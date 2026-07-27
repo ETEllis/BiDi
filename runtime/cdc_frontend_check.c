@@ -967,14 +967,17 @@ static int write_file_bytes(const char *path, const uint8_t *bytes,
     return fclose(fp) == 0;
 }
 
-enum { STORE_HEADER_SIZE = 4 + 1 + 8 + 4 + CDC_DIGEST_SIZE };
+enum {
+    STORE_FRAMING_SIZE = 4 + 1 + 8 + 4,
+    STORE_HEADER_SIZE = STORE_FRAMING_SIZE + 2 * CDC_DIGEST_SIZE
+};
 
-/* One corruption case: flip a byte at `offset`, expect open to fail
- * closed with ECORRUPT, no handle, and the log bytes untouched. */
-static int corrupt_case(const char *base, const char *name,
-                        const uint8_t *orig, size_t size, size_t offset,
-                        uint8_t new_value) {
-    char dir[512], log_path[600];
+/* One corruption case: mutate one byte, expect open to fail closed with
+ * ECORRUPT, no handle, recovered_out untouched (0), and the log bytes
+ * byte-identical (3122af5 re-review contract). */
+static int corrupt_case(const char *dir, const char *log_path,
+                        const char *name, const uint8_t *orig, size_t size,
+                        size_t offset, uint8_t new_value, int verbose) {
     uint8_t *mutated;
     uint8_t *after = NULL;
     size_t after_size = 0;
@@ -983,11 +986,6 @@ static int corrupt_case(const char *base, const char *name,
     cdc_store_status status;
     int ok = 1;
 
-    snprintf(dir, sizeof(dir), "%s/%s", base, name);
-    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
-    if (mkdir(dir, 0777) != 0 && errno != EEXIST) {
-        return 0;
-    }
     mutated = malloc(size);
     if (!mutated) {
         return 0;
@@ -1003,37 +1001,42 @@ static int corrupt_case(const char *base, const char *name,
     }
     status = cdc_store_open(dir, &store, &recovered);
     if (status != CDC_STORE_ECORRUPT) {
-        fprintf(stderr, "store-corrupt FAIL %s: open -> %s\n", name,
-                cdc_store_status_name(status));
+        fprintf(stderr, "store-corrupt FAIL %s offset=%zu: open -> %s\n",
+                name, offset, cdc_store_status_name(status));
         ok = 0;
     }
     if (store != NULL) {
-        fprintf(stderr, "store-corrupt FAIL %s: handle returned\n", name);
+        fprintf(stderr, "store-corrupt FAIL %s offset=%zu: handle\n", name,
+                offset);
         cdc_store_close(store);
         ok = 0;
     }
-    /* the corrupted evidence must be byte-identical to what we wrote */
+    if (recovered != 0) {
+        fprintf(stderr,
+                "store-corrupt FAIL %s offset=%zu: recovered=%d\n", name,
+                offset, recovered);
+        ok = 0;
+    }
     if (!read_file_bytes(log_path, &after, &after_size) ||
         after_size != size || memcmp(after, mutated, size) != 0) {
-        fprintf(stderr, "store-corrupt FAIL %s: log mutated by open\n",
-                name);
+        fprintf(stderr, "store-corrupt FAIL %s offset=%zu: log mutated\n",
+                name, offset);
         ok = 0;
     }
     free(after);
     free(mutated);
-    if (ok) {
-        printf("store-corrupt ok case=%s\n", name);
+    if (ok && verbose) {
+        printf("store-corrupt ok case=%s offset=%zu\n", name, offset);
     }
     return ok;
 }
 
 static int cmd_store_corrupt(const char *base) {
     char src_dir[512], src_log[600];
+    char sweep_dir[512], sweep_log[600];
     uint8_t *orig = NULL;
     size_t size = 0;
-    size_t first_payload_len;
-    size_t data0 = 0; /* offset of first DATA record */
-    size_t seal0;     /* offset of first SEAL record (after 3 DATA) */
+    size_t swept = 0;
     int failures = 0;
     cdc_store *store = NULL;
 
@@ -1049,37 +1052,33 @@ static int cmd_store_corrupt(const char *base) {
         fprintf(stderr, "store-corrupt FAIL: read reference log\n");
         return 1;
     }
-    /* first DATA payload length from its header length field (LE) */
-    first_payload_len = (size_t)orig[data0 + 13] |
-                        ((size_t)orig[data0 + 14] << 8) |
-                        ((size_t)orig[data0 + 15] << 16) |
-                        ((size_t)orig[data0 + 16] << 24);
-    {
-        /* walk three DATA records to locate the first SEAL header */
-        size_t off = 0;
-        int i;
-        for (i = 0; i < 3; i++) {
-            size_t len = (size_t)orig[off + 13] |
-                         ((size_t)orig[off + 14] << 8) |
-                         ((size_t)orig[off + 15] << 16) |
-                         ((size_t)orig[off + 16] << 24);
-            off += STORE_HEADER_SIZE + len;
-        }
-        seal0 = off;
+    snprintf(sweep_dir, sizeof(sweep_dir), "%s/sweep", base);
+    snprintf(sweep_log, sizeof(sweep_log), "%s/log.cdcstore", sweep_dir);
+    if (mkdir(sweep_dir, 0777) != 0 && errno != EEXIST) {
+        free(orig);
+        return 1;
     }
 
-    failures += !corrupt_case(base, "flip-data-payload", orig, size,
-                              data0 + STORE_HEADER_SIZE, 0xff);
-    failures += !corrupt_case(base, "flip-data-digest", orig, size,
-                              data0 + 17, 0xff);
-    failures += !corrupt_case(base, "flip-data-seq", orig, size, data0 + 5,
-                              0x7f);
-    failures += !corrupt_case(base, "flip-seal-digest", orig, size,
-                              seal0 + 17, 0xff);
-    failures += !corrupt_case(base, "flip-type", orig, size, data0 + 4,
-                              (uint8_t)'X');
-    failures += !corrupt_case(base, "flip-length", orig, size, data0 + 13,
-                              (uint8_t)(first_payload_len + 1));
+    /* Full mutation matrix (re-review item 6): EVERY byte of the sealed
+     * log — all magic, type, sequence, length, framing-tag, payload-digest,
+     * payload, and seal bytes — flipped one at a time; each must fail
+     * closed with the evidence untouched. */
+    {
+        size_t offset;
+        for (offset = 0; offset < size; offset++) {
+            if (!corrupt_case(sweep_dir, sweep_log, "sweep", orig, size,
+                              offset, (uint8_t)(orig[offset] ^ 0xff), 0)) {
+                failures++;
+            }
+            swept++;
+        }
+    }
+    /* Re-review item 7: the exact high-byte length mutation, named. The
+     * first DATA record's length field sits at offset 13..16; flipping
+     * offset 16 declares a multi-megabyte payload in a small file. */
+    failures += !corrupt_case(sweep_dir, sweep_log,
+                              "high-byte-length", orig, size, 16,
+                              (uint8_t)(orig[16] + 1), 1);
 
     /* control 1: unmutated copy opens clean with 2 seals */
     {
@@ -1097,8 +1096,9 @@ static int cmd_store_corrupt(const char *base) {
         cdc_store_close(store);
         store = NULL;
     }
-    /* control 2: a fully valid but unsealed DATA tail is recoverable
-     * (latch-or-hold), distinguished from corruption */
+    /* control 2: a fully valid but unsealed DATA tail (correct framing
+     * tag, digest, and sequence) is recoverable (latch-or-hold),
+     * distinguished from corruption */
     {
         char dir[512], log_path[600];
         uint8_t record[STORE_HEADER_SIZE + 5];
@@ -1109,14 +1109,16 @@ static int cmd_store_corrupt(const char *base) {
         snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
         mkdir(dir, 0777);
         write_file_bytes(log_path, orig, size);
-        memcpy(record, "CDC1", 4);
+        memcpy(record, "CDC2", 4);
         record[4] = 'D';
         record[5] = 7; /* event seq 7 (6 sealed events precede) */
         memset(record + 6, 0, 7);
         record[13] = 5; /* payload length 5, little-endian */
         memset(record + 14, 0, 3);
+        cdc_digest(record, STORE_FRAMING_SIZE, record + STORE_FRAMING_SIZE);
         cdc_digest("extra", 5, digest);
-        memcpy(record + 17, digest, CDC_DIGEST_SIZE);
+        memcpy(record + STORE_FRAMING_SIZE + CDC_DIGEST_SIZE, digest,
+               CDC_DIGEST_SIZE);
         memcpy(record + STORE_HEADER_SIZE, "extra", 5);
         fp = fopen(log_path, "ab");
         fwrite(record, 1, sizeof(record), fp);
@@ -1133,7 +1135,7 @@ static int cmd_store_corrupt(const char *base) {
     if (failures) {
         return 1;
     }
-    printf("store-corrupt ok cases=6 controls=2\n");
+    printf("store-corrupt ok swept=%zu named=1 controls=2\n", swept);
     return 0;
 }
 

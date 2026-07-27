@@ -429,12 +429,13 @@ mkdir -p build/store_test build/store_crash build/store_corrupt
 run_step ./build/cdc_frontend_check store-check build/store_test
 ./build/cdc_frontend_check store-crash build/store_crash | tee build/store_crash.txt
 grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
-# Review B1/B2 permanent counterexamples: byte-flips in DATA payload,
-# DATA digest, sequence, SEAL digest, type, and length must fail closed
-# (ECORRUPT, no handle, log bytes untouched); a fully valid unsealed tail
-# stays recoverable and distinguished from corruption.
+# Full mutation matrix (3122af5 re-review): EVERY byte of the sealed log
+# flipped one at a time must fail closed (ECORRUPT, no handle,
+# recovered=0, log bytes untouched), including the named high-byte length
+# mutation; a fully valid unsealed tail stays recoverable and
+# distinguished from corruption.
 ./build/cdc_frontend_check store-corrupt build/store_corrupt | tee build/store_corrupt.txt
-grep -q "store-corrupt ok cases=6 controls=2" build/store_corrupt.txt
+grep -q "store-corrupt ok swept=726 named=1 controls=2" build/store_corrupt.txt
 if [ "$SANITIZED" = "1" ]; then
   rm -rf build/store_crash_asan build/store_corrupt_asan
   mkdir -p build/store_crash_asan build/store_corrupt_asan

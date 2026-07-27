@@ -10,19 +10,31 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/* Record layout (little-endian fixed fields):
- *   [4]  magic  "CDC1"
+/* Record layout, format v2 (little-endian fixed fields; 3122af5 re-review
+ * final repair — framing metadata is AUTHENTICATED before it is trusted):
+ *   [4]  magic  "CDC2"
  *   [1]  type   'D' data / 'S' seal
  *   [8]  seq    (data: event ordinal; seal: sealed transaction ordinal)
  *   [4]  payload length (seal: 0)
+ *   [32] framing tag: digest over the preceding 17 framing bytes
+ *        (magic | type | seq | length). The scanner verifies this tag
+ *        BEFORE allocating or reading payload_len, so a mutated length
+ *        field can never masquerade as a torn tail.
  *   [32] payload digest (seal: digest of the transaction's event digests)
  *   [n]  payload
  * A transaction = its DATA records followed by one SEAL. Replay/recovery
- * accept only complete, digest-valid records and only up to the last SEAL.
- */
+ * accept only complete, tag-valid, digest-valid, sequence-continuous
+ * records and only up to the last SEAL. Records above
+ * CDC_STORE_MAX_RECORD fail closed before any allocation. */
 
-static const uint8_t MAGIC[4] = {'C', 'D', 'C', '1'};
-enum { HEADER_SIZE = 4 + 1 + 8 + 4 + CDC_DIGEST_SIZE };
+static const uint8_t MAGIC[4] = {'C', 'D', 'C', '2'};
+enum {
+    FRAMING_SIZE = 4 + 1 + 8 + 4,
+    OFF_TAG = FRAMING_SIZE,
+    OFF_DIGEST = FRAMING_SIZE + CDC_DIGEST_SIZE,
+    HEADER_SIZE = FRAMING_SIZE + 2 * CDC_DIGEST_SIZE,
+    CDC_STORE_MAX_RECORD = 64 << 20
+};
 
 typedef struct {
     uint8_t *payload;
@@ -146,9 +158,24 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
             result->state = SCAN_CORRUPT;
             break;
         }
+        /* Authenticate the framing (magic, type, seq, length) BEFORE
+         * trusting payload_len (3122af5 re-review): a complete header
+         * whose tag fails is corruption, never a torn tail. */
+        {
+            uint8_t tag[CDC_DIGEST_SIZE];
+            cdc_digest(header, FRAMING_SIZE, tag);
+            if (memcmp(tag, header + OFF_TAG, CDC_DIGEST_SIZE) != 0) {
+                result->state = SCAN_CORRUPT;
+                break;
+            }
+        }
         type = header[4];
         seq = get_u64(header + 5);
         payload_len = get_u32(header + 13);
+        if (payload_len > (uint32_t)CDC_STORE_MAX_RECORD) {
+            result->state = SCAN_CORRUPT; /* bound enforced pre-allocation */
+            break;
+        }
         if (type == 'D') {
             uint8_t *payload = malloc(payload_len ? payload_len : 1);
             uint8_t digest[CDC_DIGEST_SIZE];
@@ -165,7 +192,7 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
             }
             cdc_digest(payload, payload_len, digest);
             free(payload);
-            if (memcmp(digest, header + 17, CDC_DIGEST_SIZE) != 0 ||
+            if (memcmp(digest, header + OFF_DIGEST, CDC_DIGEST_SIZE) != 0 ||
                 seq != expect_event) {
                 result->state = SCAN_CORRUPT;
                 break;
@@ -175,7 +202,8 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
                 cdc_digest_init(&txn_ctx);
                 txn_open = 1;
             }
-            cdc_digest_update(&txn_ctx, header + 17, CDC_DIGEST_SIZE);
+            cdc_digest_update(&txn_ctx, header + OFF_DIGEST,
+                              CDC_DIGEST_SIZE);
             offset += HEADER_SIZE + (long)payload_len;
         } else if (type == 'S') {
             uint8_t seal_expected[CDC_DIGEST_SIZE];
@@ -185,7 +213,8 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
             }
             cdc_digest_final(&txn_ctx, seal_expected);
             txn_open = 0;
-            if (memcmp(seal_expected, header + 17, CDC_DIGEST_SIZE) != 0) {
+            if (memcmp(seal_expected, header + OFF_DIGEST,
+                       CDC_DIGEST_SIZE) != 0) {
                 result->state = SCAN_CORRUPT;
                 break;
             }
@@ -308,8 +337,8 @@ cdc_store_status cdc_store_stage(cdc_store *store, const void *payload,
     if (!store || (!payload && size > 0)) {
         return CDC_STORE_EARG;
     }
-    if (size > (size_t)UINT32_MAX) {
-        return CDC_STORE_EARG; /* record length field is 32-bit */
+    if (size > (size_t)CDC_STORE_MAX_RECORD) {
+        return CDC_STORE_EARG; /* documented per-record bound */
     }
     if (store->staged_count == store->staged_cap) {
         size_t next = store->staged_cap ? store->staged_cap * 2 : 8;
@@ -380,7 +409,8 @@ static cdc_store_status write_record(cdc_store *store, FILE *fp,
     header[4] = type;
     put_u64(header + 5, seq);
     put_u32(header + 13, payload_len);
-    memcpy(header + 17, digest, CDC_DIGEST_SIZE);
+    cdc_digest(header, FRAMING_SIZE, header + OFF_TAG);
+    memcpy(header + OFF_DIGEST, digest, CDC_DIGEST_SIZE);
     if (crash) {
         size_t torn = payload_len / 2;
         fwrite(header, 1, sizeof(header), fp);
@@ -505,7 +535,8 @@ cdc_store_status cdc_store_replay(cdc_store *store, char *out,
             }
             payload_len = get_u32(header + 13);
             /* fold every record digest (data and seal) in order */
-            cdc_digest_update(&state_ctx, header + 17, CDC_DIGEST_SIZE);
+            cdc_digest_update(&state_ctx, header + OFF_DIGEST,
+                              CDC_DIGEST_SIZE);
             if (payload_len > 0) {
                 fseek(fp, payload_len, SEEK_CUR);
             }

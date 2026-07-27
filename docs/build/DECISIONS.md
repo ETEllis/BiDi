@@ -46,6 +46,22 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D10 — 2026-07-24 — Store record format v2: authenticated framing
+
+The 3122af5 pinned re-review's final blocker (unauthenticated payload_len:
+a high-byte length mutation classified as a torn tail and truncated sealed
+history) is repaired by versioning the record format to v2 ("CDC2"): every
+header carries a framing tag digested over magic|type|seq|length, verified
+BEFORE the length is trusted or any allocation occurs; a documented 64 MiB
+per-record bound is enforced pre-allocation. Torn-tail classification is
+reachable only after the framing tag proves the declared length authentic.
+The seed phase has no persisted stores, so no migration exists. The
+mutation matrix is now a FULL-BYTE SWEEP: all 726 bytes of the reference
+sealed log flipped one at a time, each asserting ECORRUPT + no handle +
+recovered=0 + byte-identical log (plain and ASan), plus the named
+high-byte length case and the clean/valid-unsealed-tail controls. The
+seven-boundary crash matrix is unchanged and green.
+
 ## D9 — 2026-07-24 — Independent merge-boundary review (bb3531b) adopted
 
 The independent review at head `bb3531b` (REQUEST CHANGES, B1–B7) is

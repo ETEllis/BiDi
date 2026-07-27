@@ -30,6 +30,12 @@
  *   digest, sequence continuity, seal digest, type, or length — is
  *   CDC_STORE_ECORRUPT: open fails, no handle, and the log bytes are
  *   never mutated. Corrupted evidence is preserved, not repaired.
+ * - Framing metadata is AUTHENTICATED (record format v2, 3122af5
+ *   re-review): every record header carries a framing tag digested over
+ *   magic, type, sequence, and length, verified BEFORE the length field
+ *   is trusted or any allocation happens; a mutated length can never
+ *   masquerade as a torn tail. Records above a documented bound
+ *   (64 MiB) fail closed pre-allocation.
  * - Sequence numbers are monotonic and verified (DATA: global event
  *   ordinal; SEAL: transaction ordinal). Each SEAL digest is recomputed
  *   from its transaction's DATA digests and must match.
