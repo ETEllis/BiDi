@@ -128,6 +128,38 @@ typedef struct {
     scan_state state;
 } scan_result;
 
+/* Read-fault injection for the scan path (f1f68c0 re-review): simulates a
+ * mid-read I/O error after N successful scan reads so the EOF-vs-fault
+ * distinction is permanently testable. 0 disarms. */
+static int scan_read_fail_at;
+static int scan_read_ops;
+static int scan_read_injected;
+
+void cdc_store_set_read_fail_after(int operations) {
+    scan_read_fail_at = operations;
+    scan_read_ops = 0;
+    scan_read_injected = 0;
+}
+
+static size_t scan_fread(void *buffer, size_t size, FILE *fp) {
+    if (scan_read_fail_at > 0) {
+        scan_read_ops++;
+        if (scan_read_ops >= scan_read_fail_at) {
+            scan_read_injected = 1;
+            return 0;
+        }
+    }
+    return fread(buffer, 1, size, fp);
+}
+
+/* A short or zero read is EOF only when the stream carries no error
+ * indicator; a real read fault must surface as CDC_STORE_EIO and may
+ * NEVER be classified as a torn tail (which would authorize destructive
+ * truncation). */
+static int scan_read_faulted(FILE *fp) {
+    return ferror(fp) || scan_read_injected;
+}
+
 static cdc_store_status scan_log(const char *path, scan_result *result) {
     FILE *fp = fopen(path, "rb");
     long offset = 0;
@@ -141,12 +173,25 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
     if (!fp) {
         return errno == ENOENT ? CDC_STORE_OK : CDC_STORE_EIO;
     }
+    /* The log must be a regular file; directories, FIFOs, and devices are
+     * I/O errors before a single byte is interpreted. */
+    {
+        struct stat st;
+        if (fstat(fileno(fp), &st) != 0 || !S_ISREG(st.st_mode)) {
+            fclose(fp);
+            return CDC_STORE_EIO;
+        }
+    }
     for (;;) {
         uint8_t header[HEADER_SIZE];
-        size_t got = fread(header, 1, sizeof(header), fp);
+        size_t got = scan_fread(header, sizeof(header), fp);
         uint32_t payload_len;
         uint64_t seq;
         uint8_t type;
+        if (got < sizeof(header) && scan_read_faulted(fp)) {
+            fclose(fp);
+            return CDC_STORE_EIO;
+        }
         if (got == 0) {
             break; /* clean record boundary at EOF */
         }
@@ -184,9 +229,13 @@ static cdc_store_status scan_log(const char *path, scan_result *result) {
                 fclose(fp);
                 return CDC_STORE_EMEM;
             }
-            read_len = fread(payload, 1, payload_len, fp);
+            read_len = scan_fread(payload, payload_len, fp);
             if (read_len != payload_len) {
                 free(payload);
+                if (scan_read_faulted(fp)) {
+                    fclose(fp);
+                    return CDC_STORE_EIO;
+                }
                 result->state = SCAN_TAIL; /* incomplete payload at EOF */
                 break;
             }

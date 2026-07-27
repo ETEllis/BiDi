@@ -110,6 +110,14 @@ cdc_store_status cdc_store_fence(cdc_store *store, uint64_t expected_seal);
  * recovery to prove the latch-or-hold contract. */
 void cdc_store_set_fail_after(cdc_store *store, int operations);
 
+/* Read-fault injection (f1f68c0 re-review): simulate a mid-read I/O
+ * error after N successful scan reads (0 disarms; global to the scan
+ * path). A faulted read surfaces as CDC_STORE_EIO — never as a torn
+ * tail, never truncating, never yielding a handle. Non-regular log
+ * paths (directory, FIFO, device) are CDC_STORE_EIO before any byte is
+ * interpreted. */
+void cdc_store_set_read_fail_after(int operations);
+
 /* Number of write/flush/sync boundary operations a commit of the current
  * staged transaction would perform (for exhaustive injection sweeps). */
 int cdc_store_commit_operations(const cdc_store *store);

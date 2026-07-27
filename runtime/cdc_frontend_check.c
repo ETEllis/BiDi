@@ -1139,6 +1139,102 @@ static int cmd_store_corrupt(const char *base) {
     return 0;
 }
 
+/* ---- store I/O-fault regressions (f1f68c0 re-review) ---------------- */
+
+static int store_io_case(const char *name, const char *dir,
+                         const uint8_t *expect_bytes, size_t expect_size) {
+    cdc_store *store = NULL;
+    int recovered = -1;
+    cdc_store_status status = cdc_store_open(dir, &store, &recovered);
+    int ok = 1;
+    if (status != CDC_STORE_EIO) {
+        fprintf(stderr, "store-io FAIL %s: open -> %s\n", name,
+                cdc_store_status_name(status));
+        ok = 0;
+    }
+    if (store != NULL) {
+        fprintf(stderr, "store-io FAIL %s: handle returned\n", name);
+        cdc_store_close(store);
+        ok = 0;
+    }
+    if (expect_bytes != NULL) {
+        char log_path[600];
+        uint8_t *after = NULL;
+        size_t after_size = 0;
+        snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+        if (!read_file_bytes(log_path, &after, &after_size) ||
+            after_size != expect_size ||
+            memcmp(after, expect_bytes, expect_size) != 0) {
+            fprintf(stderr, "store-io FAIL %s: log mutated (size %zu)\n",
+                    name, after_size);
+            ok = 0;
+        }
+        free(after);
+    }
+    if (ok) {
+        printf("store-io ok case=%s\n", name);
+    }
+    return ok;
+}
+
+static int cmd_store_io(const char *base) {
+    char dir[512], log_path[600], digest_out[80];
+    uint8_t *orig = NULL;
+    size_t size = 0;
+    int failures = 0;
+
+    /* regression 1: log.cdcstore is a directory -> EIO, no handle */
+    snprintf(dir, sizeof(dir), "%s/iodir", base);
+    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+    mkdir(dir, 0777);
+    mkdir(log_path, 0777);
+    failures += !store_io_case("dir-as-log", dir, NULL, 0);
+
+    /* reference store with 2 sealed transactions for the injection arms */
+    if (!store_reference_digest(base, "io_src", 2, digest_out,
+                                sizeof(digest_out))) {
+        fprintf(stderr, "store-io FAIL: reference store\n");
+        return 1;
+    }
+    snprintf(dir, sizeof(dir), "%s/io_src", base);
+    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+    if (!read_file_bytes(log_path, &orig, &size)) {
+        fprintf(stderr, "store-io FAIL: read reference log\n");
+        return 1;
+    }
+
+    /* regression 2: injected mid-read fault before any seal (first scan
+     * read) -> EIO, bytes unchanged */
+    cdc_store_set_read_fail_after(1);
+    failures += !store_io_case("fault-before-seal", dir, orig, size);
+    cdc_store_set_read_fail_after(0);
+
+    /* regression 3: injected mid-read fault after the first seal (each
+     * txn = 3 DATA x 2 reads + 1 SEAL read = 7 reads; fault at read 8)
+     * -> EIO, bytes unchanged, NO truncation of the sealed prefix */
+    cdc_store_set_read_fail_after(8);
+    failures += !store_io_case("fault-after-seal", dir, orig, size);
+    cdc_store_set_read_fail_after(0);
+
+    /* control: disarmed, the same store opens clean with 2 seals */
+    {
+        cdc_store *store = NULL;
+        int recovered = -1;
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK ||
+            recovered != 0 || cdc_store_sealed_count(store) != 2) {
+            fprintf(stderr, "store-io FAIL: disarmed control\n");
+            failures++;
+        }
+        cdc_store_close(store);
+    }
+    free(orig);
+    if (failures) {
+        return 1;
+    }
+    printf("store-io ok cases=3 controls=1\n");
+    return 0;
+}
+
 /* ---- reject --------------------------------------------------------- */
 
 static int cmd_reject(int argc, char **argv) {
@@ -1208,6 +1304,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-corrupt") == 0 && argc >= 3) {
         return cmd_store_corrupt(argv[2]);
+    }
+    if (strcmp(argv[1], "store-io") == 0 && argc >= 3) {
+        return cmd_store_io(argv[2]);
     }
     fprintf(stderr, "cdc_frontend_check: unknown mode '%s'\n", argv[1]);
     return 2;

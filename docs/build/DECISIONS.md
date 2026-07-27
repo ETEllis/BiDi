@@ -46,6 +46,22 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D11 — 2026-07-24 — Read faults are EIO, never torn tails
+
+The f1f68c0 final re-review's surgical blocker is repaired: every scan
+read now distinguishes EOF from an I/O fault. A short or zero fread with
+the stream error indicator set (or the injected read fault armed)
+surfaces as CDC_STORE_EIO — never SCAN_TAIL, never truncation, never a
+handle. Non-regular log paths (directory, FIFO, device) are rejected by
+fstat before a single byte is interpreted. A read-fault injection hook
+(cdc_store_set_read_fail_after) makes the distinction permanently
+testable. Permanent regressions in verify.sh (plain + ASan):
+directory-as-log → EIO/no handle; injected fault before any seal →
+EIO/bytes unchanged; injected fault after a seal → EIO/bytes
+unchanged/no truncation; disarmed control opens clean. The 726-byte
+mutation sweep, named high-length case, and seven-boundary crash matrix
+are unchanged and green.
+
 ## D10 — 2026-07-24 — Store record format v2: authenticated framing
 
 The 3122af5 pinned re-review's final blocker (unauthenticated payload_len:

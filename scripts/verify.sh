@@ -436,11 +436,20 @@ grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
 # distinguished from corruption.
 ./build/cdc_frontend_check store-corrupt build/store_corrupt | tee build/store_corrupt.txt
 grep -q "store-corrupt ok swept=726 named=1 controls=2" build/store_corrupt.txt
+# I/O-fault regressions (f1f68c0 re-review): read faults are EIO, never
+# torn tails — a directory as log, a fault before any seal, and a fault
+# after a seal must all fail closed with no handle, no truncation, and
+# byte-identical logs.
+rm -rf build/store_io
+mkdir -p build/store_io
+./build/cdc_frontend_check store-io build/store_io | tee build/store_io.txt
+grep -q "store-io ok cases=3 controls=1" build/store_io.txt
 if [ "$SANITIZED" = "1" ]; then
-  rm -rf build/store_crash_asan build/store_corrupt_asan
-  mkdir -p build/store_crash_asan build/store_corrupt_asan
+  rm -rf build/store_crash_asan build/store_corrupt_asan build/store_io_asan
+  mkdir -p build/store_crash_asan build/store_corrupt_asan build/store_io_asan
   run_step ./build/cdc_frontend_check_asan store-crash build/store_crash_asan
   run_step ./build/cdc_frontend_check_asan store-corrupt build/store_corrupt_asan
+  run_step ./build/cdc_frontend_check_asan store-io build/store_io_asan
 fi
 
 echo
