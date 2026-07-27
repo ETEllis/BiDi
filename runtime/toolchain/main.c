@@ -19,8 +19,8 @@ int cdc_bridge_main(int argc, char **argv);
 
 static int is_native_verb(const char *verb) {
     static const char *const VERBS[] = {
-        "run",     "compile", "interpret", "prove", "surface",
-        "council", "evolve",  "universal", "replay",
+        "run",     "compile", "interpret", "prove",  "surface",
+        "council", "evolve",  "universal", "replay", "fused",
     };
     size_t i;
     for (i = 0; i < sizeof(VERBS) / sizeof(VERBS[0]); i++) {
@@ -60,6 +60,18 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "version") == 0) {
         return cmd_version();
     }
+    if (strcmp(argv[1], "run") == 0 && argc == 3) {
+        /* Phase C: cdc run is the fused single-process executor — one
+         * parse, one live Runtime, every declared stage family. The
+         * legacy single-mode behavior remains available as the explicit
+         * mode verbs below. */
+        char *fused_argv[4];
+        fused_argv[0] = argv[0];
+        fused_argv[1] = (char *)"fused";
+        fused_argv[2] = argv[2];
+        fused_argv[3] = NULL;
+        return cdc_native_main(3, fused_argv);
+    }
     if (is_native_verb(argv[1]) && argc >= 3) {
         return cdc_native_main(argc, argv);
     }
@@ -68,9 +80,6 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "test") == 0) {
         return cdc_cmd_test(argc - 2, argv + 2);
-    }
-    if (strcmp(argv[1], "run") == 0) {
-        return cmd_unavailable(argv[1], "Phase C");
     }
     if (is_native_verb(argv[1]) || strcmp(argv[1], "bridge") == 0) {
         usage(stderr);

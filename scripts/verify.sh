@@ -293,16 +293,13 @@ echo "== Unified driver passthrough parity [gate CT2] =="
 # including exit codes, across every legacy mode family (parity is checked
 # AFTER the standalone binaries are built later in this script would be too
 # late — they are compiled here if absent).
-if [ ! -x build/cdc_native_runtime ]; then
-  run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
-    runtime/cdc_native_runtime.c runtime/cdc_source.c -lm \
-    -o build/cdc_native_runtime
-fi
-if [ ! -x build/cdc_bridge_runtime ]; then
-  run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
-    runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
-    -o build/cdc_bridge_runtime
-fi
+rm -f build/cdc_native_runtime build/cdc_bridge_runtime
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/cdc_native_runtime.c runtime/cdc_source.c -lm \
+  -o build/cdc_native_runtime
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
+  -o build/cdc_bridge_runtime
 PASSTHROUGH_MODES=0
 while IFS= read -r MODE_ARGS; do
   set +e
@@ -317,7 +314,6 @@ while IFS= read -r MODE_ARGS; do
   cmp build/passthrough_a.txt build/passthrough_b.txt
   PASSTHROUGH_MODES=$((PASSTHROUGH_MODES + 1))
 done <<'MODES'
-run native_reducer.cdc
 compile native_reducer.cdc
 interpret native_reducer.cdc
 prove native_reducer.cdc
@@ -325,7 +321,9 @@ surface native_surface.cdc
 council council_bridge.cdc
 evolve council_bridge.cdc
 universal framework_loop.cdc
-run framework_loop.cdc
+fused framework_loop.cdc
+fused native_reducer.cdc
+fused council_bridge.cdc
 MODES
 ./build/cdc_bridge_runtime verify bridge64.cdc > build/passthrough_a.txt
 ./build/cdc bridge verify bridge64.cdc > build/passthrough_b.txt
@@ -335,6 +333,24 @@ cmp build/passthrough_a.txt build/passthrough_b.txt
 cmp build/passthrough_a.txt build/passthrough_b.txt
 PASSTHROUGH_MODES=$((PASSTHROUGH_MODES + 2))
 echo "unified passthrough parity ok modes=${PASSTHROUGH_MODES}"
+
+echo
+echo "== Fused single-process executor [gate CT3] =="
+# cdc run = the fused executor: one parse, one live Runtime, every declared
+# stage family; byte-identical to the native fused mode.
+./build/cdc run framework_loop.cdc > build/fused_a.txt
+./build/cdc_native_runtime fused framework_loop.cdc > build/fused_b.txt
+cmp build/fused_a.txt build/fused_b.txt
+grep -q "cdc fused ok stages=1 mode=universal source=framework_loop.cdc" build/fused_a.txt
+./build/cdc run council_bridge.cdc > build/fused_a.txt
+grep -q "cdc fused ok stages=2 source=council_bridge.cdc" build/fused_a.txt
+./build/cdc run native_reducer.cdc > build/fused_a.txt
+grep -q "cdc fused ok stages=1 source=native_reducer.cdc" build/fused_a.txt
+if ./build/cdc run kernel.cdc >/dev/null 2>&1; then
+  echo "fused run must fail closed on a source with no executable stage" >&2
+  exit 1
+fi
+echo "fused executor ok (universal closure, multi-stage, fail-closed)"
 
 echo
 echo "== Typed test runner [gate CT3 seed] =="

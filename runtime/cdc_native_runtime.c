@@ -2129,6 +2129,53 @@ static void usage(void) {
     exit(2);
 }
 
+/* Fused single-process executor (gate CT3): one parse, one live Runtime,
+ * every stage family the source declares, in kernel order. This discharges
+ * the queued "single-process executor fusing all modes" obligation:
+ * - a source with a universal job takes the universal closure path, which
+ *   already chains reduce -> surface -> council -> closure -> enactment
+ *   over one live state with interpreter parity;
+ * - any other source runs its reducer chain first (only when all three
+ *   foundational kinds are present, mirroring run mode), and the surface,
+ *   council, and evolution stages then operate on the MUTATED state.
+ * cycles=N re-execution stays queued: inline expect-* values pin
+ * first-cycle state, so unbounded iteration needs per-cycle expectation
+ * families (see BUILD_STATE honest boundaries). */
+static void run_fused(Runtime *rt, const char *path) {
+    int stages = 0;
+    if (rt->universal_count > 0) {
+        run_universal(rt, path);
+        printf("cdc fused ok stages=1 mode=universal source=%s\n", path);
+        return;
+    }
+    if (rt->step_count > 0) {
+        int flow_count, commit_count, nest_count;
+        count_step_kinds(rt, &flow_count, &commit_count, &nest_count);
+        if (flow_count > 0 && commit_count > 0 && nest_count > 0) {
+            run_steps(rt, path);
+            stages++;
+        }
+    }
+    if (rt->guard_count + rt->trace_count + rt->measure_count +
+            rt->policy_count + rt->bridge_count + rt->counter_count >
+        0) {
+        run_surface(rt, path);
+        stages++;
+    }
+    if (rt->deliberation_count > 0) {
+        run_council(rt, path);
+        stages++;
+    }
+    if (rt->evolution_count > 0) {
+        run_evolution(rt, path);
+        stages++;
+    }
+    if (stages == 0) {
+        fail("fused run: source declares no executable stage");
+    }
+    printf("cdc fused ok stages=%d source=%s\n", stages, path);
+}
+
 /* With CDC_NATIVE_NO_MAIN the same entry point compiles as
  * cdc_native_main so the unified cdc driver can pass legacy verbs through
  * with byte-identical behavior (gate CT2). */
@@ -2164,6 +2211,8 @@ int CDC_NATIVE_ENTRY(int argc, char **argv) {
         run_evolution(&runtime, argv[2]);
     } else if (strcmp(argv[1], "universal") == 0) {
         run_universal(&runtime, argv[2]);
+    } else if (strcmp(argv[1], "fused") == 0) {
+        run_fused(&runtime, argv[2]);
     } else {
         usage();
     }
