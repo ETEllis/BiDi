@@ -79,13 +79,23 @@ static int program_contains(const cdc_program *program,
     return 0;
 }
 
-/* Is `job` declared in this unit with expect-status=held? */
-static int job_expects_hold(const cdc_program *program, const char *job) {
+/* Is `job` declared in this unit as the EXECUTABLE statement of the given
+ * form with expect-status=held? Review B3: the authorization is bound to
+ * the typed executable statement identity (directive == the runtime record
+ * form AND first argument == job id); an unrelated statement — a witness,
+ * an expect line, a different form — must never authorize a runtime HOLD. */
+static int job_expects_hold(const cdc_program *program, const char *form,
+                            const char *job) {
     size_t count = cdc_program_statement_count(program);
     size_t i;
     for (i = 0; i < count; i++) {
+        const char *directive =
+            cdc_program_statement_directive(program, i);
         const char *arg = cdc_program_statement_arg(program, i, 0);
         const char *expect;
+        if (!directive || strcmp(directive, form) != 0) {
+            continue;
+        }
         if (!arg || strcmp(arg, job) != 0) {
             continue;
         }
@@ -97,21 +107,27 @@ static int job_expects_hold(const cdc_program *program, const char *job) {
     return 0;
 }
 
-/* Extracts the job id from a runtime record line whose first token is
- * "<form>=<jobid>". Returns 0 if the line has no such shape. */
-static int line_job_id(const char *line, char *out, size_t out_size) {
+/* Extracts the form and job id from a runtime record line whose first
+ * token is "<form>=<jobid>". Returns 0 if the line has no such shape. */
+static int line_form_and_job(const char *line, char *form_out,
+                             size_t form_size, char *job_out,
+                             size_t job_size) {
     const char *eq = strchr(line, '=');
     const char *space = strchr(line, ' ');
-    size_t n;
-    if (!eq || (space && eq > space)) {
+    size_t form_n, job_n;
+    if (!eq || eq == line || (space && eq > space)) {
         return 0;
     }
-    n = space ? (size_t)(space - (eq + 1)) : strlen(eq + 1);
-    if (n == 0 || n + 1 > out_size) {
+    form_n = (size_t)(eq - line);
+    job_n = space ? (size_t)(space - (eq + 1)) : strlen(eq + 1);
+    if (form_n == 0 || job_n == 0 || form_n + 1 > form_size ||
+        job_n + 1 > job_size) {
         return 0;
     }
-    memcpy(out, eq + 1, n);
-    out[n] = '\0';
+    memcpy(form_out, line, form_n);
+    form_out[form_n] = '\0';
+    memcpy(job_out, eq + 1, job_n);
+    job_out[job_n] = '\0';
     return 1;
 }
 
@@ -123,10 +139,12 @@ static void classify_output(FILE *fp, const cdc_program *program,
         if (strstr(line, "status=accepted")) {
             counts->commit++;
         } else if (strstr(line, "status=held")) {
+            char form[64];
             char job[256];
             counts->hold++;
-            if (line_job_id(line, job, sizeof(job)) &&
-                job_expects_hold(program, job)) {
+            if (line_form_and_job(line, form, sizeof(form), job,
+                                  sizeof(job)) &&
+                job_expects_hold(program, form, job)) {
                 counts->expected_hold++;
             } else {
                 counts->unexpected_hold++;
@@ -147,14 +165,20 @@ static void classify_output(FILE *fp, const cdc_program *program,
 static int run_mode(const char *file, const char *mode,
                     const cdc_program *program, test_counts *counts,
                     int verbose) {
-    const char *out_path = "build/cdc_test_child.txt";
+    char out_path[128];
     pid_t pid;
     int status;
 
+    /* Review hardening: a unique per-invocation child-output path so
+     * concurrent cdc test invocations cannot collide. */
+    snprintf(out_path, sizeof(out_path), "build/cdc_test_child_%ld.txt",
+             (long)getpid());
     fflush(NULL);
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "cdc test: fork failed\n");
+        fprintf(stderr, "cdc test: FAIL %s (%s): fork failed\n", file,
+                mode);
+        counts->fail++; /* review B4: unobserved runs are failures */
         return 0;
     }
     if (pid == 0) {
@@ -172,16 +196,23 @@ static int run_mode(const char *file, const char *mode,
         exit(cdc_native_main(3, child_argv));
     }
     if (waitpid(pid, &status, 0) < 0) {
-        fprintf(stderr, "cdc test: waitpid failed\n");
+        fprintf(stderr, "cdc test: FAIL %s (%s): waitpid failed\n", file,
+                mode);
+        counts->fail++;
         return 0;
     }
     counts->runs++;
     {
         FILE *fp = fopen(out_path, "r");
-        if (fp) {
-            classify_output(fp, program, file, mode, counts, verbose);
-            fclose(fp);
+        if (!fp) {
+            fprintf(stderr,
+                    "cdc test: FAIL %s (%s): child output unreadable\n",
+                    file, mode);
+            counts->fail++;
+            return 0;
         }
+        classify_output(fp, program, file, mode, counts, verbose);
+        fclose(fp);
     }
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         counts->fail++;
@@ -250,19 +281,21 @@ int cdc_cmd_test(int argc, char **argv) {
         cdc_program_destroy(program);
     }
 
-    /* A7: separate counts, never a merged total; unexpected holds are gate
-     * failures while expected holds are first-class equilibrium results. */
-    printf("cdc test %s runs=%ld commit=%ld hold=%ld (expected=%ld "
-           "unexpected=%ld) nest=%ld fail=%ld\n",
-           counts.fail == 0 && counts.unexpected_hold == 0 ? "ok"
-                                                           : "FAIL",
-           counts.runs, counts.commit, counts.hold, counts.expected_hold,
-           counts.unexpected_hold, counts.nest, counts.fail);
-    if (counts.fail > 0) {
-        return 1;
+    /* A7: separate counts, never a merged total; unexpected holds are
+     * failures while expected holds are first-class equilibrium results.
+     * Review B4: a run set with zero executed checks carries no evidence
+     * and is never green. */
+    {
+        int failed = counts.fail > 0 || counts.unexpected_hold > 0 ||
+                     counts.runs == 0;
+        printf("cdc test %s runs=%ld commit=%ld hold=%ld (expected=%ld "
+               "unexpected=%ld) nest=%ld fail=%ld%s\n",
+               failed ? "FAIL" : "ok", counts.runs, counts.commit,
+               counts.hold, counts.expected_hold, counts.unexpected_hold,
+               counts.nest, counts.fail,
+               counts.runs == 0 ? " (no executable stage selected)" : "");
+        (void)gate; /* strictness is unconditional; flag kept for CLI
+                       stability */
+        return failed ? 1 : 0;
     }
-    if (gate && counts.unexpected_hold > 0) {
-        return 1;
-    }
-    return 0;
 }

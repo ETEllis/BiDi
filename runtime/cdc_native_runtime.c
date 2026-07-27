@@ -2151,10 +2151,14 @@ static void run_fused(Runtime *rt, const char *path) {
     if (rt->step_count > 0) {
         int flow_count, commit_count, nest_count;
         count_step_kinds(rt, &flow_count, &commit_count, &nest_count);
-        if (flow_count > 0 && commit_count > 0 && nest_count > 0) {
-            run_steps(rt, path);
-            stages++;
+        if (flow_count == 0 || commit_count == 0 || nest_count == 0) {
+            /* Review B5: a declared-but-incomplete reducer family is a
+             * typed error, never silently skipped. */
+            fail("fused run: reducer family incomplete (declares steps "
+                 "but not all of flow, commit, nest)");
         }
+        run_steps(rt, path);
+        stages++;
     }
     if (rt->guard_count + rt->trace_count + rt->measure_count +
             rt->policy_count + rt->bridge_count + rt->counter_count >

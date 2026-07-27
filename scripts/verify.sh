@@ -245,7 +245,9 @@ run_step ./build/cdc version
 # Exact statement gate (review item C3): statements = dump records plus
 # structural end lines; both counted from the same frozen corpus.
 END_LINES=$(cat ./*.cdc | grep -cE '^[[:space:]]*end[[:space:]]*(#.*)?$')
-ROOT_FILE_COUNT=$(ls ./*.cdc | wc -l)
+# Review B7: count via the shell, not ls|wc (BSD wc pads with spaces).
+set -- ./*.cdc
+ROOT_FILE_COUNT=$#
 EXPECTED_STATEMENTS=$((FRONTEND_RECORDS + END_LINES))
 grep -q "cdc verify parse ok files=${ROOT_FILE_COUNT} statements=${EXPECTED_STATEMENTS}\$" \
   build/cdc_verify_parse.txt
@@ -378,21 +380,66 @@ if ./build/cdc test --gate tests/fixtures/test_runner/silent_hold.cdc \
 fi
 grep -q "(expected=0 unexpected=1) nest=1 fail=0" build/cdc_test_neg.txt
 echo "typed gate rejects undeclared holds (runtime exit 0 notwithstanding)"
+# Review B3: an unrelated witness carrying the job name and
+# expect-status=held must NOT authorize the hold.
+if ./build/cdc test --gate tests/fixtures/test_runner/spoofed_hold.cdc \
+  > build/cdc_test_spoof.txt 2>/dev/null; then
+  echo "typed gate accepted a spoofed hold authorization" >&2
+  exit 1
+fi
+grep -q "(expected=0 unexpected=1)" build/cdc_test_spoof.txt
+echo "typed gate rejects spoofed hold authorization (unrelated witness)"
+# Review B4: zero executed runs is never green.
+if ./build/cdc test --gate kernel.cdc > build/cdc_test_zero.txt 2>/dev/null; then
+  echo "typed gate passed with zero executed runs" >&2
+  exit 1
+fi
+grep -q "runs=0.*no executable stage selected" build/cdc_test_zero.txt
+echo "typed gate fails on zero executed runs"
+# Review B5: a declared-but-incomplete reducer family is a typed fused
+# error, never silently skipped (three one-kind-missing counterexamples).
+printf 'field f1 dt=0.125 gain=1.0 deadband=0.5\nmodule m1 field=f1 belief=0.0 prior=0.0 precision=1.0 action-gain=1.0\ncell m1.a module=m1 theta=0.0 amplitude=1.0 omega=0.0\nguard g1 cell=m1.a expect-state=open\n' > build/fused_base.txt
+for MISSING in nest commit flow; do
+  {
+    cat build/fused_base.txt
+    if [ "$MISSING" != "flow" ]; then
+      printf 'flow f-x field=f1 duration=1.0\n'
+    fi
+    if [ "$MISSING" != "commit" ]; then
+      printf 'commit c-x module=m1\n'
+    fi
+    if [ "$MISSING" != "nest" ]; then
+      printf 'nest n-x parent=m1 child=m1\n'
+    fi
+  } > "build/fused_missing_${MISSING}.cdc"
+  if ./build/cdc run "build/fused_missing_${MISSING}.cdc" >/dev/null 2>&1; then
+    echo "fused run silently skipped an incomplete reducer (missing ${MISSING})" >&2
+    exit 1
+  fi
+done
+echo "fused run fails typed on incomplete reducer families (3 counterexamples)"
 
 echo
 echo "== Durable store substrate [gates CT4/MM1 seed] =="
 # Digest vectors, replay determinism, typed statuses, and the crash matrix:
 # injected failure at EVERY commit write/flush/sync boundary must recover
 # to exactly the old or the new sealed state — never a partial batch.
-rm -rf build/store_test build/store_crash
-mkdir -p build/store_test build/store_crash
+rm -rf build/store_test build/store_crash build/store_corrupt
+mkdir -p build/store_test build/store_crash build/store_corrupt
 run_step ./build/cdc_frontend_check store-check build/store_test
 ./build/cdc_frontend_check store-crash build/store_crash | tee build/store_crash.txt
 grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
+# Review B1/B2 permanent counterexamples: byte-flips in DATA payload,
+# DATA digest, sequence, SEAL digest, type, and length must fail closed
+# (ECORRUPT, no handle, log bytes untouched); a fully valid unsealed tail
+# stays recoverable and distinguished from corruption.
+./build/cdc_frontend_check store-corrupt build/store_corrupt | tee build/store_corrupt.txt
+grep -q "store-corrupt ok cases=6 controls=2" build/store_corrupt.txt
 if [ "$SANITIZED" = "1" ]; then
-  rm -rf build/store_crash_asan
-  mkdir -p build/store_crash_asan
+  rm -rf build/store_crash_asan build/store_corrupt_asan
+  mkdir -p build/store_crash_asan build/store_corrupt_asan
   run_step ./build/cdc_frontend_check_asan store-crash build/store_crash_asan
+  run_step ./build/cdc_frontend_check_asan store-corrupt build/store_corrupt_asan
 fi
 
 echo

@@ -14,7 +14,9 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
+#include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -930,6 +932,211 @@ static int cmd_store_check(const char *base) {
     return 0;
 }
 
+/* ---- store corruption counterexamples (review B1/B2) ---------------- */
+
+static int read_file_bytes(const char *path, uint8_t **out, size_t *size) {
+    FILE *fp = fopen(path, "rb");
+    long end;
+    if (!fp) {
+        return 0;
+    }
+    fseek(fp, 0, SEEK_END);
+    end = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    *out = malloc((size_t)end ? (size_t)end : 1);
+    if (!*out || fread(*out, 1, (size_t)end, fp) != (size_t)end) {
+        free(*out);
+        fclose(fp);
+        return 0;
+    }
+    fclose(fp);
+    *size = (size_t)end;
+    return 1;
+}
+
+static int write_file_bytes(const char *path, const uint8_t *bytes,
+                            size_t size) {
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        return 0;
+    }
+    if (fwrite(bytes, 1, size, fp) != size) {
+        fclose(fp);
+        return 0;
+    }
+    return fclose(fp) == 0;
+}
+
+enum { STORE_HEADER_SIZE = 4 + 1 + 8 + 4 + CDC_DIGEST_SIZE };
+
+/* One corruption case: flip a byte at `offset`, expect open to fail
+ * closed with ECORRUPT, no handle, and the log bytes untouched. */
+static int corrupt_case(const char *base, const char *name,
+                        const uint8_t *orig, size_t size, size_t offset,
+                        uint8_t new_value) {
+    char dir[512], log_path[600];
+    uint8_t *mutated;
+    uint8_t *after = NULL;
+    size_t after_size = 0;
+    cdc_store *store = NULL;
+    int recovered = -1;
+    cdc_store_status status;
+    int ok = 1;
+
+    snprintf(dir, sizeof(dir), "%s/%s", base, name);
+    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+    if (mkdir(dir, 0777) != 0 && errno != EEXIST) {
+        return 0;
+    }
+    mutated = malloc(size);
+    if (!mutated) {
+        return 0;
+    }
+    memcpy(mutated, orig, size);
+    mutated[offset] = new_value;
+    if (mutated[offset] == orig[offset]) {
+        mutated[offset] ^= 0xff;
+    }
+    if (!write_file_bytes(log_path, mutated, size)) {
+        free(mutated);
+        return 0;
+    }
+    status = cdc_store_open(dir, &store, &recovered);
+    if (status != CDC_STORE_ECORRUPT) {
+        fprintf(stderr, "store-corrupt FAIL %s: open -> %s\n", name,
+                cdc_store_status_name(status));
+        ok = 0;
+    }
+    if (store != NULL) {
+        fprintf(stderr, "store-corrupt FAIL %s: handle returned\n", name);
+        cdc_store_close(store);
+        ok = 0;
+    }
+    /* the corrupted evidence must be byte-identical to what we wrote */
+    if (!read_file_bytes(log_path, &after, &after_size) ||
+        after_size != size || memcmp(after, mutated, size) != 0) {
+        fprintf(stderr, "store-corrupt FAIL %s: log mutated by open\n",
+                name);
+        ok = 0;
+    }
+    free(after);
+    free(mutated);
+    if (ok) {
+        printf("store-corrupt ok case=%s\n", name);
+    }
+    return ok;
+}
+
+static int cmd_store_corrupt(const char *base) {
+    char src_dir[512], src_log[600];
+    uint8_t *orig = NULL;
+    size_t size = 0;
+    size_t first_payload_len;
+    size_t data0 = 0; /* offset of first DATA record */
+    size_t seal0;     /* offset of first SEAL record (after 3 DATA) */
+    int failures = 0;
+    cdc_store *store = NULL;
+
+    /* reference store: 2 sealed transactions, 3 events each */
+    if (!store_reference_digest(base, "corrupt_src", 2, src_log,
+                                sizeof(src_log))) {
+        fprintf(stderr, "store-corrupt FAIL: reference store\n");
+        return 1;
+    }
+    snprintf(src_dir, sizeof(src_dir), "%s/corrupt_src", base);
+    snprintf(src_log, sizeof(src_log), "%s/log.cdcstore", src_dir);
+    if (!read_file_bytes(src_log, &orig, &size)) {
+        fprintf(stderr, "store-corrupt FAIL: read reference log\n");
+        return 1;
+    }
+    /* first DATA payload length from its header length field (LE) */
+    first_payload_len = (size_t)orig[data0 + 13] |
+                        ((size_t)orig[data0 + 14] << 8) |
+                        ((size_t)orig[data0 + 15] << 16) |
+                        ((size_t)orig[data0 + 16] << 24);
+    {
+        /* walk three DATA records to locate the first SEAL header */
+        size_t off = 0;
+        int i;
+        for (i = 0; i < 3; i++) {
+            size_t len = (size_t)orig[off + 13] |
+                         ((size_t)orig[off + 14] << 8) |
+                         ((size_t)orig[off + 15] << 16) |
+                         ((size_t)orig[off + 16] << 24);
+            off += STORE_HEADER_SIZE + len;
+        }
+        seal0 = off;
+    }
+
+    failures += !corrupt_case(base, "flip-data-payload", orig, size,
+                              data0 + STORE_HEADER_SIZE, 0xff);
+    failures += !corrupt_case(base, "flip-data-digest", orig, size,
+                              data0 + 17, 0xff);
+    failures += !corrupt_case(base, "flip-data-seq", orig, size, data0 + 5,
+                              0x7f);
+    failures += !corrupt_case(base, "flip-seal-digest", orig, size,
+                              seal0 + 17, 0xff);
+    failures += !corrupt_case(base, "flip-type", orig, size, data0 + 4,
+                              (uint8_t)'X');
+    failures += !corrupt_case(base, "flip-length", orig, size, data0 + 13,
+                              (uint8_t)(first_payload_len + 1));
+
+    /* control 1: unmutated copy opens clean with 2 seals */
+    {
+        char dir[512], log_path[600];
+        int recovered = -1;
+        snprintf(dir, sizeof(dir), "%s/control_clean", base);
+        snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+        mkdir(dir, 0777);
+        write_file_bytes(log_path, orig, size);
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK ||
+            recovered != 0 || cdc_store_sealed_count(store) != 2) {
+            fprintf(stderr, "store-corrupt FAIL: clean control\n");
+            failures++;
+        }
+        cdc_store_close(store);
+        store = NULL;
+    }
+    /* control 2: a fully valid but unsealed DATA tail is recoverable
+     * (latch-or-hold), distinguished from corruption */
+    {
+        char dir[512], log_path[600];
+        uint8_t record[STORE_HEADER_SIZE + 5];
+        uint8_t digest[CDC_DIGEST_SIZE];
+        int recovered = -1;
+        FILE *fp;
+        snprintf(dir, sizeof(dir), "%s/control_tail", base);
+        snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+        mkdir(dir, 0777);
+        write_file_bytes(log_path, orig, size);
+        memcpy(record, "CDC1", 4);
+        record[4] = 'D';
+        record[5] = 7; /* event seq 7 (6 sealed events precede) */
+        memset(record + 6, 0, 7);
+        record[13] = 5; /* payload length 5, little-endian */
+        memset(record + 14, 0, 3);
+        cdc_digest("extra", 5, digest);
+        memcpy(record + 17, digest, CDC_DIGEST_SIZE);
+        memcpy(record + STORE_HEADER_SIZE, "extra", 5);
+        fp = fopen(log_path, "ab");
+        fwrite(record, 1, sizeof(record), fp);
+        fclose(fp);
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK ||
+            recovered != 1 || cdc_store_sealed_count(store) != 2) {
+            fprintf(stderr, "store-corrupt FAIL: unsealed-tail control\n");
+            failures++;
+        }
+        cdc_store_close(store);
+        store = NULL;
+    }
+    free(orig);
+    if (failures) {
+        return 1;
+    }
+    printf("store-corrupt ok cases=6 controls=2\n");
+    return 0;
+}
+
 /* ---- reject --------------------------------------------------------- */
 
 static int cmd_reject(int argc, char **argv) {
@@ -996,6 +1203,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-check") == 0 && argc >= 3) {
         return cmd_store_check(argv[2]);
+    }
+    if (strcmp(argv[1], "store-corrupt") == 0 && argc >= 3) {
+        return cmd_store_corrupt(argv[2]);
     }
     fprintf(stderr, "cdc_frontend_check: unknown mode '%s'\n", argv[1]);
     return 2;

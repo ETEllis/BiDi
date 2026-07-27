@@ -60,6 +60,8 @@ const char *cdc_store_status_name(cdc_store_status status) {
         return "state";
     case CDC_STORE_EUNSUPPORTED:
         return "unsupported";
+    case CDC_STORE_EUNSEALED:
+        return "unsealed-tail";
     default:
         return "unknown";
     }
@@ -70,6 +72,15 @@ static void put_u64(uint8_t *out, uint64_t value) {
     for (i = 0; i < 8; i++) {
         out[i] = (uint8_t)(value >> (i * 8));
     }
+}
+
+static uint64_t get_u64(const uint8_t *in) {
+    uint64_t value = 0;
+    int i;
+    for (i = 0; i < 8; i++) {
+        value |= (uint64_t)in[i] << (i * 8);
+    }
+    return value;
 }
 
 static void put_u32(uint8_t *out, uint32_t value) {
@@ -88,23 +99,33 @@ static uint32_t get_u32(const uint8_t *in) {
     return value;
 }
 
-/* Scans the log, computing the sealed prefix. Returns CDC_STORE_OK with
- * the sealed/events/valid_bytes outputs set; dirty is 1 when bytes beyond
- * the sealed prefix exist (torn or unsealed tail). */
-static cdc_store_status scan_log(const char *path, uint64_t *sealed,
-                                 uint64_t *events, long *valid_bytes,
-                                 int *dirty) {
+/* Typed scan result shared by open/verify/replay/attest (review B1/B2):
+ * SCAN_CLEAN — sealed prefix is the whole file;
+ * SCAN_TAIL — a physically incomplete final record or fully valid but
+ *             unsealed transaction tail follows the sealed prefix
+ *             (recoverable by truncation, latch-or-hold);
+ * SCAN_CORRUPT — an integrity violation inside a structurally complete
+ *             record (magic, type, length, payload digest, sequence,
+ *             or seal digest): fail closed, never mutate. */
+typedef enum { SCAN_CLEAN = 0, SCAN_TAIL = 1, SCAN_CORRUPT = 2 } scan_state;
+
+typedef struct {
+    uint64_t sealed;
+    uint64_t events; /* events within the sealed prefix */
+    long valid_bytes;
+    scan_state state;
+} scan_result;
+
+static cdc_store_status scan_log(const char *path, scan_result *result) {
     FILE *fp = fopen(path, "rb");
     long offset = 0;
-    long last_sealed_offset = 0;
-    uint64_t sealed_count = 0;
-    uint64_t event_count = 0;
-    uint64_t events_at_seal = 0;
+    uint64_t expect_event = 1;
+    uint64_t expect_seal = 1;
+    cdc_digest_ctx txn_ctx;
+    int txn_open = 0;
 
-    *sealed = 0;
-    *events = 0;
-    *valid_bytes = 0;
-    *dirty = 0;
+    memset(result, 0, sizeof(*result));
+    result->state = SCAN_CLEAN;
     if (!fp) {
         return errno == ENOENT ? CDC_STORE_OK : CDC_STORE_EIO;
     }
@@ -112,72 +133,100 @@ static cdc_store_status scan_log(const char *path, uint64_t *sealed,
         uint8_t header[HEADER_SIZE];
         size_t got = fread(header, 1, sizeof(header), fp);
         uint32_t payload_len;
+        uint64_t seq;
         uint8_t type;
         if (got == 0) {
+            break; /* clean record boundary at EOF */
+        }
+        if (got < sizeof(header)) {
+            result->state = SCAN_TAIL; /* physically incomplete header */
             break;
         }
-        if (got < sizeof(header) ||
-            memcmp(header, MAGIC, sizeof(MAGIC)) != 0) {
-            *dirty = 1;
+        if (memcmp(header, MAGIC, sizeof(MAGIC)) != 0) {
+            result->state = SCAN_CORRUPT;
             break;
         }
         type = header[4];
+        seq = get_u64(header + 5);
         payload_len = get_u32(header + 13);
         if (type == 'D') {
             uint8_t *payload = malloc(payload_len ? payload_len : 1);
             uint8_t digest[CDC_DIGEST_SIZE];
+            size_t read_len;
             if (!payload) {
                 fclose(fp);
                 return CDC_STORE_EMEM;
             }
-            if (fread(payload, 1, payload_len, fp) != payload_len) {
+            read_len = fread(payload, 1, payload_len, fp);
+            if (read_len != payload_len) {
                 free(payload);
-                *dirty = 1;
+                result->state = SCAN_TAIL; /* incomplete payload at EOF */
                 break;
             }
             cdc_digest(payload, payload_len, digest);
             free(payload);
-            if (memcmp(digest, header + 17, CDC_DIGEST_SIZE) != 0) {
-                *dirty = 1;
+            if (memcmp(digest, header + 17, CDC_DIGEST_SIZE) != 0 ||
+                seq != expect_event) {
+                result->state = SCAN_CORRUPT;
                 break;
             }
-            event_count++;
+            expect_event++;
+            if (!txn_open) {
+                cdc_digest_init(&txn_ctx);
+                txn_open = 1;
+            }
+            cdc_digest_update(&txn_ctx, header + 17, CDC_DIGEST_SIZE);
             offset += HEADER_SIZE + (long)payload_len;
         } else if (type == 'S') {
-            if (payload_len != 0) {
-                *dirty = 1;
+            uint8_t seal_expected[CDC_DIGEST_SIZE];
+            if (payload_len != 0 || seq != expect_seal || !txn_open) {
+                result->state = SCAN_CORRUPT;
                 break;
             }
-            sealed_count++;
+            cdc_digest_final(&txn_ctx, seal_expected);
+            txn_open = 0;
+            if (memcmp(seal_expected, header + 17, CDC_DIGEST_SIZE) != 0) {
+                result->state = SCAN_CORRUPT;
+                break;
+            }
+            expect_seal++;
             offset += HEADER_SIZE;
-            last_sealed_offset = offset;
-            events_at_seal = event_count;
+            result->sealed++;
+            result->valid_bytes = offset;
+            result->events = expect_event - 1;
         } else {
-            *dirty = 1;
+            result->state = SCAN_CORRUPT;
             break;
         }
     }
-    /* events beyond the last seal are unsealed */
-    if (!feof(fp) || ftell(fp) != last_sealed_offset) {
-        long end;
-        fseek(fp, 0, SEEK_END);
-        end = ftell(fp);
-        if (end != last_sealed_offset) {
-            *dirty = 1;
-        }
-    }
     fclose(fp);
-    *sealed = sealed_count;
-    *events = events_at_seal;
-    *valid_bytes = last_sealed_offset;
+    /* fully valid DATA records after the last seal are an unsealed tail */
+    if (result->state == SCAN_CLEAN && offset != result->valid_bytes) {
+        result->state = SCAN_TAIL;
+    }
     return CDC_STORE_OK;
+}
+
+/* fsync a path (file or directory); best effort errors surface as EIO. */
+static int sync_path(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+    if (fsync(fd) != 0) {
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    return 0;
 }
 
 cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
                                 int *recovered_out) {
     cdc_store *store;
     cdc_store_status status;
-    int dirty = 0;
+    scan_result scan;
+    int written;
 
     if (!dir || !out) {
         return CDC_STORE_EARG;
@@ -193,19 +242,36 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
     if (!store) {
         return CDC_STORE_EMEM;
     }
-    snprintf(store->dir, sizeof(store->dir), "%s", dir);
-    snprintf(store->log_path, sizeof(store->log_path), "%s/log.cdcstore",
-             dir);
-    status = scan_log(store->log_path, &store->sealed, &store->events,
-                      &store->valid_bytes, &dirty);
+    written = snprintf(store->dir, sizeof(store->dir), "%s", dir);
+    if (written < 0 || (size_t)written >= sizeof(store->dir)) {
+        free(store);
+        return CDC_STORE_EARG;
+    }
+    written = snprintf(store->log_path, sizeof(store->log_path),
+                       "%s/log.cdcstore", dir);
+    if (written < 0 || (size_t)written >= sizeof(store->log_path)) {
+        free(store);
+        return CDC_STORE_EARG;
+    }
+    status = scan_log(store->log_path, &scan);
     if (status != CDC_STORE_OK) {
         free(store);
         return status;
     }
-    if (dirty) {
-        /* Recovery: truncate the unsealed/torn tail (hold semantics — the
-         * unfinished transaction never happened). */
-        if (truncate(store->log_path, store->valid_bytes) != 0) {
+    if (scan.state == SCAN_CORRUPT) {
+        /* Committed-prefix integrity violation: fail closed, preserve the
+         * evidence bytes exactly as found (review B1). */
+        free(store);
+        return CDC_STORE_ECORRUPT;
+    }
+    if (scan.state == SCAN_TAIL) {
+        /* Latch-or-hold recovery: only a physically incomplete final
+         * record or a valid-but-unsealed transaction tail is discarded.
+         * The truncation itself is made durable before recovery is
+         * reported (review secondary hardening). */
+        if (truncate(store->log_path, scan.valid_bytes) != 0 ||
+            sync_path(store->log_path) != 0 ||
+            sync_path(store->dir) != 0) {
             free(store);
             return CDC_STORE_EIO;
         }
@@ -213,6 +279,9 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
             *recovered_out = 1;
         }
     }
+    store->sealed = scan.sealed;
+    store->events = scan.events;
+    store->valid_bytes = scan.valid_bytes;
     *out = store;
     return CDC_STORE_OK;
 }
@@ -238,6 +307,9 @@ cdc_store_status cdc_store_stage(cdc_store *store, const void *payload,
     staged_event event;
     if (!store || (!payload && size > 0)) {
         return CDC_STORE_EARG;
+    }
+    if (size > (size_t)UINT32_MAX) {
+        return CDC_STORE_EARG; /* record length field is 32-bit */
     }
     if (store->staged_count == store->staged_cap) {
         size_t next = store->staged_cap ? store->staged_cap * 2 : 8;
@@ -407,18 +479,20 @@ cdc_store_status cdc_store_replay(cdc_store *store, char *out,
     FILE *fp;
     cdc_digest_ctx state_ctx;
     uint8_t state_digest[CDC_DIGEST_SIZE];
-    uint64_t sealed, events;
+    scan_result scan;
     long valid;
-    int dirty;
     long offset = 0;
 
     if (!store || !out) {
         return CDC_STORE_EARG;
     }
-    if (scan_log(store->log_path, &sealed, &events, &valid, &dirty) !=
-        CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
+    if (scan.state == SCAN_CORRUPT) {
+        return CDC_STORE_ECORRUPT; /* corrupt evidence is never replayed */
+    }
+    valid = scan.valid_bytes;
     fp = fopen(store->log_path, "rb");
     cdc_digest_init(&state_ctx);
     if (fp) {
@@ -450,20 +524,21 @@ cdc_store_status cdc_store_attest(cdc_store *store, char *out,
     cdc_digest_ctx ctx;
     uint8_t digest[CDC_DIGEST_SIZE];
     uint8_t buffer[4096];
-    uint64_t sealed, events;
-    long valid, remaining;
-    int dirty;
+    scan_result scan;
+    long remaining;
 
     if (!store || !out) {
         return CDC_STORE_EARG;
     }
-    if (scan_log(store->log_path, &sealed, &events, &valid, &dirty) !=
-        CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
+    }
+    if (scan.state == SCAN_CORRUPT) {
+        return CDC_STORE_ECORRUPT; /* corrupt evidence is never attested */
     }
     cdc_digest_init(&ctx);
     fp = fopen(store->log_path, "rb");
-    remaining = valid;
+    remaining = scan.valid_bytes;
     while (fp && remaining > 0) {
         size_t take = remaining > (long)sizeof(buffer) ? sizeof(buffer)
                                                        : (size_t)remaining;
@@ -483,17 +558,20 @@ cdc_store_status cdc_store_attest(cdc_store *store, char *out,
 }
 
 cdc_store_status cdc_store_verify(cdc_store *store) {
-    uint64_t sealed, events;
-    long valid;
-    int dirty;
+    scan_result scan;
     if (!store) {
         return CDC_STORE_EARG;
     }
-    if (scan_log(store->log_path, &sealed, &events, &valid, &dirty) !=
-        CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
-    return dirty ? CDC_STORE_ECORRUPT : CDC_STORE_OK;
+    if (scan.state == SCAN_CORRUPT) {
+        return CDC_STORE_ECORRUPT;
+    }
+    if (scan.state == SCAN_TAIL) {
+        return CDC_STORE_EUNSEALED;
+    }
+    return CDC_STORE_OK;
 }
 
 cdc_store_status cdc_store_snapshot(cdc_store *store) {

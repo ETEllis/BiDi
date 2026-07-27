@@ -21,6 +21,7 @@ fi
 MOBIUS_BLENDER_BIN="${MOBIUS_BLENDER_BIN:-$(command -v blender || true)}"
 MASTER="assets/identity/3d/mobius-identity-master.blend"
 VALIDATION_LOG="build/identity-blender/validation.log"
+mkdir -p "$(dirname "$VALIDATION_LOG")"
 
 test -s "$MASTER" || { echo "missing Blender master: $MASTER" >&2; exit 1; }
 

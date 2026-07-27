@@ -46,6 +46,33 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D9 — 2026-07-24 — Independent merge-boundary review (bb3531b) adopted
+
+The independent review at head `bb3531b` (REQUEST CHANGES, B1–B7) is
+adopted as binding. All seven blockers are repaired with permanent
+counterexamples in `verify.sh`:
+B1/B2 — the store scanner is a typed three-state scan (CLEAN /
+TORN-OR-UNSEALED TAIL / CORRUPT COMMITTED PREFIX) shared by
+open/verify/replay/attest; sequence continuity and seal digests are
+verified; corruption of a structurally complete record fails closed with
+CDC_STORE_ECORRUPT, returns no handle, and NEVER mutates the log
+(6 byte-flip counterexamples + clean and valid-unsealed-tail controls);
+recovery truncation is itself made durable before recovery is reported.
+B3 — HOLD authorization binds to the typed executable statement identity
+(directive == runtime record form AND first argument == job id); the
+unrelated-witness spoof is a permanent negative fixture.
+B4 — zero executed runs is never green; fork/wait/child-output failures
+count as failures; per-invocation child output paths.
+B5 — a declared-but-incomplete reducer family is a typed fused error
+(three one-kind-missing counterexamples).
+B6 — identity 3D verifier creates its log directory.
+B7 — file counts computed by the shell (no ls|wc), BSD-portable.
+Deferred with the reviewer's structure intact: replacing stdout
+classification with structured per-check result records folds into the
+CT2/CT3 per-check-vector work already queued in RESUME_HERE; the
+re-review gate's testable requirement (spoof rejection) is met now.
+macOS-runner CI lane is queued as an operator-environment item.
+
 ## D8 — 2026-07-23 — Adversarial review adopted; identity branch integration
 
 The PR #3 Adversarial Gate Review (2026-07-23) is adopted as binding:

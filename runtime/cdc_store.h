@@ -18,14 +18,25 @@
  * declared and fail closed with CDC_STORE_EUNSUPPORTED until their gate
  * (recorded in BUILD_STATE) — never silently absent.
  *
- * Durability contract of the reference backend:
+ * Durability and integrity contract of the reference backend
+ * (2026-07-24 independent review, B1/B2):
  * - The log is append-only: DATA records followed by a SEAL record per
- *   transaction. Replay counts only sealed transactions; recovery
- *   truncates any unsealed or torn tail, so after a crash at ANY write
- *   boundary exactly the old (pre-transaction) or new (sealed) state is
- *   visible — never a partial batch (A10/A4 semantics: latch-or-hold).
- * - Every record carries its payload digest (interim sha256 per D2);
- *   torn or corrupted tails are detected by length/digest/marker checks.
+ *   transaction. Replay counts only sealed transactions.
+ * - TORN/UNSEALED TAIL vs CORRUPT COMMITTED PREFIX are distinguished and
+ *   never conflated. Recovery may truncate ONLY a physically incomplete
+ *   final record or a fully valid but unsealed transaction tail
+ *   (latch-or-hold: the unfinished transaction never happened). ANY
+ *   integrity violation inside a structurally complete record — payload
+ *   digest, sequence continuity, seal digest, type, or length — is
+ *   CDC_STORE_ECORRUPT: open fails, no handle, and the log bytes are
+ *   never mutated. Corrupted evidence is preserved, not repaired.
+ * - Sequence numbers are monotonic and verified (DATA: global event
+ *   ordinal; SEAL: transaction ordinal). Each SEAL digest is recomputed
+ *   from its transaction's DATA digests and must match.
+ * - open/verify/replay/attest share one typed scan; none can bypass
+ *   integrity state. replay/attest operate on the sealed prefix only and
+ *   refuse corrupt logs.
+ * - Every record carries its payload digest (interim sha256 per D2).
  * - Commit path: write(all records) -> fflush -> fsync(log fd) ->
  *   fsync(directory fd). The injectable failure hook aborts at each
  *   boundary to prove recovery (cdc_store_set_fail_after).
@@ -40,10 +51,13 @@ typedef enum {
     CDC_STORE_EARG = 1,
     CDC_STORE_EIO = 2,
     CDC_STORE_EMEM = 3,
-    CDC_STORE_ECORRUPT = 4,     /* recovery found and truncated a torn tail */
+    CDC_STORE_ECORRUPT = 4,     /* committed prefix integrity violation:
+                                   fail closed, log NEVER mutated */
     CDC_STORE_ECRASH = 5,       /* injected failure fired (test harness) */
     CDC_STORE_ESTATE = 6,
     CDC_STORE_EUNSUPPORTED = 7, /* declared verb not yet landed */
+    CDC_STORE_EUNSEALED = 8,    /* verify: valid but unsealed/torn tail
+                                   present (recoverable by open) */
 } cdc_store_status;
 
 const char *cdc_store_status_name(cdc_store_status status);

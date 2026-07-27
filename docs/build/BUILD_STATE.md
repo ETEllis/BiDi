@@ -42,8 +42,21 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
     (records + structural `end` lines = `statements`), recomputed from the
     corpus on every run.
 
-- **Phase D seed — durable store substrate (gates CT4/MM1): LIVE (this
-  commit).** `runtime/cdc_store.{h,c}` (full protocol declared; reference
+- **2026-07-24 independent-review repairs (B1–B7): COMPLETE (this
+  commit).** All seven merge blockers from the bb3531b review repaired
+  and permanently gated (see DECISIONS D9 for the item-by-item record):
+  the store integrity contract now fails closed on committed-prefix
+  corruption with evidence preserved (6 byte-flip counterexamples, 2
+  controls, plain + ASan); sequence and seal digests verified; hold
+  authorization bound to executable statement identity (spoof fixture);
+  zero-run gates fail; incomplete reducer families fail typed; the
+  identity 3D verifier creates its log directory; counts are
+  BSD-portable. Re-review gate items 2–7 are demonstrably green in
+  verify.sh; item 1 (fresh macOS run) needs an operator-side or CI
+  macOS lane (queued).
+
+- **Phase D seed — durable store substrate (gates CT4/MM1): LIVE
+  (previous commit).** `runtime/cdc_store.{h,c}` (full protocol declared; reference
   backend: append-only DATA+SEAL transaction log, digest-checked records,
   torn/unsealed-tail recovery by truncation, fsync of file AND directory,
   in-memory staging with commit/rollback) + `runtime/cdc_digest.{h,c}`
