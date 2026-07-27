@@ -165,6 +165,8 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_frontend_check.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -202,6 +204,8 @@ if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
   runtime/cdc_frontend_check.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -374,6 +378,22 @@ if ./build/cdc test --gate tests/fixtures/test_runner/silent_hold.cdc \
 fi
 grep -q "(expected=0 unexpected=1) nest=1 fail=0" build/cdc_test_neg.txt
 echo "typed gate rejects undeclared holds (runtime exit 0 notwithstanding)"
+
+echo
+echo "== Durable store substrate [gates CT4/MM1 seed] =="
+# Digest vectors, replay determinism, typed statuses, and the crash matrix:
+# injected failure at EVERY commit write/flush/sync boundary must recover
+# to exactly the old or the new sealed state — never a partial batch.
+rm -rf build/store_test build/store_crash
+mkdir -p build/store_test build/store_crash
+run_step ./build/cdc_frontend_check store-check build/store_test
+./build/cdc_frontend_check store-crash build/store_crash | tee build/store_crash.txt
+grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
+if [ "$SANITIZED" = "1" ]; then
+  rm -rf build/store_crash_asan
+  mkdir -p build/store_crash_asan
+  run_step ./build/cdc_frontend_check_asan store-crash build/store_crash_asan
+fi
 
 echo
 echo "== ABI boundary counterexamples [2026-07-23 adversarial review] =="

@@ -42,7 +42,30 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
     (records + structural `end` lines = `statements`), recomputed from the
     corpus on every run.
 
-- **Phase C seed — typed test runner (gate CT3): LIVE (this commit).**
+- **Phase D seed — durable store substrate (gates CT4/MM1): LIVE (this
+  commit).** `runtime/cdc_store.{h,c}` (full protocol declared; reference
+  backend: append-only DATA+SEAL transaction log, digest-checked records,
+  torn/unsealed-tail recovery by truncation, fsync of file AND directory,
+  in-memory staging with commit/rollback) + `runtime/cdc_digest.{h,c}`
+  (interim sha256 per D2, FIPS vectors self-tested). verify.sh gates:
+  replay determinism across independent stores; typed statuses
+  (ESTATE/EUNSUPPORTED fail closed for empty commits and
+  snapshot/compact/fence); and the **crash matrix — injected failure at
+  every one of the 7 commit write/flush/sync boundaries recovers to
+  exactly the old (3) or new (4) sealed state, never partial** (plain +
+  ASan). Open items and their order live in RESUME_HERE (BLAKE3 swap,
+  snapshot/compact/fence, kill-based injection, .cdc-declared
+  persistence jobs, BiDi-decision wiring).
+
+- **Fused executor — cdc run (gate CT3): LIVE (previous commit).** One
+  parse, one live Runtime, every declared stage family; universal
+  closure path for universal-bearing sources; multi-stage chaining
+  (council_bridge: council + evolution over one state, previously two
+  invocations); fail-closed on no-stage sources; parity-gated against
+  the native fused mode. cycles=N stays queued with its recorded reason
+  (inline expectations pin first-cycle state).
+
+- **Phase C seed — typed test runner (gate CT3): LIVE (earlier commit).**
   `cdc test [--gate] <files...>` (runtime/toolchain/cmd_test.c, ABI 1.2
   statement introspection): free discovery (every job carries inline
   expectations), per-file mode selection over the eight runtime families,

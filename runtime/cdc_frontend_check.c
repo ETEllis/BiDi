@@ -22,9 +22,11 @@
 #include "cdc_abi.h"
 #include "cdc_ast.h"
 #include "cdc_diagnostic.h"
+#include "cdc_digest.h"
 #include "cdc_lexer.h"
 #include "cdc_parser.h"
 #include "cdc_source.h"
+#include "cdc_store.h"
 
 static const char *base_name(const char *path) {
     const char *slash = strrchr(path, '/');
@@ -720,6 +722,214 @@ static int cmd_oom_abi(const char *path) {
     return 1;
 }
 
+/* ---- store: digest vectors + crash matrix (Phase D, CT4/MM1 seed) --- */
+
+static int digest_self_test(void) {
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char hex[80];
+    cdc_digest("", 0, digest);
+    cdc_digest_hex(digest, hex, sizeof(hex));
+    if (strcmp(hex, "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e464"
+                    "9b934ca495991b7852b855") != 0) {
+        fprintf(stderr, "digest FAIL: empty vector -> %s\n", hex);
+        return 0;
+    }
+    cdc_digest("abc", 3, digest);
+    cdc_digest_hex(digest, hex, sizeof(hex));
+    if (strcmp(hex, "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396"
+                    "177a9cb410ff61f20015ad") != 0) {
+        fprintf(stderr, "digest FAIL: abc vector -> %s\n", hex);
+        return 0;
+    }
+    return 1;
+}
+
+static int store_commit_txn(cdc_store *store, int which) {
+    char payload[64];
+    int i;
+    for (i = 0; i < 3; i++) {
+        snprintf(payload, sizeof(payload), "txn-%d-event-%d", which, i);
+        if (cdc_store_stage(store, payload, strlen(payload)) !=
+            CDC_STORE_OK) {
+            return 0;
+        }
+    }
+    return cdc_store_commit(store) == CDC_STORE_OK;
+}
+
+/* Builds a reference store with `txns` committed transactions under
+ * dir/name and returns its replay digest. */
+static int store_reference_digest(const char *base, const char *name,
+                                  int txns, char *out, size_t out_size) {
+    char dir[512];
+    cdc_store *store = NULL;
+    int t;
+    snprintf(dir, sizeof(dir), "%s/%s", base, name);
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        return 0;
+    }
+    for (t = 1; t <= txns; t++) {
+        if (!store_commit_txn(store, t)) {
+            cdc_store_close(store);
+            return 0;
+        }
+    }
+    if (cdc_store_replay(store, out, out_size) != CDC_STORE_OK) {
+        cdc_store_close(store);
+        return 0;
+    }
+    cdc_store_close(store);
+    return 1;
+}
+
+static int cmd_store_crash(const char *base) {
+    char ref_old[80], ref_new[80];
+    int boundaries = 0, old_state = 0, new_state = 0;
+    int k;
+
+    if (!digest_self_test()) {
+        return 1;
+    }
+    if (!store_reference_digest(base, "ref1", 1, ref_old,
+                                sizeof(ref_old)) ||
+        !store_reference_digest(base, "ref2", 2, ref_new,
+                                sizeof(ref_new))) {
+        fprintf(stderr, "store-crash FAIL: reference stores\n");
+        return 1;
+    }
+    if (strcmp(ref_old, ref_new) == 0) {
+        fprintf(stderr, "store-crash FAIL: reference digests collide\n");
+        return 1;
+    }
+
+    /* boundary count for the second transaction (3 events) */
+    {
+        char dir[512];
+        cdc_store *probe = NULL;
+        char payload[8] = "p";
+        int i;
+        snprintf(dir, sizeof(dir), "%s/probe", base);
+        if (cdc_store_open(dir, &probe, NULL) != CDC_STORE_OK) {
+            return 1;
+        }
+        for (i = 0; i < 3; i++) {
+            cdc_store_stage(probe, payload, 1);
+        }
+        boundaries = cdc_store_commit_operations(probe);
+        cdc_store_close(probe);
+    }
+
+    for (k = 1; k <= boundaries; k++) {
+        char dir[512];
+        cdc_store *store = NULL;
+        cdc_store_status status;
+        char replayed[80];
+        uint64_t sealed;
+        int recovered = 0;
+
+        snprintf(dir, sizeof(dir), "%s/crash_%d", base, k);
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            !store_commit_txn(store, 1)) {
+            fprintf(stderr, "store-crash FAIL: baseline txn (k=%d)\n", k);
+            return 1;
+        }
+        {
+            char payload[64];
+            int i;
+            for (i = 0; i < 3; i++) {
+                snprintf(payload, sizeof(payload), "txn-2-event-%d", i);
+                cdc_store_stage(store, payload, strlen(payload));
+            }
+        }
+        cdc_store_set_fail_after(store, k);
+        status = cdc_store_commit(store);
+        cdc_store_close(store);
+        if (status == CDC_STORE_OK) {
+            fprintf(stderr,
+                    "store-crash FAIL: injection %d did not fire\n", k);
+            return 1;
+        }
+        if (status != CDC_STORE_ECRASH) {
+            fprintf(stderr, "store-crash FAIL: injection %d -> %s\n", k,
+                    cdc_store_status_name(status));
+            return 1;
+        }
+        /* recovery: reopen and require exactly old or new state */
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK) {
+            fprintf(stderr, "store-crash FAIL: reopen (k=%d)\n", k);
+            return 1;
+        }
+        sealed = cdc_store_sealed_count(store);
+        if (cdc_store_replay(store, replayed, sizeof(replayed)) !=
+                CDC_STORE_OK ||
+            cdc_store_verify(store) != CDC_STORE_OK) {
+            fprintf(stderr, "store-crash FAIL: replay/verify (k=%d)\n", k);
+            cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        if (sealed == 1 && strcmp(replayed, ref_old) == 0) {
+            old_state++;
+        } else if (sealed == 2 && strcmp(replayed, ref_new) == 0) {
+            new_state++;
+        } else {
+            fprintf(stderr,
+                    "store-crash FAIL: partial state at k=%d "
+                    "(sealed=%llu)\n",
+                    k, (unsigned long long)sealed);
+            return 1;
+        }
+    }
+    printf("store-crash ok boundaries=%d old=%d new=%d\n", boundaries,
+           old_state, new_state);
+    return 0;
+}
+
+static int cmd_store_check(const char *base) {
+    char dir[512];
+    char a[80], b[80], attest[80];
+    cdc_store *store = NULL;
+
+    if (!digest_self_test()) {
+        return 1;
+    }
+    if (!store_reference_digest(base, "det1", 2, a, sizeof(a)) ||
+        !store_reference_digest(base, "det2", 2, b, sizeof(b))) {
+        fprintf(stderr, "store-check FAIL: determinism stores\n");
+        return 1;
+    }
+    if (strcmp(a, b) != 0) {
+        fprintf(stderr, "store-check FAIL: replay digests differ\n");
+        return 1;
+    }
+    snprintf(dir, sizeof(dir), "%s/det1", base);
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        return 1;
+    }
+    if (cdc_store_sealed_count(store) != 2 ||
+        cdc_store_attest(store, attest, sizeof(attest)) != CDC_STORE_OK ||
+        cdc_store_verify(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-check FAIL: attest/verify\n");
+        cdc_store_close(store);
+        return 1;
+    }
+    /* rollback leaves nothing; empty commit is a typed state error;
+     * declared-but-unlanded verbs fail closed. */
+    cdc_store_stage(store, "ghost", 5);
+    cdc_store_rollback(store);
+    if (cdc_store_commit(store) != CDC_STORE_ESTATE ||
+        cdc_store_snapshot(store) != CDC_STORE_EUNSUPPORTED ||
+        cdc_store_compact(store) != CDC_STORE_EUNSUPPORTED ||
+        cdc_store_fence(store, 2) != CDC_STORE_EUNSUPPORTED) {
+        fprintf(stderr, "store-check FAIL: typed statuses\n");
+        cdc_store_close(store);
+        return 1;
+    }
+    cdc_store_close(store);
+    printf("store-check ok determinism=1 attest=%s\n", attest);
+    return 0;
+}
+
 /* ---- reject --------------------------------------------------------- */
 
 static int cmd_reject(int argc, char **argv) {
@@ -780,6 +990,12 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "oom-abi") == 0 && argc >= 3) {
         return cmd_oom_abi(argv[2]);
+    }
+    if (strcmp(argv[1], "store-crash") == 0 && argc >= 3) {
+        return cmd_store_crash(argv[2]);
+    }
+    if (strcmp(argv[1], "store-check") == 0 && argc >= 3) {
+        return cmd_store_check(argv[2]);
     }
     fprintf(stderr, "cdc_frontend_check: unknown mode '%s'\n", argv[1]);
     return 2;
