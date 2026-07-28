@@ -128,6 +128,15 @@ cdc_status cdc_runtime_load(cdc_runtime *runtime, cdc_program *program);
 cdc_status cdc_runtime_verify(cdc_runtime *runtime,
                               const cdc_program *program, cdc_result **out);
 
+/* The ORDERED per-check parity vector for the loaded corpus (interface
+ * section 7): one record per check, in evaluation order. Aggregate counts
+ * can agree while the checks behind them differ, so conformance compares
+ * these record by record. The trace digest chains, so ordering is part of
+ * the compared value rather than something a reader has to notice. */
+cdc_status cdc_runtime_vectors(cdc_runtime *runtime,
+                               const cdc_program *program,
+                               cdc_result **out);
+
 /* Declared at ABI 1.0; functional from the Phase C execution surface.
  * Until then returns CDC_ERR_STATE and, when `out` is non-NULL, a result
  * explaining the gap. It never partially executes. */

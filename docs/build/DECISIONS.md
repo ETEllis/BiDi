@@ -46,6 +46,50 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D18 — 2026-07-28 — Ordered per-check parity vectors (interface section 7)
+
+Parity was compared as a byte-identical contract REPORT. That is real
+evidence, but a report is prose: it carries no per-check identity a
+consumer can compare field-for-field, and nothing makes ordering part of
+the compared value rather than an incidental property of two texts that
+happen to match.
+
+Both `cdc verify` and `cdc test` now export the section-7 vector — one
+record per check, in order:
+
+    <identifier> <decision> <coordinate> <effects> <trace> <closure>
+
+`decision` is the ternary carrier's own vocabulary (commit | hold | nest |
+fail), never pass/fail, and the gate rejects a binary vocabulary appearing
+in that column.
+
+**The trace digest chains.** trace_i = digest(trace_{i-1} || effects_i), so
+a record that moves position changes its own trace digest and every later
+one. Ordering is therefore part of the value being compared, not something
+a reader has to notice. The counterexample measures exactly that: swapping
+two ADJACENT checks diverges 250 of 253 records. If only those two had
+changed, ordering would be checkable but not load-bearing.
+
+**What the contract oracle does and does not test.** The bootloader cannot
+produce BLAKE3 digests — no stdlib BLAKE3, and shelling out per check would
+be 250+ subprocesses — so its vectors are re-rendered in C from the report
+it independently computed. The digest function is therefore shared and is
+NOT under test; it does not need to be, being already gated by 31 reference
+vectors. What IS under test is everything the two implementations compute
+separately: each check's identifier, its verdict, its full evaluated label,
+and their order. This is stated rather than glossed, because a reader could
+otherwise mistake the shared digest for an independent confirmation.
+
+**Fields with no honest value are "-".** Contract checks have no bridge
+coordinate. No check carries a closure witness digest yet — that field is
+reserved and empty rather than filled with a placeholder that would read as
+evidence. Carrying closure witnesses on the receipt is the next open item,
+and until it lands the column stays "-".
+
+Execution vectors are rendered from the receipts (D17), with the receipt
+line as the effects payload, so the vector and the receipt cannot describe
+different effects. ABI gains `cdc_runtime_vectors`.
+
 ## D17 — 2026-07-28 — Effects are reported, not inferred from prose (ABI 1.3)
 
 `cdc test` decided every verdict by string-matching the runtime's HUMAN

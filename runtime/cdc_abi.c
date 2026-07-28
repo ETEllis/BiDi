@@ -364,6 +364,47 @@ cdc_status cdc_runtime_load(cdc_runtime *runtime, cdc_program *program) {
     return CDC_OK;
 }
 
+cdc_status cdc_runtime_vectors(cdc_runtime *runtime,
+                               const cdc_program *program,
+                               cdc_result **out) {
+    char *vectors = NULL;
+    size_t vectors_len = 0;
+    FILE *mem;
+    int verdict;
+    cdc_result *result;
+
+    if (!runtime || !out) {
+        return CDC_ERR_ARGUMENT;
+    }
+    *out = NULL;
+    if (program) {
+        cdc_status status =
+            cdc_runtime_load(runtime, (cdc_program *)program);
+        if (status != CDC_OK) {
+            return status;
+        }
+    }
+    mem = open_memstream(&vectors, &vectors_len);
+    if (!mem) {
+        return CDC_ERR_MEMORY;
+    }
+    verdict = cdc_registry_vectors(runtime->registry, ".", mem);
+    if (fclose(mem) != 0 || verdict < 0) {
+        free(vectors);
+        return CDC_ERR_MEMORY;
+    }
+    result = cdc_frontend_alloc(NULL, sizeof(*result));
+    if (!result) {
+        free(vectors);
+        return CDC_ERR_MEMORY;
+    }
+    memset(result, 0, sizeof(*result));
+    result->text = vectors;
+    result->errors = verdict == 1 ? 0 : 1;
+    *out = result;
+    return CDC_OK;
+}
+
 cdc_status cdc_runtime_verify(cdc_runtime *runtime,
                               const cdc_program *program, cdc_result **out) {
     char *report = NULL;

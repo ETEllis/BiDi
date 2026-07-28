@@ -7,7 +7,7 @@ lane inherits when this lane's capacity ends). Read in order:
 `CDC_TOOLCHAIN_PLAN.md` (with Amendment Record) → the two operator-held
 documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
 `CDC_MEMORY_MANIFOLD_INTERFACE.md` → `docs/build/BUILD_STATE.md` →
-`docs/build/DECISIONS.md` (D1–D17).
+`docs/build/DECISIONS.md` (D1–D18).
 
 ## Current head (2026-07-28)
 
@@ -107,8 +107,9 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
 2. **CT2/CT3 closure (this repo).** Typed effect receipts are DONE (D17,
    ABI 1.3): outcomes are structured records, `cdc test` classifies from
    fields rather than prose, and receipt/prose parity is gated. Remaining:
-   closure witnesses carried on the same receipt; per-check ordered vector
-   export
+   closure witnesses carried on the same receipt (the vector's sixth
+   field is reserved and empty until then). Per-check ordered vector export
+   is DONE (D18). Remaining
    (interface §7 format) from cdc test and cdc verify; lifecycle/
    cancellation/budget contract for cdc run; full-binary sanitizer sweep;
    then CT0 completion: reproducible-build check + manifest digest

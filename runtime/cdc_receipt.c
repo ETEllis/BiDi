@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cdc_digest.h"
+
 void cdc_receipt_init(cdc_receipt *receipt) {
     if (!receipt) {
         return;
@@ -246,4 +248,68 @@ int cdc_receipt_parse(const char *line, cdc_receipt *receipt) {
         receipt->generation = value;
     }
     return 1;
+}
+
+
+/* ---- parity vectors --------------------------------------------------- */
+
+void cdc_vector_chain_init(cdc_vector_chain *chain) {
+    if (chain) {
+        memset(chain, 0, sizeof(*chain));
+    }
+}
+
+const char *cdc_receipt_decision(const cdc_receipt *receipt) {
+    if (!receipt) {
+        return "fail";
+    }
+    if (strcmp(receipt->kind, "nest") == 0) {
+        return "nest";
+    }
+    switch (receipt->outcome) {
+    case CDC_OUTCOME_ACCEPTED:
+        return "commit";
+    case CDC_OUTCOME_HELD:
+        return "hold";
+    default:
+        return "fail";
+    }
+}
+
+int cdc_vector_render(cdc_vector_chain *chain, const char *identifier,
+                      const char *decision, const char *coordinate,
+                      const void *effects, size_t effects_size,
+                      const char *closure, char *out, size_t out_size) {
+    uint8_t effects_digest[CDC_DIGEST_SIZE];
+    char effects_hex[96];
+    char trace_hex[96];
+    cdc_digest_ctx ctx;
+    uint8_t next[CDC_DIGEST_SIZE];
+    int written;
+
+    if (!chain || !identifier || !decision || !out) {
+        return -1;
+    }
+    cdc_digest(effects, effects_size, effects_digest);
+    cdc_digest_hex(effects_digest, effects_hex, sizeof(effects_hex));
+
+    /* trace_i = digest(trace_{i-1} || effects_i): a record that changes
+     * position changes its trace digest and every later one, so the
+     * comparison catches reordering, not just substitution. */
+    cdc_digest_init(&ctx);
+    cdc_digest_update(&ctx, chain->chain, CDC_DIGEST_SIZE);
+    cdc_digest_update(&ctx, effects_digest, CDC_DIGEST_SIZE);
+    cdc_digest_final(&ctx, next);
+    memcpy(chain->chain, next, CDC_DIGEST_SIZE);
+    chain->started = 1;
+    cdc_digest_hex(chain->chain, trace_hex, sizeof(trace_hex));
+
+    written = snprintf(out, out_size, "%s %s %s %s %s %s", identifier,
+                       decision, coordinate && coordinate[0] ? coordinate : "-",
+                       effects_hex, trace_hex,
+                       closure && closure[0] ? closure : "-");
+    if (written < 0 || (size_t)written >= out_size) {
+        return -1;
+    }
+    return written;
 }

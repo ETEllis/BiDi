@@ -1155,6 +1155,90 @@ static int cmd_store_kill(const char *base) {
 
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
 
+/* ---- parity vectors from the oracle report (interface section 7) -----
+ *
+ * The bootloader is the oracle for contract checks. It cannot produce
+ * BLAKE3 digests (no stdlib BLAKE3 in Python, and shelling out per check
+ * would be 250+ subprocesses), so its vectors are RE-RENDERED here from the
+ * report it independently computed: each `  OK <label>   [<source>]` line
+ * becomes the same six-field record the native evaluator emits.
+ *
+ * What that does and does not test. The digest function is shared, so it is
+ * not under test — it does not need to be, because it is already gated by
+ * 31 reference vectors. What IS under test is everything the two
+ * implementations compute separately: each check's identifier, its verdict,
+ * its full evaluated label, and the ORDER of all of them. A divergence in
+ * any of those changes the vector, and the chained trace digest carries the
+ * change forward so a reordering cannot cancel out. */
+static int cmd_vectors_from_report(const char *report_path) {
+    FILE *fp = fopen(report_path, "r");
+    char line[4096];
+    cdc_vector_chain chain;
+    long emitted = 0;
+
+    if (!fp) {
+        fprintf(stderr, "vectors-from-report: cannot read %s\n", report_path);
+        return 1;
+    }
+    cdc_vector_chain_init(&chain);
+    while (fgets(line, sizeof(line), fp)) {
+        const char *decision;
+        char *label;
+        char *source;
+        char *bracket;
+        char record[512];
+        size_t len = strlen(line);
+
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (strncmp(line, "  OK ", 5) == 0) {
+            decision = "commit";
+            label = line + 5;
+        } else if (strncmp(line, "  FAIL ", 7) == 0) {
+            decision = "fail";
+            label = line + 7;
+        } else {
+            continue; /* banner, rule, or summary line */
+        }
+        /* the source is the LAST "   [" ... "]" on the line, so a label
+         * containing brackets cannot truncate it */
+        bracket = strrchr(label, '[');
+        if (!bracket || bracket == label || bracket[-1] != ' ' ||
+            label[strlen(label) - 1] != ']') {
+            fprintf(stderr, "vectors-from-report: unparsable record: %s\n",
+                    line);
+            fclose(fp);
+            return 1;
+        }
+        source = bracket + 1;
+        label[strlen(label) - 1] = '\0'; /* drop ']' */
+        /* drop the three spaces before '[' */
+        {
+            char *end = bracket - 1;
+            while (end > label && *end == ' ') {
+                *end-- = '\0';
+            }
+            *bracket = '\0';
+        }
+        if (cdc_vector_render(&chain, source, decision, NULL, label,
+                              strlen(label), NULL, record,
+                              sizeof(record)) < 0) {
+            fprintf(stderr, "vectors-from-report: record too long\n");
+            fclose(fp);
+            return 1;
+        }
+        printf("%s\n", record);
+        emitted++;
+    }
+    fclose(fp);
+    if (emitted == 0) {
+        fprintf(stderr, "vectors-from-report: no check records found\n");
+        return 1;
+    }
+    return 0;
+}
+
 /* ---- typed effect receipts (gate CT3) --------------------------------
  *
  * The carrier `cdc test` now trusts instead of prose. These cases pin the
@@ -2487,6 +2571,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
         return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "vectors-from-report") == 0 && argc >= 3) {
+        return cmd_vectors_from_report(argv[2]);
     }
     if (strcmp(argv[1], "receipt-check") == 0) {
         return cmd_receipt_check();

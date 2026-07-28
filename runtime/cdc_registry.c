@@ -2,6 +2,8 @@
 
 #include "cdc_registry.h"
 
+#include "cdc_receipt.h"
+
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
@@ -987,6 +989,42 @@ unknown:
         fprintf(mem, " %s", expect_arg(stmt, i));
     }
     return 0;
+}
+
+int cdc_registry_vectors(cdc_registry *registry, const char *python_root,
+                         FILE *stream) {
+    size_t i;
+    size_t passed = 0;
+    cdc_vector_chain chain;
+
+    cdc_vector_chain_init(&chain);
+    for (i = 0; i < registry->expect_count; i++) {
+        char *label_buf = NULL;
+        size_t label_len = 0;
+        FILE *mem = open_memstream(&label_buf, &label_len);
+        char record[512];
+        int ok;
+        if (!mem) {
+            return -1;
+        }
+        ok = eval_expect(registry, registry->expects[i].stmt, python_root,
+                         mem);
+        fclose(mem);
+        passed += ok ? 1 : 0;
+        /* The effects digest covers the check's full evaluated label, so a
+         * check whose verdict is unchanged but whose REASON changed still
+         * shows up as a different vector. */
+        if (cdc_vector_render(&chain, registry->expects[i].source,
+                              ok ? "commit" : "fail", NULL, label_buf,
+                              label_len, NULL, record,
+                              sizeof(record)) < 0) {
+            free(label_buf);
+            return -1;
+        }
+        free(label_buf);
+        fprintf(stream, "%s\n", record);
+    }
+    return passed == registry->expect_count ? 1 : 0;
 }
 
 int cdc_registry_report(cdc_registry *registry, const char *python_root,

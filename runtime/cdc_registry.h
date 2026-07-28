@@ -43,4 +43,21 @@ int cdc_registry_load(cdc_registry *registry, const cdc_unit *unit,
 int cdc_registry_report(cdc_registry *registry, const char *python_root,
                         FILE *stream);
 
+/* Writes the ORDERED per-check parity vector (interface section 7) for the
+ * collected expectations: one record per check, in evaluation order.
+ *
+ *   <file:line> <commit|fail> <coordinate> <effects> <trace> <closure>
+ *
+ * Aggregate counts can agree while the checks behind them differ, so parity
+ * is compared record by record. The trace digest chains over every effects
+ * digest so far, which makes ORDERING part of the compared value: a record
+ * that moves changes its own trace digest and every one after it.
+ *
+ * Contract checks carry no bridge coordinate and no closure witness yet;
+ * those fields are "-" rather than a placeholder digest that would read as
+ * evidence. Returns 1 when every check passed, 0 otherwise, -1 on
+ * allocation failure. */
+int cdc_registry_vectors(cdc_registry *registry, const char *python_root,
+                         FILE *stream);
+
 #endif

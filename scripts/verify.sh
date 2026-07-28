@@ -324,6 +324,55 @@ python3 cdc_boot.py > build/contract_boot.txt
 ./build/cdc verify --contract $CDC_ROOT_SOURCES > build/contract_native.txt
 cmp build/contract_boot.txt build/contract_native.txt
 echo "toolchain-verify-parity ok (byte-identical contract reports)"
+# Ordered per-check parity vectors (interface section 7, amendment A5).
+# Byte-identical reports already imply the same checks in the same order,
+# but a report is prose: it carries no per-check identity a consumer can
+# compare field-for-field, and nothing forces ordering to be part of the
+# compared VALUE. The vector does both.
+#
+# The oracle side is re-rendered from the bootloader's independently
+# computed report. The digest function is shared and is therefore not what
+# is under test — it is already gated by 31 reference vectors. What is under
+# test is everything the two implementations compute separately: each
+# check's identifier, its verdict, its full evaluated label, and their
+# order.
+# shellcheck disable=SC2086
+./build/cdc verify --vectors $CDC_ROOT_SOURCES > build/vectors_native.txt
+./build/cdc_frontend_check vectors-from-report build/contract_boot.txt \
+  > build/vectors_oracle.txt
+cmp build/vectors_native.txt build/vectors_oracle.txt
+VECTOR_COUNT=$(wc -l < build/vectors_native.txt)
+test "$VECTOR_COUNT" -ge 250
+# Every record carries all six section-7 fields.
+awk 'NF != 6 { print "malformed vector: " $0; exit 1 }' build/vectors_native.txt
+echo "per-check vector parity ok records=${VECTOR_COUNT} fields=6"
+# Counterexample: ORDER is part of the compared value, not merely the
+# sequence of comparisons. Swapping two ADJACENT checks must diverge far
+# beyond those two records, because the trace digest chains forward.
+python3 - <<'SWAP'
+from pathlib import Path
+
+lines = Path("build/contract_boot.txt").read_text().split("\n")
+idx = [i for i, l in enumerate(lines)
+       if l.startswith("  OK ") or l.startswith("  FAIL ")]
+if len(idx) < 10:
+    raise SystemExit("not enough check records to test ordering")
+a, b = idx[3], idx[4]
+lines[a], lines[b] = lines[b], lines[a]
+Path("build/contract_boot_swapped.txt").write_text("\n".join(lines))
+SWAP
+./build/cdc_frontend_check vectors-from-report build/contract_boot_swapped.txt \
+  > build/vectors_swapped.txt
+if cmp -s build/vectors_oracle.txt build/vectors_swapped.txt; then
+  echo "reordering two checks did not change the vector" >&2
+  exit 1
+fi
+SWAP_DIFF=$(diff build/vectors_oracle.txt build/vectors_swapped.txt | grep -c '^<' || true)
+# A swap of two adjacent records must propagate through the chain to the
+# tail; if only those two differed, ordering would be checkable but not
+# load-bearing.
+test "$SWAP_DIFF" -gt 100
+echo "vector ordering is load-bearing (2 adjacent checks swapped -> ${SWAP_DIFF}/${VECTOR_COUNT} records diverge)"
 printf 'witness lonely-w capability=Z9 claim="fixture"\nexpect witness missing-w\nexpect capability Z9\nexpect frameworks closed\n' \
   > build/fixture_fail_expect.cdc
 set +e
@@ -703,6 +752,29 @@ if ./build/cdc test --gate tests/fixtures/persistence/silent_persist_hold.cdc \
 fi
 grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1) nest=0 fail=0 parity=0" build/persistence_silent.txt
 echo "typed gate rejects undeclared durable holds"
+# Execution-side per-check vectors: one record per executed effect, in
+# execution order, rendered from the receipts so the two cannot describe
+# different effects.
+./build/cdc test --gate --vectors build/test_vectors.txt \
+  native_reducer.cdc native_surface.cdc council_bridge.cdc \
+  framework_transition.cdc framework_procedural.cdc \
+  framework_episodic.cdc framework_deliberative.cdc framework_loop.cdc \
+  framework_persistence.cdc > /dev/null
+awk 'NF != 6 { print "malformed execution vector: " $0; exit 1 }' \
+  build/test_vectors.txt
+EXEC_VECTORS=$(wc -l < build/test_vectors.txt)
+# 19 commit + 8 hold + 10 nest, matching the gate line exactly.
+test "$EXEC_VECTORS" = "37"
+test "$(awk '$2 == "commit"' build/test_vectors.txt | wc -l)" = "19"
+test "$(awk '$2 == "hold"' build/test_vectors.txt | wc -l)" = "8"
+test "$(awk '$2 == "nest"' build/test_vectors.txt | wc -l)" = "10"
+test "$(awk '$2 == "fail"' build/test_vectors.txt | wc -l)" = "0"
+# The decision column is the ternary vocabulary, never pass/fail.
+if grep -qE " (pass|true|false) " build/test_vectors.txt; then
+  echo "execution vectors used a binary decision vocabulary" >&2
+  exit 1
+fi
+echo "execution vector export ok records=${EXEC_VECTORS} commit=19 hold=8 nest=10 fail=0"
 
 # The persistence path owns store handles across a whole source file
 # (three handles, two of them onto one directory), so it gets its own

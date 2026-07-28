@@ -142,6 +142,14 @@ static void classify_prose(FILE *fp, test_counts *counts, int verbose) {
  * Returns 0 when the receipt stream is unreadable or malformed. A
  * malformed receipt is a hard failure: the gate must not silently fall
  * back to prose, because that is exactly the fragility being removed. */
+/* Ordered per-check parity vector (interface section 7). One record per
+ * executed effect, in execution order, chained so that a record which
+ * changes position changes every later trace digest too. The receipt is
+ * the effects payload verbatim, so the vector and the receipt cannot
+ * describe different effects. */
+static FILE *vector_stream;
+static cdc_vector_chain vector_chain;
+
 static int classify_receipts(const char *path, const cdc_program *program,
                              const char *file, const char *mode,
                              test_counts *counts) {
@@ -164,6 +172,29 @@ static int classify_receipts(const char *path, const cdc_program *program,
                     file, mode, line);
             fclose(fp);
             return 0;
+        }
+        if (vector_stream) {
+            char identifier[320];
+            char record[640];
+            size_t len = strlen(line);
+            while (len > 0 &&
+                   (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+                line[--len] = '\0';
+            }
+            snprintf(identifier, sizeof(identifier), "%s:%s:%s", file, mode,
+                     receipt.job);
+            if (cdc_vector_render(&vector_chain, identifier,
+                                  cdc_receipt_decision(&receipt),
+                                  receipt.trits[0] ? receipt.trits : NULL,
+                                  line, len, NULL, record,
+                                  sizeof(record)) < 0) {
+                fprintf(stderr,
+                        "cdc test: FAIL %s (%s): vector record too long\n",
+                        file, mode);
+                fclose(fp);
+                return 0;
+            }
+            fprintf(vector_stream, "%s\n", record);
         }
         if (strcmp(receipt.kind, "nest") == 0) {
             counts->nest++;
@@ -311,17 +342,32 @@ int cdc_cmd_test(int argc, char **argv) {
     int gate = 0, verbose = 0;
     int i, m;
     int first_file = 0;
+    int vector_path_index = -1;
 
     memset(&counts, 0, sizeof(counts));
+    cdc_vector_chain_init(&vector_chain);
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--gate") == 0) {
             gate = 1;
         } else if (strcmp(argv[i], "--verbose") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "--vectors") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "cdc test --vectors: no path given\n");
+                return 2;
+            }
+            vector_stream = fopen(argv[i + 1], "w");
+            if (!vector_stream) {
+                fprintf(stderr, "cdc test --vectors: cannot write %s\n",
+                        argv[i + 1]);
+                return 2;
+            }
+            vector_path_index = i + 1;
+            i++;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "cdc test: unknown option %s\n", argv[i]);
             return 2;
-        } else if (!first_file) {
+        } else if (!first_file && i != vector_path_index) {
             first_file = i;
         }
     }
@@ -334,7 +380,7 @@ int cdc_cmd_test(int argc, char **argv) {
     for (i = 0; i < argc; i++) {
         cdc_program *program = NULL;
         cdc_status status;
-        if (argv[i][0] == '-') {
+        if (argv[i][0] == '-' || i == vector_path_index) {
             continue;
         }
         status = cdc_program_parse(argv[i], NULL, 0, &program);
@@ -369,6 +415,10 @@ int cdc_cmd_test(int argc, char **argv) {
                counts.runs == 0 ? " (no executable stage selected)" : "");
         (void)gate; /* strictness is unconditional; flag kept for CLI
                        stability */
+        if (vector_stream) {
+            fclose(vector_stream);
+            vector_stream = NULL;
+        }
         return failed ? 1 : 0;
     }
 }

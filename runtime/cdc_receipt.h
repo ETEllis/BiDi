@@ -98,6 +98,43 @@ int cdc_receipt_emit(void *stream, const cdc_receipt *receipt);
  * receipts fail closed rather than being skipped as noise. */
 int cdc_receipt_parse(const char *line, cdc_receipt *receipt);
 
+/* ---- parity vectors (interface section 7, amendment A5) --------------
+ *
+ * An ordered per-check vector. Aggregate counts can agree while the checks
+ * behind them differ, so parity is compared record by record, in order:
+ *
+ *   <check-identifier> <decision> <coordinate> <effects> <trace> <closure>
+ *
+ * decision is the ternary carrier's own vocabulary — commit | hold | nest |
+ * fail — not pass/fail. The TRACE digest is a running chain over every
+ * effects digest emitted so far, so a record that moves position changes
+ * its own trace digest and every one after it: ordering is part of the
+ * compared value rather than something a reader has to notice.
+ *
+ * Fields with no honest value are "-" and are never invented. Contract
+ * checks have no bridge coordinate; most checks carry no closure witness
+ * yet, and that gap is recorded rather than filled with a placeholder
+ * digest that would look like evidence.
+ */
+typedef struct {
+    uint8_t chain[32];
+    int started;
+} cdc_vector_chain;
+
+void cdc_vector_chain_init(cdc_vector_chain *chain);
+
+/* Renders one vector record (no trailing newline) and advances the chain.
+ * `coordinate` and `closure` may be NULL, rendering as "-". Returns the
+ * number of bytes written, or -1 if the buffer is too small. */
+int cdc_vector_render(cdc_vector_chain *chain, const char *identifier,
+                      const char *decision, const char *coordinate,
+                      const void *effects, size_t effects_size,
+                      const char *closure, char *out, size_t out_size);
+
+/* The decision token for a receipt: "commit" for +1, "hold" for 0, "nest"
+ * for a nest integration, "fail" for -1. */
+const char *cdc_receipt_decision(const cdc_receipt *receipt);
+
 /* Vocabulary helpers shared by producer and consumer. */
 const char *cdc_outcome_token(cdc_outcome outcome);
 cdc_outcome cdc_outcome_from_token(const char *token);
