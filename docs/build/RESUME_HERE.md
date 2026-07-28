@@ -6,7 +6,7 @@ external access, or awaiting one operator decision — all listed below with
 their exact blockers. Read in order: `CDC_TOOLCHAIN_PLAN.md` (with
 Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
-`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D28).
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D34).
 
 ## Current head (2026-07-28)
 
@@ -21,8 +21,11 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
   lane, claims withdrawn (D16), CT2/CT3/CT0 closure — typed receipts,
   ordered vectors with a chained trace digest, lifecycle contract,
   whole-binary sanitizers, closure witnesses, corpus-bound verdicts
-  (D17–D21), the deletion gates through the scanner (D22–D27), and
-  Phase I — `cdc build` / `cdc install` / `cdc x` (D28).
+  (D17–D21), the deletion gates through the scanner (D22–D27), Phase I —
+  `cdc build` / `cdc install` / `cdc x` (D28), same-application store
+  coordination (D29), the second review and Darwin reproducibility repairs
+  (D30–D32), the frozen bootloader-oracle decision (D33), and the
+  separately classified RFTC logical-cell crucible (D34).
 - Full `./scripts/verify.sh` green locally at this head, including the
   Phase I gate section and the sanitized Phase I sweep.
 - The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
@@ -70,9 +73,20 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
    counts with the macOS CI lane running the full native suite, and the
    coordination registry's last-close window closed with its own probe
    build.
+8. **RFTC foundational crucible**: five separately failing classical
+   witnesses, deterministic and alternate-seed evidence, sanitizer
+   execution, 256-seed rapid and 4,096-seed stress profiles, plus a
+   self-contained evidence-bound UI (D34). This completes the entry gate,
+   not the distributed six-form runtime described in
+   `docs/rftc/RFTC_FULL_BUILD_SPEC.md`.
 
 ## QUEUED, with recorded reasons (not blockers, not claims)
 
+- **RFTC integrated six-form runtime** — `frame`, `reduce`, `complex`,
+  `topology`, `authority`, and `transport`, followed by recursive logical
+  cells and bound operator surfaces. Capability IDs remain unassigned because
+  H12-H17 are already reserved by D3; allocation requires an explicit registry
+  amendment.
 - **Ed25519 keyed authentication + external anchor** — integrity tags are
   unkeyed (corruption detection, not forgery resistance); whole-file
   generation rollback is detectable only against an externally retained

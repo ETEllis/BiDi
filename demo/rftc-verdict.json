@@ -1,0 +1,20 @@
+{
+  "schema": "rftc-crucible/v1",
+  "classification": "CLASSICAL_REFERENCE_FRAME_TOPOLOGICAL_COHERENCE",
+  "profile": "smoke",
+  "seed": "5928518606219378689",
+  "seeds": 24,
+  "nodeCount": 32,
+  "experiments": [
+    {"id":"synchronization-onset","status":"PASS","uncoupledR":0.159426161,"coupledR":0.994210920,"separation":0.834784760,"criticalCoupling":0.900000000,"precriticalR":0.693661783,"criticalR":0.952422954,"maxRegression":0.000000000,"thresholds":{"uncoupledMax":0.35,"coupledMin":0.80,"separationMin":0.50,"criticalR":0.80,"maxRegression":0.03}},
+    {"id":"topological-sector","status":"PASS","moderatePreservation":1.000000000,"shuffledPreservation":0.166666667,"meanSlipThreshold":2.964878067,"thresholds":{"moderateMin":0.99,"shuffledMax":0.60,"slipMin":2.5,"slipMax":3.8}},
+    {"id":"hidden-granularity","status":"PASS","macroMatchRate":1.000000000,"digestDifferenceRate":1.000000000,"claim":"distinct microstates share one macro boundary"},
+    {"id":"bidi-recovery","status":"PASS","bidiRecoverySteps":26.708333333,"localRecoverySteps":404.708333333,"improvement":0.934005971,"thresholds":{"improvementMin":0.30}},
+    {"id":"causal-cut","status":"PASS","classicalS":2.000000000,"communicatingS":4.000000000,"classicalValid":true,"communicatingValid":false,"claim":"a communicating digital cluster cannot certify nonclassicality"}
+  ],
+  "verdict": "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM",
+  "claims": {
+    "allowed": ["classical collective order parameter","classical topological sector","many-to-one reference-frame coarse graining","bidirectional macro-micro control advantage"],
+    "notAllowed": ["quantum superposition","entanglement","Bell nonlocality","quantum computational advantage"]
+  }
+}
