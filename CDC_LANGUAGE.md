@@ -1,7 +1,7 @@
 # The `.cdc` Language
 ### Native source format for the Coherence-Delta Calculus
 
-`.cdc` is the native language surface for the calculus kernel. In v0.2.4 the
+`.cdc` is the native language surface for the calculus kernel. In v0.3.0 the
 checked surface includes native declarations, witnesses, and the first
 source-declared reducer jobs: terms, reducer rules, field/module/cell/channel
 state, flow/commit/nest jobs, guard/trace/measure/policy/bridge/counter jobs,
@@ -40,6 +40,7 @@ directive    = kernel | term | rule | provides | bootloader
              | flow | commit | nest | trace | measure | policy | bridge
              | compile | interpret | proof | council | deliberate | evolve
              | universal | store | persist
+             | frame | reduce | complex | topology | authority | transport
              | expect | "end" ;
 
 kernel       = "kernel" name { kwarg } ;
@@ -76,6 +77,12 @@ evolve       = "evolve" key { kwarg } ;
 universal    = "universal" key { kwarg } ;
 store        = "store" key { kwarg } ;
 persist      = "persist" key { kwarg } ;
+frame        = "frame" key { kwarg } ;
+reduce       = "reduce" key { kwarg } ;
+complex      = "complex" key { kwarg } ;
+topology     = "topology" key { kwarg } ;
+authority    = "authority" key { kwarg } ;
+transport    = "transport" key { kwarg } ;
 
 expect       = "expect" predicate ;
 kwarg        = key "=" value ;

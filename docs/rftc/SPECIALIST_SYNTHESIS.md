@@ -90,7 +90,7 @@ license to discard the underlying microstate record.
 
 ## What the executable first pass establishes
 
-The RFTC crucible now measures five separately failing witnesses.
+The RFTC crucible now measures seven separately failing witnesses.
 
 1. A nine-point coupling sweep finds a finite onset interval instead of
    comparing only hand-selected endpoints.

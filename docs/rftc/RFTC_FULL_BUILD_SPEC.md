@@ -1,7 +1,8 @@
 # Reference-Frame Topological Coherence — Full Build Specification
 
-Status: **C1-C2 runtime core active; parser-level six-form and distributed C3
-implementation gated on the crucible verdict**
+Status: **C1-C2 runtime core and C3 six-form language ingress active;
+distributed authority, transport, and recursive execution remain gated next
+work**
 
 ## 1. End state
 
@@ -51,10 +52,8 @@ decision creates no state mutation.
 ## 3. Six-form RFTC language layer
 
 These forms extend the existing parser and AST. They do not create a second
-runtime language. Capability identifiers are intentionally unassigned here:
-decision D3 reserves H12-H17 for Memory Manifold, so the RFTC lane must receive
-new registry identifiers through an explicit registry amendment rather than
-silently reuse them.
+runtime language. Decision D35 assigns the non-colliding `R1-R6` capability
+range to this lane; D3's H12-H17 Memory Manifold reservation remains untouched.
 
 ### `frame`
 

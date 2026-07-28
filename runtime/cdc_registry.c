@@ -128,7 +128,8 @@ static const char *const FORM_NAMES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
-    "store",   "persist",
+    "store",   "persist", "frame",   "reduce",  "complex",
+    "topology", "authority", "transport",
 };
 enum { FORM_NAME_COUNT = sizeof(FORM_NAMES) / sizeof(FORM_NAMES[0]) };
 

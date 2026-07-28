@@ -30,7 +30,8 @@ typedef enum {
     CDC_STMT_WITNESS,
     CDC_STMT_FORM, /* field module cell channel guard counter flow commit
                       nest trace measure policy bridge compile interpret
-                      proof council deliberate evolve universal */
+                      proof council deliberate evolve universal store persist
+                      frame reduce complex topology authority transport */
     CDC_STMT_EXPECT,
     CDC_STMT_END,
     CDC_STMT_UNKNOWN
@@ -51,11 +52,11 @@ typedef struct {
 } cdc_unit;
 
 /* Directive classification shared with the legacy loader. Returns the kind
- * for a directive token ("law" maps to CDC_STMT_INVARIANT; the twenty
- * reducer-form directives map to CDC_STMT_FORM). */
+ * for a directive token ("law" maps to CDC_STMT_INVARIANT; the source-form
+ * directives map to CDC_STMT_FORM). */
 cdc_stmt_kind cdc_directive_kind(const char *directive);
 
-/* True when the directive is one of the twenty reducer-form directives. */
+/* True when the directive is one of the source-form directives. */
 int cdc_directive_is_form(const char *directive);
 
 void cdc_unit_init(cdc_unit *program);

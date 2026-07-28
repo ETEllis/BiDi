@@ -1,20 +1,17 @@
-# RESUME_HERE — BiDi/CDC lane: baton complete in this repository
+# RESUME_HERE — BiDi/CDC lane: C3 execution baton
 
-Updated 2026-07-28. **Every component executable in this repository is
-COMPLETE and gated.** What remains is queued-with-reason, blocked on
-external access, or awaiting one operator decision — all listed below with
-their exact blockers. Read in order: `CDC_TOOLCHAIN_PLAN.md` (with
+Updated 2026-07-28. **The post-PR6 mainline is green and C3 language ingress
+is complete; distributed C3 semantics are active work.** Read in order:
+`CDC_TOOLCHAIN_PLAN.md` (with
 Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
-`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D34).
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D35).
 
 ## Current head (2026-07-28)
 
-- `main` = `3e851ff` — **PR #3 merged** under the baton's Section 1
-  authorization. PR #3 is finished and must not be reused.
-- Work branch `claude/bun-equivalent-build-plan-lxe772`, open as **draft
-  PR #4**, carries the whole post-merge arc. Rather than pinning SHAs that
-  drift, the arc is indexed by its decision record: BLAKE3 + product
+- `main` = `7b78cc5` — **PR #6 merged** after both exact-head CI lanes passed.
+- Work branch `codex/c3-language-abi` carries D35 and the first C3 increment.
+- The completed post-merge arc is indexed by its decision record: BLAKE3 + product
   surfaces + store protocol (D13–D14), persistence as a language form
   (D15), the 2026-07-28 review repair — store generations, real
   interprocess serialization, head-bound provenance, required macOS CI
@@ -25,13 +22,13 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
   `cdc build` / `cdc install` / `cdc x` (D28), same-application store
   coordination (D29), the second review and Darwin reproducibility repairs
   (D30–D32), the frozen bootloader-oracle decision (D33), and the
-  separately classified RFTC logical-cell crucible (D34).
+   separately classified RFTC logical-cell crucible (D34), and the
+   six-form/R1-R6 C3 language ingress (D35).
 - Full `./scripts/verify.sh` green locally at this head, including the
   Phase I gate section and the sanitized Phase I sweep.
 - The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
   never merged and every finding is repaired with permanent
-  counterexamples (D16 records the withdrawn claims). **Do not merge PR #4
-  without operator sign-off.**
+  counterexamples (D16 records the withdrawn claims).
 
 ## COMPLETE in this repository (all hard-gated in `./scripts/verify.sh`)
 
@@ -73,20 +70,24 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
    counts with the macOS CI lane running the full native suite, and the
    coordination registry's last-close window closed with its own probe
    build.
-8. **RFTC foundational crucible**: five separately failing classical
+8. **RFTC foundational crucible**: seven separately failing classical
    witnesses, deterministic and alternate-seed evidence, sanitizer
    execution, 256-seed rapid and 4,096-seed stress profiles, plus a
    self-contained evidence-bound UI (D34). This completes the entry gate,
    not the distributed six-form runtime described in
    `docs/rftc/RFTC_FULL_BUILD_SPEC.md`.
+9. **RFTC C3 language ingress**: `frame`, `reduce`, `complex`, `topology`,
+   `authority`, and `transport` parse through the canonical native frontend
+   and frozen oracle under the explicit R1-R6 registry allocation; malformed
+   and unknown forms fail closed (D35). Runtime semantics remain queued below.
 
 ## QUEUED, with recorded reasons (not blockers, not claims)
 
-- **RFTC integrated six-form runtime** — `frame`, `reduce`, `complex`,
-  `topology`, `authority`, and `transport`, followed by recursive logical
-  cells and bound operator surfaces. Capability IDs remain unassigned because
-  H12-H17 are already reserved by D3; allocation requires an explicit registry
-  amendment.
+- **RFTC integrated C3 semantics** — compile the accepted six forms into
+  bounded dynamic frame/topology state, authenticated transport,
+  scope/horizon/expiry/nonce/revocation authority, quorum/partition handling,
+  recursive logical cells, and bound operator surfaces. The R1-R6 allocation
+  and grammar ingress are complete under D35.
 - **Ed25519 keyed authentication + external anchor** — integrity tags are
   unkeyed (corruption detection, not forgery resistance); whole-file
   generation rollback is detectable only against an externally retained

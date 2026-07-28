@@ -1390,7 +1390,7 @@ echo "== Phase I: cdc build / cdc install / cdc x [gate CT5 seed] =="
 rm -f build/cdc-bundle.cdc build/cdc-bundle.manifest
 # shellcheck disable=SC2086
 ./build/cdc build $CDC_ROOT_SOURCES | tee build/cdc_build.txt
-grep -q "cdc build ok files=19 statements=[0-9]* checks=253/253 corpus=blake3:" \
+grep -q "cdc build ok files=${ROOT_FILE_COUNT} statements=${EXPECTED_STATEMENTS} checks=${VECTOR_COUNT}/${VECTOR_COUNT} corpus=blake3:" \
   build/cdc_build.txt
 # determinism: build twice, both artifacts byte-identical (no timestamps,
 # no absolute paths — D21's reproducibility extended to artifacts)

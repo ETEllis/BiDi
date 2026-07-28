@@ -7,7 +7,8 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #4; PR #3 merged at `3e851ff`). PR #3 is finished and must not be reused.
+- main: `7b78cc564f10a245f043840fae04eafefb2538fa` (PR #6 merge);
+  active branch: `codex/c3-language-abi`
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -18,6 +19,24 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   and `evidence/gates/CT0/sha256-manifest.txt` (interim SHA-256, see D2)
 
 ## Last completed phase and gate
+
+- **PR #6 MERGED — C1-C2 RFTC converged on the post-PR5 mainline
+  (2026-07-28).** Exact head `f73a12c` passed the full native/formal/paper
+  lane and CDC Studio macOS lane; merge commit `7b78cc5`. It includes the
+  immutable frame reducer, relational record closure, sealed replay visitor,
+  deterministic/alternate-seed/sanitizer crucible, and the seven-witness
+  classical claim boundary.
+
+- **C3 language ingress COMPLETE; distributed semantics remain active work
+  (2026-07-28, D35).** The six RFTC forms (`frame`, `reduce`, `complex`,
+  `topology`, `authority`, `transport`) are grammar-1 forms in the native
+  parser, registry, canonical serializer, and frozen independent oracle.
+  The explicit `R1-R6` capability range leaves D3's H12-H17 Memory Manifold
+  reservation untouched. `rftc.cdc` declares the canonical boundary, and
+  the RFTC gate proves all six forms parse with their attributes while
+  identifier-free forms and unknown quantum-shaped aliases reject with typed
+  diagnostics. This is the language ingress, not completion of authenticated
+  transport, distributed authority, recursive cells, or C3 as a whole.
 
 - **PR #4 MERGED; bootloader Option A executed (2026-07-28, D33).** The
   operator approved pinned head `6784ab5` after independent macOS
@@ -31,18 +50,19 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   dependency. Housekeeping from the approval note: the stale
   same-process wording in `runtime/cdc_store.h` now describes the D29
   shared-coordination design, and CDC Studio's generated `.build/` is
-  ignored. Next: Memory Manifold (E–H) and GIST/Superposition (K)
-  integration lanes, opened by the operator. PC6 stays hard-paused.
+  ignored. PR #5 subsequently froze the Studio boundary and made the UI gate
+  repeatable; merge commit `614696d`. PC6 stays hard-paused.
 
 - **RFTC classical logical-cell crucible (2026-07-28, D34).**
   A C99 executable tests the missing layer between continuous phase flow
-  and guarded commit through five separately gated witnesses:
+  and guarded commit through seven separately gated witnesses:
   synchronization onset, oriented winding-sector preservation, hidden
-  microstate granularity, bidirectional macro/micro recovery, and an
-  explicit causal cut. Identical smoke runs byte-match in JSON and CSV;
+  microstate granularity, bidirectional macro/micro recovery, typed packet
+  admissibility, redundant record closure, and an explicit causal cut.
+  Identical smoke runs byte-match in JSON and CSV;
   an alternate seed produces a distinct passing record; the same lane
   passes ASan/UBSan. The 256-seed rapid and 4,096-seed stress profiles
-  pass all five witnesses on the operator host. The evidence surface is
+  pass all seven witnesses on the operator host. The evidence surface is
   self-contained, byte-bound to the tracked smoke verdict, accepts fresh
   runtime verdicts, rejects malformed evidence, and passes narrow-screen
   validation. The full six-form architecture, authority/transport

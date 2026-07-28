@@ -186,6 +186,13 @@ They carry no persistence semantics and are covered by the existing
 produce a byte-identical report to the bootloader on every run, so these
 entries retire with `cdc_boot.py` itself under this gate.
 
+The C3 RFTC forms (`frame`, `reduce`, `complex`, `topology`, `authority`,
+`transport`) follow the same grammar discipline. The frozen oracle only
+collects their identifiers and attributes for differential parity; it owns no
+distributed semantics. Those semantics must enter through the native ABI and
+the one guarded execution path before any CLI, daemon, SDK, or UI can claim
+them.
+
 **GATE 5 CLOSED on the runtime dependency (2026-07-28, operator decision
 Option A, D33).** The language verifies and runs entirely natively: both
 runtimes, the contract evaluator, the test runner, the fused executor,
