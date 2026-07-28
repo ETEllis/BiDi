@@ -171,6 +171,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
   runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -211,6 +212,7 @@ if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
   runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -285,9 +287,11 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
   runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
   -lm \
   -o build/cdc
 run_step ./build/cdc version
+./build/cdc version | grep -q "abi=1.3 grammar=1"
 # shellcheck disable=SC2086
 ./build/cdc verify --parse $CDC_ROOT_SOURCES | tee build/cdc_verify_parse.txt
 # Exact statement gate (review item C3): statements = dump records plus
@@ -350,7 +354,8 @@ echo "== Unified driver passthrough parity [gate CT2] =="
 rm -f build/cdc_native_runtime build/cdc_bridge_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_native_runtime.c runtime/cdc_source.c \
-  runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c -lm \
+  runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c -lm \
   -o build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
@@ -410,6 +415,51 @@ fi
 echo "fused executor ok (universal closure, multi-stage, fail-closed)"
 
 echo
+echo "== Typed effect receipts [gate CT3] =="
+# `cdc test` used to decide verdicts by string-matching the runtime's HUMAN
+# report line (strstr "status=held", then splitting "<form>=<jobid>" out of
+# prose). The report format was load-bearing for the gate. Effects are now
+# reported as typed records built by the same code that produces the
+# outcome, and the gate classifies from those fields.
+run_step ./build/cdc_frontend_check receipt-check
+if [ "$SANITIZED" = "1" ]; then
+  run_step ./build/cdc_frontend_check_asan receipt-check
+fi
+# The runtime honours the contract: with CDC_RECEIPTS set it ALWAYS creates
+# the stream, so "no effects" is distinguishable from "emits no receipts".
+rm -rf build/persistence-journal build/persistence-contended build/receipts.txt
+CDC_RECEIPTS=build/receipts.txt ./build/cdc run framework_persistence.cdc \
+  > build/receipts_prose.txt
+test -f build/receipts.txt
+RECEIPT_COUNT=$(grep -c "^cdc-receipt " build/receipts.txt)
+test "$RECEIPT_COUNT" = "11"
+# Every persist report line has exactly one receipt, and the typed fields
+# say what the prose says.
+PROSE_COUNT=$(grep -c "^persist=" build/receipts_prose.txt)
+test "$PROSE_COUNT" = "$RECEIPT_COUNT"
+grep -q "kind=persist job=journal-hold op=append outcome=0 reason=balance-violation declared-hold=1 trits=-+0 balance=violated durable=0 replay-stable=1" \
+  build/receipts.txt
+grep -q "kind=persist job=journal-latch op=append outcome=+1 reason=none declared-hold=0 trits=0+- balance=admissible durable=1 replay-stable=0" \
+  build/receipts.txt
+# Compaction is the record that proves durable and replay are independent
+# observations, and it carries the generation the transition produced.
+grep -q "kind=persist job=journal-compact op=compact outcome=+1 reason=none declared-hold=0 durable=1 replay-stable=1 sealed=1 events=1 generation=1" \
+  build/receipts.txt
+grep -q "kind=persist job=contended-stale op=append outcome=0 reason=fence-violation" \
+  build/receipts.txt
+# A mode with no effects still produces an EMPTY stream, never no stream.
+rm -f build/receipts_empty.txt
+CDC_RECEIPTS=build/receipts_empty.txt ./build/cdc surface native_surface.cdc \
+  > /dev/null
+test -f build/receipts_empty.txt
+test ! -s build/receipts_empty.txt
+# With the variable unset the human surface is byte-identical: receipts are
+# an added channel, not a change to the existing one.
+./build/cdc run framework_persistence.cdc > build/receipts_prose_b.txt
+cmp build/receipts_prose.txt build/receipts_prose_b.txt
+echo "effect receipts ok records=${RECEIPT_COUNT} empty-stream=1 prose-unchanged=1"
+
+echo
 echo "== Typed test runner [gate CT3 seed] =="
 # A7 policy: commit/hold/nest/fail reported separately (merged totals
 # forbidden); every hold must be declared expect-status=held on its job or
@@ -423,7 +473,7 @@ echo "== Typed test runner [gate CT3 seed] =="
 # The persistence framework contributes 8 accepted and 3 held durable
 # records; all three holds are declared on their own persist statements, so
 # the A7 policy applies to durable mutation with no policy exception.
-grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0" \
+grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0" \
   build/cdc_test_gate.txt
 # Negative: a source the legacy runtime fully accepts (exit 0) but whose
 # hold is undeclared must fail the typed gate with unexpected=1 fail=0.
@@ -433,7 +483,7 @@ if ./build/cdc test --gate tests/fixtures/test_runner/silent_hold.cdc \
   echo "typed gate accepted an undeclared hold" >&2
   exit 1
 fi
-grep -q "(expected=0 unexpected=1) nest=1 fail=0" build/cdc_test_neg.txt
+grep -q "(expected=0 unexpected=1) nest=1 fail=0 parity=0" build/cdc_test_neg.txt
 echo "typed gate rejects undeclared holds (runtime exit 0 notwithstanding)"
 # Review B3: an unrelated witness carrying the job name and
 # expect-status=held must NOT authorize the hold.
@@ -651,7 +701,7 @@ if ./build/cdc test --gate tests/fixtures/persistence/silent_persist_hold.cdc \
   echo "typed gate accepted an undeclared durable hold" >&2
   exit 1
 fi
-grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1)" build/persistence_silent.txt
+grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1) nest=0 fail=0 parity=0" build/persistence_silent.txt
 echo "typed gate rejects undeclared durable holds"
 
 # The persistence path owns store handles across a whole source file
@@ -665,6 +715,7 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/cdc_store.c \
     runtime/cdc_digest.c \
     runtime/cdc_blake3.c \
+    runtime/cdc_receipt.c \
     -lm \
     -o build/cdc_persist_asan
   rm -rf build/persistence-journal build/persistence-contended \
@@ -796,6 +847,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
   runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
   -o build/cdc_native_runtime \
   -lm
 echo
@@ -809,6 +861,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
 if command -v emcc >/dev/null 2>&1; then
   run_step emcc -O2 runtime/cdc_wasm_exports.c runtime/cdc_source.c \
     runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
+    runtime/cdc_receipt.c \
     -sEXPORTED_FUNCTIONS='["_cdc_wasm_replay_json"]' \
     -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
     -o build/cdc_wasm_replay.js

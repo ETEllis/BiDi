@@ -30,6 +30,7 @@
 #include "cdc_digest.h"
 #include "cdc_lexer.h"
 #include "cdc_parser.h"
+#include "cdc_receipt.h"
 #include "cdc_source.h"
 #include "cdc_store.h"
 
@@ -1153,6 +1154,155 @@ static int cmd_store_kill(const char *base) {
 }
 
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
+
+/* ---- typed effect receipts (gate CT3) --------------------------------
+ *
+ * The carrier `cdc test` now trusts instead of prose. These cases pin the
+ * properties that make it trustworthy: a round trip preserves every field,
+ * an unknown version fails CLOSED rather than being skipped as noise, a
+ * malformed record is an error rather than a silent zero, and an outcome
+ * cannot be absent — a receipt records an effect, and "no effect" is not
+ * one. */
+static int cmd_receipt_check(void) {
+    int failures = 0;
+    char path[256];
+    void *stream;
+    cdc_receipt out, back;
+    FILE *fp;
+    char line[4096];
+
+    snprintf(path, sizeof(path), "build/receipt_check_%ld.txt",
+             (long)getpid());
+    if (setenv("CDC_RECEIPTS", path, 1) != 0) {
+        fprintf(stderr, "receipt-check FAIL: setenv\n");
+        return 1;
+    }
+    stream = cdc_receipt_open_env();
+    if (!stream) {
+        fprintf(stderr, "receipt-check FAIL: stream not opened\n");
+        return 1;
+    }
+
+    /* A fully-populated persist receipt survives a round trip intact. */
+    cdc_receipt_init(&out);
+    snprintf(out.kind, sizeof(out.kind), "persist");
+    snprintf(out.job, sizeof(out.job), "journal-hold");
+    snprintf(out.op, sizeof(out.op), "append");
+    out.outcome = CDC_OUTCOME_HELD;
+    snprintf(out.reason, sizeof(out.reason), "balance-violation");
+    out.declared_hold = 1;
+    snprintf(out.trits, sizeof(out.trits), "-+0");
+    snprintf(out.balance, sizeof(out.balance), "violated");
+    out.durable = 0;
+    out.replay_stable = 1;
+    out.sealed = 7;
+    out.events = 21;
+    out.generation = 3;
+    if (cdc_receipt_emit(stream, &out) != 1) {
+        fprintf(stderr, "receipt-check FAIL: emit\n");
+        failures++;
+    }
+
+    /* A receipt with no outcome is not a receipt. */
+    {
+        cdc_receipt empty;
+        cdc_receipt_init(&empty);
+        snprintf(empty.kind, sizeof(empty.kind), "commit");
+        snprintf(empty.job, sizeof(empty.job), "c1");
+        snprintf(empty.reason, sizeof(empty.reason), "none");
+        if (cdc_receipt_emit(stream, &empty) != -1) {
+            fprintf(stderr,
+                    "receipt-check FAIL: outcome-less receipt was emitted\n");
+            failures++;
+        }
+    }
+    /* A value that breaks the token vocabulary is refused, not quoted. */
+    {
+        cdc_receipt bad;
+        cdc_receipt_init(&bad);
+        snprintf(bad.kind, sizeof(bad.kind), "commit");
+        snprintf(bad.job, sizeof(bad.job), "has space");
+        bad.outcome = CDC_OUTCOME_ACCEPTED;
+        snprintf(bad.reason, sizeof(bad.reason), "none");
+        if (cdc_receipt_emit(stream, &bad) != -1) {
+            fprintf(stderr, "receipt-check FAIL: non-token job accepted\n");
+            failures++;
+        }
+    }
+    cdc_receipt_close(stream);
+
+    fp = fopen(path, "r");
+    if (!fp || !fgets(line, sizeof(line), fp)) {
+        fprintf(stderr, "receipt-check FAIL: emitted stream unreadable\n");
+        if (fp) {
+            fclose(fp);
+        }
+        return 1;
+    }
+    fclose(fp);
+    if (cdc_receipt_parse(line, &back) != 1) {
+        fprintf(stderr, "receipt-check FAIL: parse\n");
+        return 1;
+    }
+    if (strcmp(back.kind, out.kind) != 0 || strcmp(back.job, out.job) != 0 ||
+        strcmp(back.op, out.op) != 0 || back.outcome != out.outcome ||
+        strcmp(back.reason, out.reason) != 0 ||
+        back.declared_hold != out.declared_hold ||
+        strcmp(back.trits, out.trits) != 0 ||
+        strcmp(back.balance, out.balance) != 0 ||
+        back.durable != out.durable ||
+        back.replay_stable != out.replay_stable ||
+        back.sealed != out.sealed || back.events != out.events ||
+        back.generation != out.generation) {
+        fprintf(stderr, "receipt-check FAIL: round trip lost a field\n");
+        failures++;
+    }
+
+    /* Malformed and foreign records. */
+    {
+        struct {
+            const char *line;
+            int want;
+            const char *why;
+        } cases[] = {
+            {"native reducer ok steps=3\n", 0, "foreign line is not a receipt"},
+            {"\n", 0, "blank line is not a receipt"},
+            {"cdc-receipt v=2 kind=commit job=c1 outcome=+1 reason=none "
+             "declared-hold=0\n",
+             -1, "unknown version must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 reason=none "
+             "declared-hold=0\n",
+             -1, "missing outcome must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=maybe reason=none "
+             "declared-hold=0\n",
+             -1, "outcome outside the ternary must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=+1 "
+             "declared-hold=0\n",
+             -1, "missing reason must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=+1 reason=none\n", -1,
+             "missing declared-hold must fail closed"},
+        };
+        size_t i;
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+            cdc_receipt probe;
+            int got = cdc_receipt_parse(cases[i].line, &probe);
+            if (got != cases[i].want) {
+                fprintf(stderr,
+                        "receipt-check FAIL: %s (want %d, got %d)\n",
+                        cases[i].why, cases[i].want, got);
+                failures++;
+            }
+        }
+    }
+    remove(path);
+    unsetenv("CDC_RECEIPTS");
+    if (failures) {
+        return 1;
+    }
+    printf("receipt-check ok round-trip=1 closed-vocabulary=1 "
+           "malformed-fail-closed=7\n");
+    return 0;
+}
 
 /* ---- generation and concurrency counterexamples (2026-07-28 review) ----
  *
@@ -2337,6 +2487,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
         return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "receipt-check") == 0) {
+        return cmd_receipt_check();
     }
     if (strcmp(argv[1], "store-generation") == 0 && argc >= 3) {
         return cmd_store_generation(argv[2]);

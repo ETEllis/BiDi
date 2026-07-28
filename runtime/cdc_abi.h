@@ -43,7 +43,13 @@
  */
 
 #define CDC_ABI_VERSION_MAJOR 1
-#define CDC_ABI_VERSION_MINOR 2
+#define CDC_ABI_VERSION_MINOR 3
+
+/* ABI 1.3 adds typed effect receipts (cdc_receipt.h), the structured
+ * record of one executed effect. Consumers that need an outcome read a
+ * receipt instead of matching the human report line; the two channels are
+ * rendered from one struct and their agreement is gated. */
+#include "cdc_receipt.h" 
 
 typedef enum {
     CDC_OK = 0,

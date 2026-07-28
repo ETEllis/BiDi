@@ -1,3 +1,4 @@
+#include "cdc_receipt.h"
 #include "cdc_source.h"
 #include "cdc_store.h"
 
@@ -765,6 +766,47 @@ static void add_counter(Runtime *rt, const char *line) {
     counter->expect_value = cdc_read_int_attr(line, "expect-value", counter->value);
 }
 
+/* ---- typed effect receipts (gate CT3) -------------------------------- *
+ *
+ * Every effect below renders BOTH its report line and its receipt from the
+ * same result struct. A consumer that wants the outcome reads the receipt;
+ * nothing has to infer an effect by matching prose. scripts/verify.sh gates
+ * that the two channels agree, so they cannot drift apart silently.
+ *
+ * The stream is opened once per process from CDC_RECEIPTS and is a no-op
+ * when that variable is unset, so the interactive surface is unchanged. */
+static void *receipt_stream;
+static int receipt_stream_ready;
+
+static void *receipts(void) {
+    if (!receipt_stream_ready) {
+        receipt_stream = cdc_receipt_open_env();
+        receipt_stream_ready = 1;
+    }
+    return receipt_stream;
+}
+
+static void emit_receipt(const cdc_receipt *receipt) {
+    void *stream = receipts();
+    if (!stream) {
+        return;
+    }
+    if (cdc_receipt_emit(stream, receipt) < 0) {
+        /* A rejected receipt means the producer built an ill-formed record.
+         * That is a defect in this file, never something a source can
+         * cause, so it fails loudly rather than being dropped. */
+        fail("effect receipt rejected: ill-formed record");
+    }
+}
+
+/* Did the declaring statement carry expect-status=held? This is read from
+ * the parsed job, not from the printed line (review B3: authorization is
+ * bound to the typed statement identity). */
+static int step_declares_hold(const Step *step) {
+    return step->expect_status[0] &&
+           strcmp(step->expect_status, "held") == 0;
+}
+
 static void add_store(Runtime *rt, const char *line) {
     StoreDecl *store;
     char mode[16];
@@ -1032,7 +1074,19 @@ static void execute_commit(Runtime *rt, Step *step, CommitResult *result) {
 
 static void run_commit(Runtime *rt, Step *step) {
     CommitResult result;
+    cdc_receipt receipt;
     execute_commit(rt, step, &result);
+    cdc_receipt_init(&receipt);
+    snprintf(receipt.kind, sizeof(receipt.kind), "commit");
+    snprintf(receipt.job, sizeof(receipt.job), "%s", result.id);
+    receipt.outcome = strcmp(result.status, "accepted") == 0
+                          ? CDC_OUTCOME_ACCEPTED
+                          : CDC_OUTCOME_HELD;
+    snprintf(receipt.reason, sizeof(receipt.reason), "%s", result.reason);
+    receipt.declared_hold = step_declares_hold(step);
+    snprintf(receipt.trits, sizeof(receipt.trits), "%s", result.trits);
+    snprintf(receipt.balance, sizeof(receipt.balance), "%s", result.balance);
+    emit_receipt(&receipt);
     printf("commit=%s module=%s trits=%s balance=%s status=%s reason=%s\n",
            result.id, result.module, result.trits, result.balance, result.status, result.reason);
 }
@@ -1100,7 +1154,16 @@ static void execute_nest(Runtime *rt, Step *step, NestResult *result) {
 
 static void run_nest(Runtime *rt, Step *step) {
     NestResult result;
+    cdc_receipt receipt;
     execute_nest(rt, step, &result);
+    cdc_receipt_init(&receipt);
+    snprintf(receipt.kind, sizeof(receipt.kind), "nest");
+    snprintf(receipt.job, sizeof(receipt.job), "%s", result.id);
+    /* A nest that completes is an accepted integration; it has no hold
+     * path, and saying so explicitly keeps the ternary honest. */
+    receipt.outcome = CDC_OUTCOME_ACCEPTED;
+    snprintf(receipt.reason, sizeof(receipt.reason), "none");
+    emit_receipt(&receipt);
     printf("nest=%s parent=%s child=%s up=%.6f parent-belief=%.6f child-prior=%.6f\n",
            result.id, result.parent, result.child, result.up, result.parent_belief, result.child_prior);
 }
@@ -1897,6 +1960,32 @@ static void run_persistence(Runtime *rt, const char *path) {
                            "persist events expectation mismatch");
         }
 
+        {
+            cdc_receipt receipt;
+            cdc_receipt_init(&receipt);
+            snprintf(receipt.kind, sizeof(receipt.kind), "persist");
+            snprintf(receipt.job, sizeof(receipt.job), "%s", job->id);
+            snprintf(receipt.op, sizeof(receipt.op), "%s", job->op);
+            receipt.outcome = strcmp(status, "accepted") == 0
+                                  ? CDC_OUTCOME_ACCEPTED
+                                  : CDC_OUTCOME_HELD;
+            snprintf(receipt.reason, sizeof(receipt.reason), "%s", reason);
+            receipt.declared_hold = job->expect_status[0] &&
+                                    strcmp(job->expect_status, "held") == 0;
+            receipt.durable = strcmp(durable, "yes") == 0;
+            receipt.replay_stable = strcmp(replay_id, "stable") == 0;
+            receipt.sealed = (long)sealed;
+            receipt.events = (long)events;
+            receipt.generation =
+                (long)cdc_store_generation(decl->handle);
+            if (is_append) {
+                snprintf(receipt.trits, sizeof(receipt.trits), "%s",
+                         decision.trits);
+                snprintf(receipt.balance, sizeof(receipt.balance), "%s",
+                         decision.balance);
+            }
+            emit_receipt(&receipt);
+        }
         if (is_append) {
             printf("persist=%s store=%s op=append module=%s trits=%s "
                    "balance=%s status=%s reason=%s sealed=%llu events=%llu "
@@ -2228,6 +2317,19 @@ static void run_universal(Runtime *rt, const char *path) {
                    job->enact, res.enacted_coordinate,
                    find_evolution_job(rt, job->enact)->output,
                    find_evolution_job(rt, job->enact)->append_witness);
+        }
+        {
+            cdc_receipt receipt;
+            cdc_receipt_init(&receipt);
+            snprintf(receipt.kind, sizeof(receipt.kind), "universal");
+            snprintf(receipt.job, sizeof(receipt.job), "%s", job->id);
+            receipt.outcome = strcmp(res.status, "accepted") == 0
+                                  ? CDC_OUTCOME_ACCEPTED
+                                  : CDC_OUTCOME_HELD;
+            snprintf(receipt.reason, sizeof(receipt.reason), "%s", res.reason);
+            receipt.declared_hold = job->expect_status[0] &&
+                                    strcmp(job->expect_status, "held") == 0;
+            emit_receipt(&receipt);
         }
         printf("universal=%s frame=%s receptive=%s radiant=%s holonomy=%s half-projection=%s half-sheet=%s full-projection=%s full-sheet=%s winding=%d record=%s decision=%s enacted=%s status=%s reason=%s\n",
                job->id, res.frame, res.receptive_angle, res.radiant_angle, res.holonomy,
@@ -2569,6 +2671,12 @@ int cdc_native_main(int argc, char **argv);
 #endif
 int CDC_NATIVE_ENTRY(int argc, char **argv) {
     Runtime runtime;
+    /* Open the receipt stream eagerly. A mode with no effects must still
+     * produce an EMPTY stream rather than no stream, so a consumer can tell
+     * "this run had nothing to report" apart from "this runtime does not
+     * emit receipts at all". The second is a contract violation and must be
+     * detectable. */
+    (void)receipts();
     if ((argc == 4 || argc == 5) && strcmp(argv[1], "replay") == 0) {
         run_replay(argv[2], argv[3], argc == 5 ? argv[4] : NULL);
         return 0;

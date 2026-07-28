@@ -46,6 +46,50 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D17 — 2026-07-28 — Effects are reported, not inferred from prose (ABI 1.3)
+
+`cdc test` decided every verdict by string-matching the runtime's HUMAN
+report line: `strstr(line, "status=held")`, then splitting `<form>=<jobid>`
+out of the prose. That made the report format load-bearing for the gate.
+Rewording a line could change a verdict; so could a payload that happened
+to contain the text `status=accepted`.
+
+A **typed effect receipt** is now the record of one executed effect, built
+by the same code that produces the outcome, BEFORE the prose is printed.
+Both the report line and the receipt render from that one struct, so they
+cannot describe different things. Receipts carry job id, kind, op, the
+balanced-ternary outcome, the typed reason, whether the source declared the
+hold, and — for persistence — the durable and replay observations, sealed
+and event counts, and the store generation.
+
+Three decisions worth pinning:
+
+- **The carrier is a separate channel, not a change to the existing one.**
+  Receipts go to the path named by `CDC_RECEIPTS` and nothing is written
+  when it is unset, so the human surface is byte-identical (gated by
+  comparing two runs). Mixing them into stdout would have made the same
+  mistake in a new format.
+- **Parity is gated, not assumed.** The old prose classifier is retained as
+  a SHADOW and its counts must match the receipt-derived counts exactly;
+  `parity=0` appears in the gate line. If the two channels ever disagree —
+  an effect gaining a receipt without a line, or the reverse — the build
+  fails instead of the typed channel quietly winning. The counts did not
+  move (`runs=24 commit=19 hold=8 nest=10`); what moved is the basis for
+  them.
+- **A mode with no effects emits an EMPTY stream, never no stream.** The
+  runtime opens the receipt file eagerly, so a consumer can distinguish
+  "nothing happened" from "this runtime does not report effects" — the
+  second is a contract violation and has to be detectable. `cdc test`
+  treats a missing stream as a hard failure and never falls back to prose,
+  because silently falling back would restore the fragility being removed.
+
+Hold authorization is still bound to the declaring statement's typed
+identity (review B3): the consumer re-checks `declared_hold` against the
+parsed program, so a receipt cannot authorize its own hold.
+
+ABI minor version bumped to 1.3; `cdc_receipt.h` is part of the stable
+boundary, so external consumers read effects without parsing reports.
+
 ## D16 — 2026-07-28 — Store generations, real serialization, and the claims withdrawn
 
 An independent review of `1ea1ddd` found two mechanism defects and three
