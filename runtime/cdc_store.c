@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include <unistd.h>
 
 /* Record layout, format v2 (little-endian fixed fields; 3122af5 re-review
@@ -518,11 +519,27 @@ int cdc_store_commit_operations(const cdc_store *store) {
 }
 
 static int injected_crash(cdc_store *store) {
+    if (store->kill_after > 0) {
+        store->ops_done++;
+        if (store->ops_done >= store->kill_after) {
+            /* Real process death: unflushed stdio buffers are lost exactly
+             * as they would be in a power cut. Nothing after this runs. */
+            raise(SIGKILL);
+        }
+        return 0;
+    }
     if (store->fail_after <= 0) {
         return 0;
     }
     store->ops_done++;
     return store->ops_done >= store->fail_after;
+}
+
+void cdc_store_set_kill_after(cdc_store *store, int operations) {
+    if (store) {
+        store->kill_after = operations;
+        store->ops_done = 0;
+    }
 }
 
 void cdc_store_set_fail_after(cdc_store *store, int operations) {

@@ -467,6 +467,16 @@ grep -q "store-io ok cases=3 controls=1" build/store_io.txt
 # chained semantic digest) while the attest digest over raw bytes changes,
 # and that a stale writer's commit is refused without writing a byte. The
 # snapshot is swept byte-by-byte: a tampered base must never be trusted.
+# Out-of-process crash matrix: the child is genuinely SIGKILLed at each
+# commit boundary, so unflushed stdio buffers are lost as in a power cut.
+# The old/new split legitimately differs from the in-process matrix (a
+# different loss mode), so only the invariants are gated: every child dies,
+# and every recovery lands on exactly the old or the new sealed state — a
+# partial state fails inside the harness itself.
+rm -rf build/store_kill
+mkdir -p build/store_kill
+./build/cdc_frontend_check store-kill build/store_kill | tee build/store_kill.txt
+grep -q "store-kill ok boundaries=7 killed=7" build/store_kill.txt
 rm -rf build/store_protocol
 mkdir -p build/store_protocol
 ./build/cdc_frontend_check store-protocol build/store_protocol \

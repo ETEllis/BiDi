@@ -19,6 +19,19 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Phase D substrate work (2026-07-28).** Store protocol completed
+  (snapshot / compact / compare-and-set fence) on a resumable replay chain:
+  compaction preserves the replay identity byte-for-byte while the attest
+  digest over raw bytes changes, and a stale writer's commit is refused
+  without writing. Snapshots are authenticated and swept byte-by-byte
+  (85/85 fail closed). Out-of-process crash matrix added: 7/7 children
+  genuinely SIGKILLed at every commit boundary, each recovering to exactly
+  the old or new sealed state — a distinct loss mode from the in-process
+  torn-write matrix (unflushed stdio buffers are lost), which is why the
+  old/new split differs and only the invariants are gated.
+  Still open in Phase D: the `.cdc`-declared persistence surface with
+  BiDi-gated durable mutation, and typed effect receipts through the ABI.
+
 - **Foundation merged (2026-07-28).** PR #3 merged at pinned head `82ab066`
   → merge commit `3e851ff` on `main`, after verifying remote head exactness,
   a completed/success required check, and clean mergeability. Branch

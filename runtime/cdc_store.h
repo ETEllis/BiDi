@@ -118,6 +118,13 @@ void cdc_store_set_fail_after(cdc_store *store, int operations);
  * interpreted. */
 void cdc_store_set_read_fail_after(int operations);
 
+/* Out-of-process fault injection: SIGKILL this process after N commit
+ * boundary operations (0 disarms). Unlike the in-process hook, the process
+ * genuinely dies, so unflushed stdio buffers are lost the way they are in a
+ * real power cut — a distinct loss mode from a torn write. Intended for a
+ * forked child; recovery is then asserted by the surviving parent. */
+void cdc_store_set_kill_after(cdc_store *store, int operations);
+
 /* Number of write/flush/sync boundary operations a commit of the current
  * staged transaction would perform (for exhaustive injection sweeps). */
 int cdc_store_commit_operations(const cdc_store *store);

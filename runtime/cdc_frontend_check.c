@@ -17,6 +17,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1034,6 +1037,121 @@ static long file_size(const char *path) {
     return stat(path, &st) == 0 ? (long)st.st_size : -1;
 }
 
+/* ---- kill-based crash matrix (out-of-process) ------------------------ */
+
+/* The in-process hook simulates a torn write; this one kills the process
+ * outright at each commit boundary, so unflushed stdio buffers are lost the
+ * way they are in a real power cut. The surviving parent asserts the store
+ * still recovers to exactly the old or the new sealed state. */
+static int cmd_store_kill(const char *base) {
+    char ref_old[80], ref_new[80];
+    int boundaries = 0, old_state = 0, new_state = 0, killed = 0;
+    int k;
+
+    if (!store_reference_digest(base, "kref1", 1, ref_old, sizeof(ref_old)) ||
+        !store_reference_digest(base, "kref2", 2, ref_new, sizeof(ref_new))) {
+        fprintf(stderr, "store-kill FAIL: reference stores\n");
+        return 1;
+    }
+    if (strcmp(ref_old, ref_new) == 0) {
+        fprintf(stderr, "store-kill FAIL: reference digests collide\n");
+        return 1;
+    }
+    {
+        char dir[512];
+        cdc_store *probe = NULL;
+        int i;
+        snprintf(dir, sizeof(dir), "%s/kprobe", base);
+        if (cdc_store_open(dir, &probe, NULL) != CDC_STORE_OK) {
+            return 1;
+        }
+        for (i = 0; i < 3; i++) {
+            cdc_store_stage(probe, "p", 1);
+        }
+        boundaries = cdc_store_commit_operations(probe);
+        cdc_store_close(probe);
+    }
+
+    for (k = 1; k <= boundaries; k++) {
+        char dir[512];
+        cdc_store *store = NULL;
+        char replayed[80];
+        uint64_t sealed;
+        int recovered = 0;
+        pid_t pid;
+        int status = 0;
+
+        snprintf(dir, sizeof(dir), "%s/kill_%d", base, k);
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            !store_commit_txn(store, 1)) {
+            fprintf(stderr, "store-kill FAIL: baseline txn (k=%d)\n", k);
+            return 1;
+        }
+        cdc_store_close(store);
+
+        fflush(NULL);
+        pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "store-kill FAIL: fork\n");
+            return 1;
+        }
+        if (pid == 0) {
+            cdc_store *child = NULL;
+            char payload[64];
+            int i;
+            if (cdc_store_open(dir, &child, NULL) != CDC_STORE_OK) {
+                _exit(90);
+            }
+            for (i = 0; i < 3; i++) {
+                snprintf(payload, sizeof(payload), "txn-2-event-%d", i);
+                cdc_store_stage(child, payload, strlen(payload));
+            }
+            cdc_store_set_kill_after(child, k);
+            cdc_store_commit(child); /* must not return */
+            _exit(91);               /* reached only if the kill missed */
+        }
+        if (waitpid(pid, &status, 0) < 0) {
+            fprintf(stderr, "store-kill FAIL: waitpid (k=%d)\n", k);
+            return 1;
+        }
+        if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL) {
+            fprintf(stderr,
+                    "store-kill FAIL: child survived injection k=%d "
+                    "(exit=%d)\n",
+                    k, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+            return 1;
+        }
+        killed++;
+
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK) {
+            fprintf(stderr, "store-kill FAIL: reopen after kill (k=%d)\n", k);
+            return 1;
+        }
+        sealed = cdc_store_sealed_count(store);
+        if (cdc_store_replay(store, replayed, sizeof(replayed)) !=
+                CDC_STORE_OK ||
+            cdc_store_verify(store) != CDC_STORE_OK) {
+            fprintf(stderr, "store-kill FAIL: replay/verify (k=%d)\n", k);
+            cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        if (sealed == 1 && strcmp(replayed, ref_old) == 0) {
+            old_state++;
+        } else if (sealed == 2 && strcmp(replayed, ref_new) == 0) {
+            new_state++;
+        } else {
+            fprintf(stderr,
+                    "store-kill FAIL: partial state at k=%d (sealed=%llu)\n",
+                    k, (unsigned long long)sealed);
+            return 1;
+        }
+    }
+    printf("store-kill ok boundaries=%d killed=%d old=%d new=%d\n",
+           boundaries, killed, old_state, new_state);
+    return 0;
+}
+
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
 
 static int cmd_store_protocol(const char *base) {
@@ -1585,6 +1703,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-corrupt") == 0 && argc >= 3) {
         return cmd_store_corrupt(argv[2]);
+    }
+    if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
+        return cmd_store_kill(argv[2]);
     }
     if (strcmp(argv[1], "store-protocol") == 0 && argc >= 3) {
         return cmd_store_protocol(argv[2]);
