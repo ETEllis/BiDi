@@ -92,8 +92,416 @@ print("python host boundary: ok (cdc_boot.py only)")
 PY
 
 echo
+echo "== Möbi𝒰s identity asset contract =="
+python3 - <<'PY'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+root = Path(".")
+identity = root / "assets" / "identity"
+svgs = [
+    identity / "mobius-embodied-mark.svg",
+    identity / "mobius-u-operator.svg",
+    identity / "mobius-u-wordmark-dark.svg",
+    identity / "mobius-u-wordmark-light.svg",
+    identity / "mobius-u-code-sigil.svg",
+    identity / "mobius-u-code-sigil-dark.svg",
+    identity / "mobius-ius-relational.svg",
+    identity / "mobius-bi-seed.svg",
+    identity / "mobius-bidi-kernel.svg",
+    identity / "mobius-bidi-delta.svg",
+]
+
+for path in svgs:
+    if not path.is_file():
+        raise SystemExit(f"identity asset missing: {path}")
+    node = ET.parse(path).getroot()
+    if "viewBox" not in node.attrib:
+        raise SystemExit(f"identity asset lacks viewBox: {path}")
+    if not any(child.tag.endswith("title") for child in node):
+        raise SystemExit(f"identity asset lacks accessible title: {path}")
+
+for path in identity.glob("mobius-u-wordmark-*.svg"):
+    text = path.read_text(encoding="utf-8")
+    if "<text" in text:
+        raise SystemExit(f"wordmark must use portable outlines, not live text: {path}")
+    for token in ("7.16197", "circle", "stroke-linecap"):
+        if token not in text:
+            raise SystemExit(f"wordmark missing identity invariant {token!r}: {path}")
+
+motion_text = (root / "demo" / "mobius-identity.html").read_text(encoding="utf-8")
+for token in ("PRESENCE", "WORDMARK GENERATION", "I𝒰S PHASE", "UI RESTORATION", "의 RESTORATION", "BIDI SELF-EXTRACTION", "TRIADIC DELTA CLOSURE", "CODE SIGIL", "FAMILY LOCKUP", "prefers-reduced-motion", "0.125 rad", "master-video", "mobius-identity-master.mp4", "mobius-wordmark-static.png", "stageFrames"):
+    if token not in motion_text:
+        raise SystemExit(f"motion lab missing contract token {token!r}")
+
+docs = [
+    root / "docs" / "identity" / "MOBIUS_U_IDENTITY_SYSTEM.md",
+    root / "docs" / "identity" / "MOBIUS_U_GEOMETRY_SPEC.md",
+    root / "docs" / "identity" / "MOBIUS_U_MOTION_SPEC.md",
+    root / "docs" / "identity" / "MOBIUS_U_MIGRATION_AUDIT.md",
+    root / "docs" / "identity" / "MOBIUS_U_BLENDER_PIPELINE.md",
+    root / "docs" / "identity" / "MOBIUS_U_INTEGRATION.md",
+]
+if not all(path.is_file() for path in docs):
+    raise SystemExit("identity documentation set is incomplete")
+
+print(f"mobius identity assets: ok ({len(svgs)} svg, {len(docs)} contracts, 1 motion lab)")
+PY
+
+run_step ./scripts/verify_identity_3d.sh
+
+echo
 echo "== Native .cdc contract and witness suite =="
 python3 cdc_boot.py
+
+echo
+echo "== Canonical frontend (grammar 1) differential [gate CT1] =="
+command -v cc >/dev/null 2>&1 || {
+  echo "cc is required for canonical frontend verification" >&2
+  exit 1
+}
+rm -f build/cdc_frontend_check
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/cdc_frontend_check.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  runtime/cdc_source.c \
+  -o build/cdc_frontend_check
+CDC_ROOT_SOURCES=$(ls ./*.cdc | LC_ALL=C sort)
+# shellcheck disable=SC2086
+python3 cdc_boot.py --dump $CDC_ROOT_SOURCES > build/frontend_dump_boot.txt
+# shellcheck disable=SC2086
+./build/cdc_frontend_check dump $CDC_ROOT_SOURCES > build/frontend_dump_native.txt
+cmp build/frontend_dump_boot.txt build/frontend_dump_native.txt
+FRONTEND_RECORDS=$(wc -l < build/frontend_dump_boot.txt)
+test "$FRONTEND_RECORDS" -ge 5000
+echo "frontend differential ok records=${FRONTEND_RECORDS}"
+# shellcheck disable=SC2086
+run_step ./build/cdc_frontend_check roundtrip $CDC_ROOT_SOURCES
+# shellcheck disable=SC2086
+./build/cdc_frontend_check attr-parity $CDC_ROOT_SOURCES | tee build/frontend_attr_parity.txt
+grep -q " collision=0 " build/frontend_attr_parity.txt
+grep -q " duplicate=0 " build/frontend_attr_parity.txt
+grep -q " failed=0" build/frontend_attr_parity.txt
+run_step ./build/cdc_frontend_check bounds
+run_step ./build/cdc_frontend_check oom framework_loop.cdc
+for fixture in tests/fixtures/frontend/*.cdc; do
+  if python3 cdc_boot.py "$fixture" >/dev/null 2>&1; then
+    echo "legacy loader accepted invalid fixture ${fixture}" >&2
+    exit 1
+  fi
+  run_step ./build/cdc_frontend_check reject "$fixture"
+done
+echo "frontend rejection parity ok fixtures=$(ls tests/fixtures/frontend/*.cdc | wc -l)"
+SANITIZED=0
+if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
+  runtime/cdc_frontend_check.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  runtime/cdc_source.c \
+  -o build/cdc_frontend_check_asan 2>/dev/null; then
+  SANITIZED=1
+  # shellcheck disable=SC2086
+  run_step ./build/cdc_frontend_check_asan roundtrip $CDC_ROOT_SOURCES
+  run_step ./build/cdc_frontend_check_asan bounds
+else
+  echo "sanitizers unavailable; skipping instrumented frontend pass"
+fi
+
+echo
+echo "== Stable ABI and unified driver skeleton [gate CT2 seed] =="
+rm -f build/cdc
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/toolchain/main.c \
+  runtime/toolchain/cmd_verify.c \
+  runtime/toolchain/cmd_test.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
+  runtime/cdc_native_runtime.c \
+  runtime/cdc_bridge_runtime.c \
+  runtime/cdc_source.c \
+  -lm \
+  -o build/cdc
+run_step ./build/cdc version
+# shellcheck disable=SC2086
+./build/cdc verify --parse $CDC_ROOT_SOURCES | tee build/cdc_verify_parse.txt
+# Exact statement gate (review item C3): statements = dump records plus
+# structural end lines; both counted from the same frozen corpus.
+END_LINES=$(cat ./*.cdc | grep -cE '^[[:space:]]*end[[:space:]]*(#.*)?$')
+# Review B7: count via the shell, not ls|wc (BSD wc pads with spaces).
+set -- ./*.cdc
+ROOT_FILE_COUNT=$#
+EXPECTED_STATEMENTS=$((FRONTEND_RECORDS + END_LINES))
+grep -q "cdc verify parse ok files=${ROOT_FILE_COUNT} statements=${EXPECTED_STATEMENTS}\$" \
+  build/cdc_verify_parse.txt
+echo "cdc verify statement gate exact: files=${ROOT_FILE_COUNT} statements=${EXPECTED_STATEMENTS}"
+if ./build/cdc verify --parse tests/fixtures/frontend/unknown_directive.cdc \
+  >/dev/null 2>&1; then
+  echo "cdc verify accepted an invalid fixture" >&2
+  exit 1
+fi
+echo "cdc driver rejection ok (typed JSON diagnostics)"
+if ./build/cdc run >/dev/null 2>&1; then
+  echo "cdc run should fail closed before Phase C" >&2
+  exit 1
+fi
+echo "cdc unimplemented commands fail closed"
+# Gate toolchain-verify-parity: the native contract evaluator must produce
+# a byte-identical report to the bootloader, in success AND failure modes,
+# with matching exit semantics. This is the recorded deletion gate for
+# cdc_boot.py (Mandate Gate 5).
+python3 cdc_boot.py > build/contract_boot.txt
+# shellcheck disable=SC2086
+./build/cdc verify --contract $CDC_ROOT_SOURCES > build/contract_native.txt
+cmp build/contract_boot.txt build/contract_native.txt
+echo "toolchain-verify-parity ok (byte-identical contract reports)"
+printf 'witness lonely-w capability=Z9 claim="fixture"\nexpect witness missing-w\nexpect capability Z9\nexpect frameworks closed\n' \
+  > build/fixture_fail_expect.cdc
+set +e
+python3 cdc_boot.py build/fixture_fail_expect.cdc > build/contract_boot_neg.txt
+BOOT_NEG_RC=$?
+./build/cdc verify --contract build/fixture_fail_expect.cdc > build/contract_native_neg.txt
+NATIVE_NEG_RC=$?
+set -e
+test "$BOOT_NEG_RC" = "1"
+test "$NATIVE_NEG_RC" = "1"
+cmp build/contract_boot_neg.txt build/contract_native_neg.txt
+echo "toolchain-verify-parity failure-mode ok (identical FAIL reports, exit 1)"
+# A11 linkability: both legacy runtimes must compile with their entry
+# points excluded, proving the unified binary can link them (the standalone
+# CLIs keep byte-identical behavior; conversion lands with full CT2).
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -DCDC_NATIVE_NO_MAIN \
+  -c runtime/cdc_native_runtime.c -o build/cdc_native_nomain.o
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -DCDC_BRIDGE_NO_MAIN \
+  -c runtime/cdc_bridge_runtime.c -o build/cdc_bridge_nomain.o
+echo "runtime linkability ok (CDC_NATIVE_NO_MAIN + CDC_BRIDGE_NO_MAIN)"
+
+echo
+echo "== Unified driver passthrough parity [gate CT2] =="
+# The unified binary must reproduce the standalone runtimes byte-for-byte,
+# including exit codes, across every legacy mode family (parity is checked
+# AFTER the standalone binaries are built later in this script would be too
+# late — they are compiled here if absent).
+rm -f build/cdc_native_runtime build/cdc_bridge_runtime
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/cdc_native_runtime.c runtime/cdc_source.c -lm \
+  -o build/cdc_native_runtime
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
+  -o build/cdc_bridge_runtime
+PASSTHROUGH_MODES=0
+while IFS= read -r MODE_ARGS; do
+  set +e
+  # shellcheck disable=SC2086
+  ./build/cdc_native_runtime $MODE_ARGS > build/passthrough_a.txt 2>&1
+  RC_A=$?
+  # shellcheck disable=SC2086
+  ./build/cdc $MODE_ARGS > build/passthrough_b.txt 2>&1
+  RC_B=$?
+  set -e
+  test "$RC_A" = "$RC_B"
+  cmp build/passthrough_a.txt build/passthrough_b.txt
+  PASSTHROUGH_MODES=$((PASSTHROUGH_MODES + 1))
+done <<'MODES'
+compile native_reducer.cdc
+interpret native_reducer.cdc
+prove native_reducer.cdc
+surface native_surface.cdc
+council council_bridge.cdc
+evolve council_bridge.cdc
+universal framework_loop.cdc
+fused framework_loop.cdc
+fused native_reducer.cdc
+fused council_bridge.cdc
+MODES
+./build/cdc_bridge_runtime verify bridge64.cdc > build/passthrough_a.txt
+./build/cdc bridge verify bridge64.cdc > build/passthrough_b.txt
+cmp build/passthrough_a.txt build/passthrough_b.txt
+./build/cdc_bridge_runtime lookup-dyadic bridge64.cdc 101011 > build/passthrough_a.txt
+./build/cdc bridge lookup-dyadic bridge64.cdc 101011 > build/passthrough_b.txt
+cmp build/passthrough_a.txt build/passthrough_b.txt
+PASSTHROUGH_MODES=$((PASSTHROUGH_MODES + 2))
+echo "unified passthrough parity ok modes=${PASSTHROUGH_MODES}"
+
+echo
+echo "== Fused single-process executor [gate CT3] =="
+# cdc run = the fused executor: one parse, one live Runtime, every declared
+# stage family; byte-identical to the native fused mode.
+./build/cdc run framework_loop.cdc > build/fused_a.txt
+./build/cdc_native_runtime fused framework_loop.cdc > build/fused_b.txt
+cmp build/fused_a.txt build/fused_b.txt
+grep -q "cdc fused ok stages=1 mode=universal source=framework_loop.cdc" build/fused_a.txt
+./build/cdc run council_bridge.cdc > build/fused_a.txt
+grep -q "cdc fused ok stages=2 source=council_bridge.cdc" build/fused_a.txt
+./build/cdc run native_reducer.cdc > build/fused_a.txt
+grep -q "cdc fused ok stages=1 source=native_reducer.cdc" build/fused_a.txt
+if ./build/cdc run kernel.cdc >/dev/null 2>&1; then
+  echo "fused run must fail closed on a source with no executable stage" >&2
+  exit 1
+fi
+echo "fused executor ok (universal closure, multi-stage, fail-closed)"
+
+echo
+echo "== Typed test runner [gate CT3 seed] =="
+# A7 policy: commit/hold/nest/fail reported separately (merged totals
+# forbidden); every hold must be declared expect-status=held on its job or
+# the gate fails, even when the underlying runtime exits 0.
+./build/cdc test --gate \
+  native_reducer.cdc native_surface.cdc council_bridge.cdc \
+  framework_transition.cdc framework_procedural.cdc \
+  framework_episodic.cdc framework_deliberative.cdc framework_loop.cdc \
+  | tee build/cdc_test_gate.txt
+grep -q "cdc test ok runs=23 commit=11 hold=5 (expected=5 unexpected=0) nest=10 fail=0" \
+  build/cdc_test_gate.txt
+# Negative: a source the legacy runtime fully accepts (exit 0) but whose
+# hold is undeclared must fail the typed gate with unexpected=1 fail=0.
+run_step ./build/cdc run tests/fixtures/test_runner/silent_hold.cdc
+if ./build/cdc test --gate tests/fixtures/test_runner/silent_hold.cdc \
+  > build/cdc_test_neg.txt 2>/dev/null; then
+  echo "typed gate accepted an undeclared hold" >&2
+  exit 1
+fi
+grep -q "(expected=0 unexpected=1) nest=1 fail=0" build/cdc_test_neg.txt
+echo "typed gate rejects undeclared holds (runtime exit 0 notwithstanding)"
+# Review B3: an unrelated witness carrying the job name and
+# expect-status=held must NOT authorize the hold.
+if ./build/cdc test --gate tests/fixtures/test_runner/spoofed_hold.cdc \
+  > build/cdc_test_spoof.txt 2>/dev/null; then
+  echo "typed gate accepted a spoofed hold authorization" >&2
+  exit 1
+fi
+grep -q "(expected=0 unexpected=1)" build/cdc_test_spoof.txt
+echo "typed gate rejects spoofed hold authorization (unrelated witness)"
+# Review B4: zero executed runs is never green.
+if ./build/cdc test --gate kernel.cdc > build/cdc_test_zero.txt 2>/dev/null; then
+  echo "typed gate passed with zero executed runs" >&2
+  exit 1
+fi
+grep -q "runs=0.*no executable stage selected" build/cdc_test_zero.txt
+echo "typed gate fails on zero executed runs"
+# Review B5: a declared-but-incomplete reducer family is a typed fused
+# error, never silently skipped (three one-kind-missing counterexamples).
+printf 'field f1 dt=0.125 gain=1.0 deadband=0.5\nmodule m1 field=f1 belief=0.0 prior=0.0 precision=1.0 action-gain=1.0\ncell m1.a module=m1 theta=0.0 amplitude=1.0 omega=0.0\nguard g1 cell=m1.a expect-state=open\n' > build/fused_base.txt
+for MISSING in nest commit flow; do
+  {
+    cat build/fused_base.txt
+    if [ "$MISSING" != "flow" ]; then
+      printf 'flow f-x field=f1 duration=1.0\n'
+    fi
+    if [ "$MISSING" != "commit" ]; then
+      printf 'commit c-x module=m1\n'
+    fi
+    if [ "$MISSING" != "nest" ]; then
+      printf 'nest n-x parent=m1 child=m1\n'
+    fi
+  } > "build/fused_missing_${MISSING}.cdc"
+  if ./build/cdc run "build/fused_missing_${MISSING}.cdc" >/dev/null 2>&1; then
+    echo "fused run silently skipped an incomplete reducer (missing ${MISSING})" >&2
+    exit 1
+  fi
+done
+echo "fused run fails typed on incomplete reducer families (3 counterexamples)"
+
+echo
+echo "== Durable store substrate [gates CT4/MM1 seed] =="
+# Digest vectors, replay determinism, typed statuses, and the crash matrix:
+# injected failure at EVERY commit write/flush/sync boundary must recover
+# to exactly the old or the new sealed state — never a partial batch.
+rm -rf build/store_test build/store_crash build/store_corrupt
+mkdir -p build/store_test build/store_crash build/store_corrupt
+run_step ./build/cdc_frontend_check store-check build/store_test
+./build/cdc_frontend_check store-crash build/store_crash | tee build/store_crash.txt
+grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
+# Full mutation matrix (3122af5 re-review): EVERY byte of the sealed log
+# flipped one at a time must fail closed (ECORRUPT, no handle,
+# recovered=0, log bytes untouched), including the named high-byte length
+# mutation; a fully valid unsealed tail stays recoverable and
+# distinguished from corruption.
+./build/cdc_frontend_check store-corrupt build/store_corrupt | tee build/store_corrupt.txt
+grep -q "store-corrupt ok swept=726 named=1 controls=2" build/store_corrupt.txt
+# I/O-fault regressions (f1f68c0 re-review): read faults are EIO, never
+# torn tails — a directory as log, a fault before any seal, and a fault
+# after a seal must all fail closed with no handle, no truncation, and
+# byte-identical logs.
+rm -rf build/store_io
+mkdir -p build/store_io
+./build/cdc_frontend_check store-io build/store_io | tee build/store_io.txt
+grep -q "store-io ok cases=3 controls=1" build/store_io.txt
+if [ "$SANITIZED" = "1" ]; then
+  rm -rf build/store_crash_asan build/store_corrupt_asan build/store_io_asan
+  mkdir -p build/store_crash_asan build/store_corrupt_asan build/store_io_asan
+  run_step ./build/cdc_frontend_check_asan store-crash build/store_crash_asan
+  run_step ./build/cdc_frontend_check_asan store-corrupt build/store_corrupt_asan
+  run_step ./build/cdc_frontend_check_asan store-io build/store_io_asan
+fi
+
+echo
+echo "== ABI boundary counterexamples [2026-07-23 adversarial review] =="
+# Defect 1: rejected source under a >512-byte path must serialize complete
+# JSON (two-pass render; no fixed-slot overflow).
+LONG_SEG=$(printf 'x%.0s' $(seq 1 100))
+LONG_DIR="build/longpath/${LONG_SEG}/${LONG_SEG}/${LONG_SEG}/${LONG_SEG}/${LONG_SEG}"
+mkdir -p "$LONG_DIR"
+cp tests/fixtures/frontend/unknown_directive.cdc "${LONG_DIR}/rejected.cdc"
+LONG_PATH="${LONG_DIR}/rejected.cdc"
+test "${#LONG_PATH}" -gt 512
+./build/cdc_frontend_check abi-diag "$LONG_PATH" > build/abi_diag_long.txt
+grep -qF "$LONG_PATH" build/abi_diag_long.txt
+grep -q "abi-diag ok" build/abi_diag_long.txt
+echo "abi long-path diagnostic ok (path ${#LONG_PATH} bytes)"
+if ./build/cdc verify --parse "$LONG_PATH" >/dev/null 2>&1; then
+  echo "cdc verify accepted the long-path rejected fixture" >&2
+  exit 1
+fi
+# Defect 2: unreadable and special paths are CDC_ERR_IO, never empty
+# accepted programs.
+if ./build/cdc verify --parse . >/dev/null 2>&1; then
+  echo "cdc verify accepted a directory as an empty program" >&2
+  exit 1
+fi
+run_step ./build/cdc_frontend_check abi-io . io
+run_step ./build/cdc_frontend_check abi-io /dev/null io
+rm -f build/test_fifo
+mkfifo build/test_fifo
+timeout 10 ./build/cdc_frontend_check abi-io build/test_fifo io
+rm -f build/test_fifo
+run_step ./build/cdc_frontend_check io-mid-read build
+if [ "$(id -u)" != "0" ]; then
+  cp tests/fixtures/frontend/unknown_directive.cdc build/noread.cdc
+  chmod 000 build/noread.cdc
+  run_step ./build/cdc_frontend_check abi-io build/noread.cdc io
+  chmod 644 build/noread.cdc
+  rm -f build/noread.cdc
+else
+  echo "running as root; unreadable-file case skipped (permissions moot)"
+fi
+: > build/empty_unit.cdc
+./build/cdc verify --parse build/empty_unit.cdc | \
+  grep -q "cdc verify parse ok files=1 statements=0"
+echo "zero-byte regular source ok (valid empty unit)"
+run_step ./build/cdc_frontend_check oom-abi tests/fixtures/frontend/unknown_directive.cdc
+if [ "$SANITIZED" = "1" ]; then
+  run_step ./build/cdc_frontend_check_asan abi-diag "$LONG_PATH" > /dev/null
+  run_step ./build/cdc_frontend_check_asan oom-abi tests/fixtures/frontend/unknown_directive.cdc
+  run_step ./build/cdc_frontend_check_asan abi-io . io
+fi
 
 echo
 echo "== Operational bridge runtime =="

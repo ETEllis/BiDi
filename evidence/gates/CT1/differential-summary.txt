@@ -1,0 +1,29 @@
+# CT1 evidence — canonical frontend differential (Phase B steps 1-2)
+date: 2026-07-22
+
+## differential dump (boot --dump vs cdc_frontend_check dump, 18 root files)
+records: 5286 (byte-identical, cmp exit 0)
+38f10a0e600f1f0c330dd73b3d27fa6984b6375396c5afbc2c48a3f12e5b6a28  build/frontend_dump_boot.txt
+38f10a0e600f1f0c330dd73b3d27fa6984b6375396c5afbc2c48a3f12e5b6a28  build/frontend_dump_native.txt
+
+## canonical corpus digest (grammar-1 canonical serialization of all root .cdc)
+e931cbb02fea0e57981167744e0ce1301f1ac543837b00cda075a33c1e99bd41  canon(root corpus)
+
+## attr-parity vs legacy cdc_read_attr scanner
+frontend attr-parity checked=47665 quoting=4863 collision=0 duplicate=0 skipped=3 failed=0
+quoting class = legacy retains quotes / truncates at first space (claim=, label= style values)
+skipped=3 = the three '==' tokens in kernel.cdc expects (empty key before '=')
+collision=0 and duplicate=0 are hard-gated in verify.sh
+
+## adversarial + failure-injection
+bounds: 12 typed-diagnostic cases (CDC010-CDC022, CDC014), no crash
+oom: clean completion after 765 injected allocation-failure runs
+sanitizers: ASan+UBSan instrumented roundtrip+bounds green
+
+## rejection parity fixtures (rejected by BOTH legacy loader and frontend)
+duplicate_framework.cdc
+kernel_missing_name.cdc
+missing_id.cdc
+trailing_escape.cdc
+unknown_directive.cdc
+unterminated_quote.cdc

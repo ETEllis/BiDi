@@ -1,0 +1,66 @@
+# CT0 source identity (Phase A freeze)
+date: 2026-07-22
+environment: Claude Code remote container (Linux 6.18.5, Ubuntu cc 13.3.0, Python 3.11.15)
+remote: http://local_proxy@127.0.0.1:41729/git/ETEllis/BiDi-Coherence-Delta-Calculus
+branch: claude/bun-equivalent-build-plan-lxe772
+HEAD: 99747e0a63ad14ad243934c122da73ec94a57940
+tree: 8f2f140e280be868d3160cdf77bd171d50b7c4de
+origin/main: 8cfe48fdb71e53af78411471869c064e6c650c63
+
+## tracked file blob ids (git SHA-1) at HEAD
+100644 blob a6b65bd847903ebd9b88d81824452362c047ea25	.github/workflows/ci.yml
+100644 blob 67726d2c28bcd7ff073181629eb860474ab8cd83	.gitignore
+100644 blob 8f36a2592f2809275ebcd5ea788cff95e32b2be3	BIDI_CALCULUS_CORE.md
+100644 blob f3b898f1a7b04979d8b3846dd892472bcc6f98cc	BIDI_COHERENCE_DELTA_CALCULUS.md
+100644 blob 2de1f84d286ddfbf0e1a716f1a666de8a301426f	BRIDGE_RUNTIME.md
+100644 blob 4308d1c98d5bd0f8ac18cd9fcfda773dbcd61768	CDC_LANGUAGE.md
+100644 blob 42ee8ce8c371cbf1595ff0704b69e0ed9e6f3805	CDC_TOOLCHAIN_PLAN.md
+100644 blob 78001319cb0125c6fec54a50d98b411f97640d76	CITATION.cff
+100644 blob f39a83913a8fa67e16128d95b34e1a222682eb83	FORMAL_SEMANTIC_SPINE.md
+100644 blob e85f08e85ee0fb8032b9586d15697a2db26598dd	FRAMEWORKS.md
+100644 blob 70d936f15cc87353f0370d34af779ab9c7a38e32	LICENSE
+100644 blob 6fab12692087202e8432e4868f39c86cde46c20f	NATIVE_SELF_HOSTING_MANDATE.md
+100644 blob 5ad19917841ebb1bfc787180559d581fdfbe0241	README.md
+100644 blob 30f15b5ca2b6a52899752433e1b2116326944bf0	TERNARY_TRACE_WINDOW_SEMANTICS.md
+100644 blob e53546e2e0f91e8711702c31f261fee6305725b2	VERIFICATION_OBLIGATION_MATRIX.md
+100644 blob 616e17bdd68e3929c82e51f3d87bf1ebb3bfb633	assets/bidi-cdc-icon.svg
+100644 blob 23b6a5049f18b67edb3269ef58ffbd987d3dc942	assets/bridge64-grid.svg
+100644 blob 4c8f7eb3c04ae8afb7ed0c770a0c000ebb892b0f	assets/icon-concepts/01-aperture-delta.svg
+100644 blob b5739bcab8cdda77eadbf5783194488cc318b459	assets/icon-concepts/02-nested-boundary.svg
+100644 blob 7a06f10fdfb1a0bbf6e408d32dea5990b3a60ff3	assets/icon-concepts/03-trit-barrier.svg
+100644 blob 1ddce4dab12a4f762cacf18f0a823bf4e29a8217	assets/icon-concepts/04-dual-cone.svg
+100644 blob d3d5c05793a67e471e437971ca7b6c0b24958e32	assets/icon-concepts/README.md
+100644 blob 1cc72f814d5ca9a3edb17b36dcc6c4b656c6a05e	bridge4096.cdc
+100644 blob 6e76eecd23648713021806d4113a028727a6097b	bridge512.cdc
+100644 blob 73d202e1dd6bd6454e0d734e74835d6f9a84b9d6	bridge64.cdc
+100644 blob 65ce8c59daaaca0fbcfa7f4237df8624bd321965	bridge_codebooks.cdc
+100644 blob 38204b87660b7b783073ce1e3a00c29a8d59a16b	bridge_jobs.cdc
+100644 blob f287f9aa6cbf9c97a67153615604e067e773731c	cdc_boot.py
+100644 blob 37c13edf9ae24cf22dd7bc101e2bde8a5207b8f3	council_bridge.cdc
+100644 blob a2ab17615a1d11f5a253c84aadd4c78e3b656194	demo/index.html
+100644 blob ff9d0f911fdbcfaef3dd98568eb1e2bdfcc11f82	demo/replay.json
+100644 blob 2dea8dd73d862e6d414950353c2f9559287e773d	formal/coq/CDCFinite.v
+100644 blob 742462c3476c2714d8e22381b5d4493134459194	formal/lean/CDCFinite.lean
+100644 blob 72cfa59cfe312db716bfe1a67209b3c6007e5378	framework_deliberative.cdc
+100644 blob 0076ac15a4d355a9f8f00a382d462450833bc790	framework_episodic.cdc
+100644 blob 285efc9247374b46d39a80d8cf677d1db5ff36e7	framework_loop.cdc
+100644 blob 2d2b33a52f383d11ea073ef037d3e2e8bc808d0c	framework_procedural.cdc
+100644 blob 14c9835c3cdfd17bade86f4210436887fcae6ba4	framework_transition.cdc
+100644 blob 06ef74638411c4cbe6ef627bc296516b2281e25a	kernel.cdc
+100644 blob bca929e82e91297fdbd76ba5c809a17871e9026d	laws.cdc
+100644 blob 310af3b13ab2053ec957301a771826615b55ad91	lean-toolchain
+100644 blob e5e102d8e24943a3947935ea79574a1140c18614	native_reducer.cdc
+100644 blob 2a67edee36a29f8d6081495c357b6e31cb42aaf4	native_surface.cdc
+100644 blob 23434b9ee8efd5cc391098e83717bc41b1c00185	paper/README.md
+100644 blob 02bcc60e5200e5e4835ad8a652091ef995812631	paper/arxiv/README.md
+100644 blob dfcb77012df513e1c7f10bafd993d0b58b50e027	paper/arxiv/main.tex
+100644 blob 865ea23f04fa6bac4a62f48ec4bf19ed56e74728	pyproject.toml
+100644 blob 0ce153e044df43d7566b813cfafc89962fe4a22d	relations.cdc
+100644 blob c7cbf77a613bf74cf9298cda655ed279b5830ca0	runtime/cdc_bridge_runtime.c
+100644 blob 02a8d549b722f3cc69697ac4fa174b02044f3f95	runtime/cdc_native_runtime.c
+100644 blob 0714bf363c1f34874c00122ebc34ea8fe8d576fc	runtime/cdc_source.c
+100644 blob 4cf23732deda468b6fc130424fd6ee1eacc1632a	runtime/cdc_source.h
+100644 blob 25eb7104819bd65a1cd9a7152878b42bcde1de67	runtime/cdc_wasm_exports.c
+100755 blob aeefb987f0f473b508d15062e488e417a6d2dc89	scripts/verify.sh
+100644 blob 88e2a96deeea7e85817da2243250cc4a255cb51e	system.cdc
+100644 blob a63bdbc5b044555628af018c31a50af2fa4ed56c	trace_windows.cdc

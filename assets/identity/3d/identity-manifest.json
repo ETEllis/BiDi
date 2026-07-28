@@ -1,0 +1,386 @@
+{
+  "schemaVersion": 2,
+  "identity": "Möbi𝒰s",
+  "formalKernel": "bidiγΔ",
+  "universalOperator": {
+    "canonicalSigil": "𝒰_",
+    "reducedMathematicalBody": "𝒰",
+    "indexedNotation": "𝒰_R",
+    "law": "one operator at multiple resolution levels; underscore is the executable live horizon"
+  },
+  "status": "working-candidate-awaiting-final-pencil-refinement",
+  "governingLaw": "One geometry. Many projections. Parent contains and generates kernel.",
+  "phaseAngle": {
+    "radians": 0.125,
+    "degrees": 7.16197243913529
+  },
+  "staticArtifact": {
+    "frame": 84,
+    "path": "../renders/mobius-wordmark-static.png",
+    "goldenFrame": "../renders/mobius-wordmark-generated.png",
+    "construction": "connected collapsed MobiusBody plus literal eyes seated in the ö slot",
+    "squareCircle": "the circular aperture meets the orthogonal phase-ground and operator upright"
+  },
+  "topology": {
+    "surface": "mobius-band",
+    "halfTwists": 1,
+    "connectedComponents": 1,
+    "eulerCharacteristic": 0,
+    "boundaryComponents": 1
+  },
+  "components": {
+    "embodiedBody": "mobius-body.glb",
+    "operatorU": "mobius-u-operator.glb",
+    "universalOperatorSigil": "mobius-u-code-sigil.glb",
+    "relationalIUs": "mobius-ius-relational.glb",
+    "codeSigil": "mobius-u-code-sigil.glb",
+    "kernelBiDiDelta": "mobius-bidi-delta.glb",
+    "animatedMaster": "mobius-identity-master.glb",
+    "animatedWordmark": "mobius-wordmark-animated.glb",
+    "animatedIUs": "mobius-ius-phase-animated.glb",
+    "animatedUIHangul": "mobius-ui-hangul-animated.glb",
+    "animatedBiDiDelta": "mobius-bidi-delta-animated.glb",
+    "animatedOperatorU": "mobius-u-animated.glb",
+    "animatedCodeSigil": "mobius-u-code-animated.glb",
+    "motionMaster": "../motion/mobius-identity-master.mp4"
+  },
+  "components2d": {
+    "embodiedBody": "../mobius-embodied-mark.svg",
+    "operatorU": "../mobius-u-operator.svg",
+    "universalOperatorSigil": "../mobius-u-code-sigil.svg",
+    "relationalIUs": "../mobius-ius-relational.svg",
+    "codeSigil": "../mobius-u-code-sigil.svg",
+    "codeSigilDark": "../mobius-u-code-sigil-dark.svg",
+    "biSeed": "../mobius-bi-seed.svg",
+    "bidiKernel": "../mobius-bidi-kernel.svg",
+    "kernelBiDiDelta": "../mobius-bidi-delta.svg",
+    "wordmarkDark": "../mobius-u-wordmark-dark.svg",
+    "wordmarkLight": "../mobius-u-wordmark-light.svg"
+  },
+  "compatibilityAliases": {
+    "codeSigil": "universalOperatorSigil",
+    "CODE_SIGIL": "UNIVERSAL_OPERATOR_SIGIL",
+    "operatorU": "reducedMathematicalBody"
+  },
+  "lineage": {
+    "BIDI_B_Source": "Glyph_B",
+    "BIDI_I_Source": "Glyph_I",
+    "BIDI_D_Reflected": "Glyph_B reflected through scale.x = 0",
+    "BIDI_I_Reflected": "Glyph_I duplicated invariantly",
+    "DeltaStroke_A_From_M": "Glyph_M",
+    "DeltaStroke_B_From_i": "Glyph_I",
+    "DeltaStroke_C_From_Ground": "Glyph_Ground_Right",
+    "HangulRestoration": "MobiusBody(ㅇ) + phase-ground(ㅡ) + i-stem(ㅣ)",
+    "RelationalUS": "U projects from conserved aperture; S unfurls from the U return terminal"
+  },
+  "documentation": {
+    "sourceOfTruth": "../../../docs/identity/MOBIUS_U_RECONCILED_SOURCE_OF_TRUTH.md",
+    "workingHandoff": "../../../docs/identity/MOBIUS_IDENTITY_WORKING_HANDOFF_2026-07-22.md",
+    "publicInstrument": "../../../docs/identity/ETELLIS_XYZ_IDENTITY_INTEGRATION_DRAFT.md",
+    "visualRefinement": "../../../docs/identity/MOBIUS_U_VISUAL_REFINEMENT_WORKING_PAPER.md",
+    "languageAndRepository": "../../../docs/identity/MOBIUS_U_LANGUAGE_AND_REPOSITORY_INTEGRATION.md",
+    "internalFoldMap": "../../../docs/identity/MOBIUS_INTERNAL_SYSTEM_FOLD_MAP.md"
+  },
+  "provisionalKineticReveals": {
+    "reverseSheet": "Möbi𝒰s -> s𝒰iböM; SUI is inspected as a separate Latin resonance",
+    "terminalOm": "the final öM may resolve to OM only as an authored motion state after the eyes lift",
+    "yiProgression": "一 -> 意 -> 易 -> 義 is an authored semantic progression, not an etymology"
+  },
+  "stateRanges": {
+    "PRESENCE": [
+      1,
+      35
+    ],
+    "WORDMARK_GENERATION": [
+      36,
+      84
+    ],
+    "ONE_TURN_WORDMARK": [
+      85,
+      108
+    ],
+    "IUS_PHASE": [
+      109,
+      156
+    ],
+    "UI_RESTORATION": [
+      157,
+      192
+    ],
+    "HANGUL_RESTORATION": [
+      193,
+      228
+    ],
+    "RETURN_TO_WORDMARK": [
+      229,
+      276
+    ],
+    "BIDI_SELF_EXTRACTION": [
+      277,
+      368
+    ],
+    "DELTA_TRIADIC_CLOSURE": [
+      369,
+      420
+    ],
+    "OPERATOR_U": [
+      421,
+      468
+    ],
+    "CODE_SIGIL": [
+      469,
+      516
+    ],
+    "FAMILY_LOCKUP": [
+      517,
+      600
+    ]
+  },
+  "clipRanges": {
+    "wordmark": {
+      "frames": [
+        1,
+        108
+      ],
+      "fps": 24
+    },
+    "ius": {
+      "frames": [
+        109,
+        156
+      ],
+      "fps": 24
+    },
+    "ui-hangul": {
+      "frames": [
+        157,
+        228
+      ],
+      "fps": 24
+    },
+    "bidi-delta": {
+      "frames": [
+        277,
+        420
+      ],
+      "fps": 24
+    },
+    "operator-u": {
+      "frames": [
+        421,
+        468
+      ],
+      "fps": 24
+    },
+    "code-sigil": {
+      "frames": [
+        469,
+        516
+      ],
+      "fps": 24
+    }
+  },
+  "goldenFrames": {
+    "presence": {
+      "frame": 1,
+      "path": "../renders/mobius-presence.png"
+    },
+    "wordmark-generated": {
+      "frame": 84,
+      "path": "../renders/mobius-wordmark-generated.png"
+    },
+    "ius-phase": {
+      "frame": 132,
+      "path": "../renders/mobius-ius-phase.png"
+    },
+    "ui-restored": {
+      "frame": 180,
+      "path": "../renders/mobius-ui-restored.png"
+    },
+    "hangul-restored": {
+      "frame": 216,
+      "path": "../renders/mobius-hangul-restored.png"
+    },
+    "bidi-extracted": {
+      "frame": 360,
+      "path": "../renders/mobius-bidi-extracted.png"
+    },
+    "delta-closed": {
+      "frame": 408,
+      "path": "../renders/mobius-delta-closed.png"
+    },
+    "u-standalone": {
+      "frame": 456,
+      "path": "../renders/mobius-u-standalone.png"
+    },
+    "u-code": {
+      "frame": 500,
+      "path": "../renders/mobius-u-code.png"
+    },
+    "family-lockup": {
+      "frame": 576,
+      "path": "../renders/mobius-family-lockup.png"
+    }
+  },
+  "motionMaster": "../motion/mobius-identity-master.mp4",
+  "files": [
+    {
+      "path": "assets/identity/3d/mobius-bidi-delta-animated.glb",
+      "bytes": 286660,
+      "sha256": "080e3d83f2414b93343c4a88451ef3c163c0190169602b37d8f711d8f5b38716"
+    },
+    {
+      "path": "assets/identity/3d/mobius-bidi-delta.glb",
+      "bytes": 191372,
+      "sha256": "bf97a0e4ad1c1ec15debd7bd7a6b7b9c5058f8c65a8dbcf58623b02006eefe70"
+    },
+    {
+      "path": "assets/identity/3d/mobius-body.glb",
+      "bytes": 255016,
+      "sha256": "37ab812d57bfced304e5875f446a896c37edfdc69d54bfb15b20d5438e59f995"
+    },
+    {
+      "path": "assets/identity/3d/mobius-identity-master.glb",
+      "bytes": 2730648,
+      "sha256": "0dcccec865d5dbf19ca9f2061d77e3ed3193b411f9b1293e776698f68c44fda7"
+    },
+    {
+      "path": "assets/identity/3d/mobius-ius-phase-animated.glb",
+      "bytes": 654360,
+      "sha256": "37db050f5b79e397984c905ae0a05b24e7a74b89c5a952f6856f4a41da437cbd"
+    },
+    {
+      "path": "assets/identity/3d/mobius-ius-relational.glb",
+      "bytes": 593376,
+      "sha256": "df6243d310937c890b78f0315556be6bdc2682168c51c7bd8e0342bdc8ed931a"
+    },
+    {
+      "path": "assets/identity/3d/mobius-u-animated.glb",
+      "bytes": 985048,
+      "sha256": "311d771f7eaab09f0fa86db0b63a5bb504d94e40a524ccaae24f9ba8c7eb796a"
+    },
+    {
+      "path": "assets/identity/3d/mobius-u-code-animated.glb",
+      "bytes": 482816,
+      "sha256": "bc031de51e720549ca41597c718b358e38ce2e070e79a4f6689a78cca6d15068"
+    },
+    {
+      "path": "assets/identity/3d/mobius-u-code-sigil.glb",
+      "bytes": 462224,
+      "sha256": "638212ceb6bbd5c7f69f004358805376c156237ecbbb89d642206efde9755bb3"
+    },
+    {
+      "path": "assets/identity/3d/mobius-u-operator.glb",
+      "bytes": 274396,
+      "sha256": "a8e3e166cbcde80ccb409b5e451fa25635270917ae6716e69e680ded3b9b3dab"
+    },
+    {
+      "path": "assets/identity/3d/mobius-ui-hangul-animated.glb",
+      "bytes": 1505832,
+      "sha256": "31a21de6857f7ae4c548acaf81cfdbf4920c35e9be138f1a51f6347e385125ed"
+    },
+    {
+      "path": "assets/identity/3d/mobius-wordmark-animated.glb",
+      "bytes": 2025372,
+      "sha256": "94d634ac976a0f1ba6022919276c7057a40891b61356547a07da2ea2f488fb70"
+    },
+    {
+      "path": "assets/identity/motion/mobius-bidi-delta.mp4",
+      "bytes": 252294,
+      "sha256": "c961a19abd85fa5e1f499d3384e258f5357ff27252f4b148a97a3caab5ed0260"
+    },
+    {
+      "path": "assets/identity/motion/mobius-code-sigil.mp4",
+      "bytes": 122489,
+      "sha256": "16f590a90c55dd95acebe74116e71c1579a52a79ed3333b93c055da015299c6f"
+    },
+    {
+      "path": "assets/identity/motion/mobius-identity-master.mp4",
+      "bytes": 1088277,
+      "sha256": "d8358e0d4045a390b5f568527d4c603024f35b1061ce3a69e70c4fd6fbdcda22"
+    },
+    {
+      "path": "assets/identity/motion/mobius-ius.mp4",
+      "bytes": 113830,
+      "sha256": "9b40e669a66fea97cd8d3cc1b499fb7eec003910a6d5af3fca6ca2b9336e3a12"
+    },
+    {
+      "path": "assets/identity/motion/mobius-operator-u.mp4",
+      "bytes": 133870,
+      "sha256": "8485a6dd01b8443c05621a8d9e79c43aff947fd32aa836c218a9656b83bb0440"
+    },
+    {
+      "path": "assets/identity/motion/mobius-ui-hangul.mp4",
+      "bytes": 171280,
+      "sha256": "33295d34a65e9db96a2eb811d53cb031327f0bde40eaa4938b380178b4b7b1d4"
+    },
+    {
+      "path": "assets/identity/motion/mobius-wordmark.mp4",
+      "bytes": 194128,
+      "sha256": "9228a1f03feed61d5ef8509fcef182070ba02234aec39086bef5f745bf6fe99f"
+    },
+    {
+      "path": "assets/identity/renders/mobius-bidi-extracted.png",
+      "bytes": 324747,
+      "sha256": "7dfdd01ae48118959402633e33444c00703fb249a1c3d54bf49a8d9bb9cc8868"
+    },
+    {
+      "path": "assets/identity/renders/mobius-delta-closed.png",
+      "bytes": 336543,
+      "sha256": "e77f16077d9cc26f0e2e619662bdb275274e92f1787ff4dc8bc3037777d8c636"
+    },
+    {
+      "path": "assets/identity/renders/mobius-family-lockup.png",
+      "bytes": 354326,
+      "sha256": "01e32b8e578e46862599950aa3457c9a3b1e236801eeca4d33692644e3179487"
+    },
+    {
+      "path": "assets/identity/renders/mobius-hangul-restored.png",
+      "bytes": 274078,
+      "sha256": "02605d07e216e10534fa363e8973effe45fa71658eac2b63ec636eb2ef7f149d"
+    },
+    {
+      "path": "assets/identity/renders/mobius-ius-phase.png",
+      "bytes": 371237,
+      "sha256": "f704f9a67a94322e88d93713e5a673f52fc84c830eb324c975fc47e66f5128e3"
+    },
+    {
+      "path": "assets/identity/renders/mobius-presence.png",
+      "bytes": 385135,
+      "sha256": "68be048200d11641737d628e0389b770290aadbacbfb3144b4a08767a7a4cfe5"
+    },
+    {
+      "path": "assets/identity/renders/mobius-u-code.png",
+      "bytes": 334396,
+      "sha256": "da05d0110cddced71eb8dadb48713093216826db810ec0bb9b1facaf5bbb9db3"
+    },
+    {
+      "path": "assets/identity/renders/mobius-u-standalone.png",
+      "bytes": 386578,
+      "sha256": "ba9b9d30c3b0c9c89f948856fc76465779e5a5e8a9c0079123d0e09f83ebd75a"
+    },
+    {
+      "path": "assets/identity/renders/mobius-ui-restored.png",
+      "bytes": 331684,
+      "sha256": "fdc8ba64f243f9e9b8f968a1dec25bf9be21e66b2266d1b7d79c528e11f81ae8"
+    },
+    {
+      "path": "assets/identity/renders/mobius-wordmark-generated.png",
+      "bytes": 331349,
+      "sha256": "659aa3e08f2fa714c1331f57b5b28b43b123d403db43d4ed19e2ae63af99e4c6"
+    },
+    {
+      "path": "assets/identity/renders/mobius-wordmark-static.png",
+      "bytes": 394724,
+      "sha256": "b41719d41c84b6591010f1a75cfcce1034c4cd971f56643f01ab4bf47678f734"
+    }
+  ],
+  "motionClips": {
+    "wordmark": "../motion/mobius-wordmark.mp4",
+    "ius": "../motion/mobius-ius.mp4",
+    "ui-hangul": "../motion/mobius-ui-hangul.mp4",
+    "bidi-delta": "../motion/mobius-bidi-delta.mp4",
+    "operator-u": "../motion/mobius-operator-u.mp4",
+    "code-sigil": "../motion/mobius-code-sigil.mp4"
+  }
+}

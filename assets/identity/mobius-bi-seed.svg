@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" role="img" aria-labelledby="title desc">
+  <title id="title">Möbi𝒰s bi seed</title>
+  <desc id="desc">The bi pair extracted from Möbius as the seed of the BiDi Delta kernel identity.</desc>
+  <path fill="#edf7ff" transform="translate(30 180) scale(.12 -.2)" d="M690 -14Q600 -14 528 4.5Q456 23 405 57.5Q354 92 327 139.5Q300 187 300 245Q300 303 327 351Q354 399 405 433.5Q456 468 528 486.5Q600 505 690 505Q798 505 882.5 476Q967 447 1015 389Q1063 331 1063 245Q1063 163 1015 105Q967 47 882.5 16.5Q798 -14 690 -14ZM600 138Q668 138 716 150Q764 162 789 186Q814 210 814 245Q814 299 758 325.5Q702 352 600 352Q524 352 460.5 343Q397 334 358.5 311Q320 288 320 245Q320 203 358.5 180Q397 157 460.5 147.5Q524 138 600 138ZM320 690V190Q320 126 315.5 74.5Q311 23 306 0H80V690Z"/>
+  <path fill="#707ddd" transform="translate(184 180) rotate(-7.16197) scale(.13 -.2)" d="M309 747V597H55V747ZM62 490H302V0H62Z"/>
+  <path d="M30 202H220" fill="none" stroke="#31e2e7" stroke-width="4" transform="rotate(-7.16197 125 202)"/>
+</svg>

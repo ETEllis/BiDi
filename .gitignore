@@ -1,13 +1,14 @@
 __pycache__/
 *.py[cod]
+*.blend1
 .DS_Store
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
-# Local build outputs
-dist/
-build/
+# Local build outputs (repository root only; docs/build/ is tracked)
+/dist/
+/build/
 *.egg-info/
 
 # LaTeX/arXiv build outputs

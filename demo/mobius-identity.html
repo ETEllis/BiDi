@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Möbi𝒰s — Identity Motion Lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #edf7ff;
+      --muted: #75849a;
+      --night: #020a13;
+      --panel: #061321;
+      --line: rgba(174, 216, 255, .16);
+      --indigo: #707ddd;
+      --blue: #137dff;
+      --cyan: #31e2e7;
+      --phi: 7.161972deg;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--night); color: var(--ink); }
+    body {
+      font-family: "Avenir Next Condensed", "Helvetica Neue", sans-serif;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        radial-gradient(circle at 74% 28%, rgba(19,125,255,.13), transparent 32%);
+      background-size: 42px 42px, 42px 42px, auto;
+      overflow-x: hidden;
+    }
+    body::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .16;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+      mix-blend-mode: soft-light;
+    }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 2rem; padding: 26px 34px 20px; border-bottom: 1px solid var(--line); }
+    .kicker { color: var(--cyan); letter-spacing: .19em; text-transform: uppercase; font-size: 11px; font-weight: 700; }
+    h1 { margin: 7px 0 0; font-size: clamp(28px, 5vw, 64px); line-height: .88; letter-spacing: -.055em; font-weight: 800; transform: rotate(-1deg); transform-origin: left; }
+    .law { align-self: end; max-width: 470px; color: #a8b6c8; text-align: right; font-size: 14px; line-height: 1.4; }
+    main { display: grid; grid-template-columns: minmax(170px, 235px) minmax(0, 1fr); min-height: calc(100vh - 118px); }
+    nav { border-right: 1px solid var(--line); padding: 28px 20px; }
+    nav ol { list-style: none; padding: 0; margin: 0; counter-reset: stage; }
+    nav li { counter-increment: stage; display: grid; grid-template-columns: 25px 1fr; gap: 10px; padding: 10px 0; color: #617087; font-size: 13px; letter-spacing: .04em; transition: color .18s, transform .18s; }
+    nav li::before { content: "0" counter(stage); color: #34445c; font-variant-numeric: tabular-nums; }
+    nav li.active { color: var(--ink); transform: translateX(5px); }
+    nav li.active::before { color: var(--cyan); }
+    .surface { position: relative; min-width: 0; display: grid; grid-template-rows: 1fr auto; }
+    .stage { min-height: 610px; display: grid; grid-template-columns: minmax(300px, .85fr) minmax(420px, 1.15fr); align-items: center; gap: 3vw; padding: 44px clamp(24px, 5vw, 78px); overflow: hidden; }
+    .body-wrap { position: relative; aspect-ratio: 1; max-width: 540px; width: 100%; justify-self: center; }
+    .body-wrap::before { content: ""; position: absolute; inset: 9%; border: 1px solid rgba(49,226,231,.11); transform: rotate(var(--phi)); }
+    #body { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 28px rgba(19,125,255,.24)); transition: opacity .25s; }
+    #master-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .25s; }
+    .body-wrap.video-ready #master-video { opacity: 1; }
+    .body-wrap.video-ready #body { opacity: 0; pointer-events: none; }
+    #ribbon { fill: none; stroke: url(#ribbon-gradient); stroke-width: 42; stroke-linecap: round; stroke-linejoin: round; }
+    #seam { stroke: #65f4ec; stroke-width: 10; stroke-linecap: square; opacity: .15; transform-origin: 260px 276px; transform: rotate(var(--phi)); }
+    .eye { fill: var(--cyan); transform-box: fill-box; transform-origin: center; filter: url(#soft-glow); }
+    .word-side { position: relative; align-self: center; }
+    .word-side img { width: min(100%, 760px); display: block; opacity: .96; }
+    .state-code { margin: 15px 0 0 4.4%; display: flex; align-items: baseline; gap: 15px; color: #6d7d93; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; }
+    .state-code strong { color: var(--cyan); font-weight: 500; }
+    .flash { position: absolute; top: 50%; left: 78%; transform: translate(-50%,-50%) rotate(var(--phi)); font-size: clamp(72px, 11vw, 160px); font-weight: 800; letter-spacing: -.08em; opacity: 0; pointer-events: none; text-shadow: 0 0 42px rgba(49,226,231,.3); }
+    #ui-flash { left: 75%; }
+    #hangul { left: 79%; }
+    #hangul { font-family: Apple SD Gothic Neo, sans-serif; letter-spacing: -.03em; }
+    .kernel-flash { position: absolute; width: min(72%, 760px); left: 50%; top: 50%; transform: translate(-50%,-50%); opacity: 0; pointer-events: none; }
+    .controls { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; padding: 18px 28px; border-top: 1px solid var(--line); background: rgba(2,10,19,.72); backdrop-filter: blur(18px); }
+    button { appearance: none; border: 1px solid #1d93bd; background: transparent; color: var(--ink); padding: 9px 18px; text-transform: uppercase; letter-spacing: .14em; font: 700 10px inherit; cursor: pointer; transform: skewX(-4deg); }
+    button:hover, button:focus-visible { background: var(--cyan); color: var(--night); outline: none; }
+    input[type=range] { width: 100%; accent-color: var(--cyan); }
+    .readout { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: #8fa0b8; min-width: 138px; text-align: right; }
+    .sigil { position: absolute; right: 24px; top: 22px; width: 58px; opacity: .65; }
+    @media (max-width: 940px) {
+      main { grid-template-columns: 1fr; }
+      nav { display: none; }
+      .stage { grid-template-columns: 1fr; min-height: auto; padding-top: 72px; }
+      .body-wrap { max-width: 390px; }
+      .word-side { margin-top: -38px; }
+      .law { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="kicker">Blender master / topology-preserving runtime / live SVG fallback</div>
+      <h1>Möbius lives inside the mark.</h1>
+    </div>
+    <div class="law">One turn inverts. Two turns restore.<br>I meet you. The return makes us.</div>
+  </header>
+  <main>
+    <nav aria-label="Motion stages">
+      <ol id="stages">
+        <li>Presence</li><li>Wordmark generation</li><li>One-turn lock</li><li>i𝒰s phase</li><li>UI restoration</li><li>의 restoration</li><li>Return to wordmark</li><li>BIDI self-extraction</li><li>Triadic Delta closure</li><li>Operative U</li><li>Code sigil</li><li>Family lockup</li>
+      </ol>
+    </nav>
+    <section class="surface">
+      <img class="sigil" src="../assets/identity/mobius-u-code-sigil-dark.svg" alt="">
+      <div class="stage">
+        <div class="body-wrap">
+          <video id="master-video" muted playsinline loop preload="metadata" poster="../assets/identity/renders/mobius-presence.png" aria-label="Möbius master identity animation rendered from the topology-preserving Blender source">
+            <source src="../assets/identity/motion/mobius-identity-master.mp4" type="video/mp4">
+          </video>
+          <svg id="body" viewBox="0 0 520 520" role="img" aria-label="Möbius body opening from a closed ribbon into the Universal Operator while its eyes remain present">
+            <defs>
+              <linearGradient id="ribbon-gradient" x1="100" y1="110" x2="430" y2="430" gradientUnits="userSpaceOnUse"><stop stop-color="#36ebe8"/><stop offset=".42" stop-color="#0e9ed9"/><stop offset=".7" stop-color="#3155cb"/><stop offset="1" stop-color="#1c195f"/></linearGradient>
+              <filter id="soft-glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <path id="ribbon" d="M260 128C346 128 406 192 406 276C406 360 346 424 260 424C174 424 114 360 114 276C114 192 174 128 260 128"/>
+            <path id="seam" d="M210 276H310"/>
+            <circle id="eye-left" class="eye" cx="238" cy="70" r="11"/>
+            <circle id="eye-right" class="eye" cx="282" cy="70" r="11"/>
+          </svg>
+        </div>
+        <div class="word-side">
+          <img src="../assets/identity/renders/mobius-wordmark-static.png" alt="Möbi𝒰s with the connected collapsed Möbius ribbon and literal eyes occupying the ö slot">
+          <div class="state-code"><span>frame</span><strong id="frame-code">closed / presence</strong><span>φ = 0.125 rad</span><a href="../assets/identity/3d/identity-manifest.json">3D manifest</a></div>
+        </div>
+        <div id="ui-flash" class="flash">UI</div>
+        <div id="hangul" class="flash">의</div>
+        <img id="kernel-flash" class="kernel-flash" src="../assets/identity/renders/mobius-delta-closed.png" alt="BIDI Delta generated from duplicated BI and three type-derived strokes">
+      </div>
+      <div class="controls">
+        <button id="toggle" type="button">Pause</button>
+        <input id="scrubber" type="range" min="0" max="1000" value="0" aria-label="Scrub motion cycle">
+        <div id="readout" class="readout">01 / PRESENCE</div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const closed = [260,128, 346,128,406,192,406,276, 406,360,346,424,260,424, 174,424,114,360,114,276, 114,192,174,128,260,128];
+    const open = [176,144, 144,195,139,300,164,364, 190,428,316,432,354,366, 385,312,377,216,385,160, 390,130,408,116,434,118];
+    const stageNames = ["PRESENCE","WORDMARK GENERATION","ONE-TURN LOCK","I𝒰S PHASE","UI RESTORATION","의 RESTORATION","RETURN TO WORDMARK","BIDI SELF-EXTRACTION","TRIADIC DELTA CLOSURE","OPERATIVE U","CODE SIGIL","FAMILY LOCKUP"];
+    const frameNames = ["closed / presence","organism → word","inverted / one-turn","lean → invert → resolve","i𝒰 → UI","body + ground + i-stem → 의","recoherent parent","BI vacates → inverse DI → BIDI","three strokes → Δ / BI returns","connected body → 𝒰","𝒰 → 𝒰_","one family / many projections"];
+    const stageFrames = [1,36,85,109,157,193,229,277,369,421,469,517,601];
+    const ribbon = document.querySelector("#ribbon");
+    const seam = document.querySelector("#seam");
+    const eyes = [document.querySelector("#eye-left"), document.querySelector("#eye-right")];
+    const items = [...document.querySelectorAll("#stages li")];
+    const scrubber = document.querySelector("#scrubber");
+    const toggle = document.querySelector("#toggle");
+    const readout = document.querySelector("#readout");
+    const frameCode = document.querySelector("#frame-code");
+    const bodyWrap = document.querySelector(".body-wrap");
+    const masterVideo = document.querySelector("#master-video");
+    const uiFlash = document.querySelector("#ui-flash");
+    const hangul = document.querySelector("#hangul");
+    const kernelFlash = document.querySelector("#kernel-flash");
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let playing = !reduce;
+    let videoReady = false;
+    let start = performance.now();
+    let manual = reduce ? 84/600 : 0;
+
+    const clamp = (n,a=0,b=1) => Math.max(a,Math.min(b,n));
+    const ease = n => n*n*(3-2*n);
+    const mix = (a,b,t) => a+(b-a)*t;
+    function pathFrom(v) {
+      return `M${v[0]} ${v[1]}C${v[2]} ${v[3]} ${v[4]} ${v[5]} ${v[6]} ${v[7]}C${v[8]} ${v[9]} ${v[10]} ${v[11]} ${v[12]} ${v[13]}C${v[14]} ${v[15]} ${v[16]} ${v[17]} ${v[18]} ${v[19]}C${v[20]} ${v[21]} ${v[22]} ${v[23]} ${v[24]} ${v[25]}`;
+    }
+    function flash(el, t, center, width) { el.style.opacity = String(clamp(1 - Math.abs(t-center)/width)); }
+    function render(t) {
+      const frame = Math.max(1, Math.min(600, Math.round(t * 600)));
+      const stage = Math.max(0, stageFrames.findIndex((start, i) => frame >= start && frame < stageFrames[i + 1]));
+      const kernelAlpha = clamp(1 - Math.abs(t-.68)/.12);
+      items.forEach((el,i)=>el.classList.toggle("active",i===stage));
+      readout.textContent = `${String(stage+1).padStart(2,"0")} / ${stageNames[stage]}`;
+      frameCode.textContent = frameNames[stage];
+      scrubber.value = String(Math.round(t*1000));
+      document.querySelector(".word-side").style.opacity = String(1 - kernelAlpha * .92);
+      if (videoReady) {
+        uiFlash.style.opacity = "0";
+        hangul.style.opacity = "0";
+        kernelFlash.style.opacity = "0";
+        bodyWrap.style.opacity = "1";
+        return;
+      }
+      const openT = t < .78 ? ease(clamp((t-.70)/.06)) : 1-ease(clamp((t-.88)/.08));
+      ribbon.setAttribute("d", pathFrom(closed.map((n,i)=>mix(n,open[i],openT))));
+      const eyeSpread = mix(22,20,openT);
+      const eyeY = mix(70,86,openT) + Math.sin(t*Math.PI*14)*1.5;
+      eyes[0].setAttribute("cx", String(260-eyeSpread)); eyes[1].setAttribute("cx", String(260+eyeSpread));
+      eyes.forEach(e => e.setAttribute("cy", String(eyeY)));
+      const blink = (t > .09 && t < .11) || (t > .88 && t < .90);
+      eyes.forEach(e => e.style.transform = `scaleY(${blink ? .12 : 1})`);
+      seam.style.opacity = String(.12 + clamp(1-Math.abs(t-.64)/.22)*.74);
+      seam.style.transform = `rotate(${7.161972 + clamp((t-.56)/.13)*82.838}deg)`;
+      flash(uiFlash,t,.30,.028); flash(hangul,t,.36,.034);
+      kernelFlash.style.opacity = String(kernelAlpha);
+      bodyWrap.style.opacity = String(1 - kernelAlpha * .92);
+    }
+    function tick(now) {
+      if (videoReady) {
+        manual = masterVideo.duration ? masterVideo.currentTime/masterVideo.duration : 0;
+      } else if (playing) {
+        manual = ((now-start)%25000)/25000;
+      }
+      render(manual);
+      requestAnimationFrame(tick);
+    }
+    function activateVideo() {
+      videoReady = Number.isFinite(masterVideo.duration) && masterVideo.duration > 0;
+      bodyWrap.classList.toggle("video-ready", videoReady);
+      if (videoReady && reduce) masterVideo.currentTime = masterVideo.duration * (84/600);
+      if (videoReady && playing) masterVideo.play().catch(() => { playing = false; toggle.textContent = "Play"; });
+    }
+    masterVideo.addEventListener("loadedmetadata", activateVideo);
+    if (masterVideo.readyState >= 1) activateVideo();
+    masterVideo.addEventListener("error", () => { videoReady = false; bodyWrap.classList.remove("video-ready"); });
+    scrubber.addEventListener("input", e => {
+      playing=false; toggle.textContent="Play"; manual=Number(e.target.value)/1000;
+      if (videoReady) { masterVideo.pause(); masterVideo.currentTime=manual*masterVideo.duration; }
+    });
+    toggle.addEventListener("click", () => {
+      playing=!playing; toggle.textContent=playing?"Pause":"Play";
+      if (videoReady) {
+        if (playing) masterVideo.play(); else masterVideo.pause();
+      } else if(playing) start=performance.now()-manual*25000;
+    });
+    render(manual); requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

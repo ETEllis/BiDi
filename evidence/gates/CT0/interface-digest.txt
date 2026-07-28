@@ -1,0 +1,13 @@
+# CDC_MEMORY_MANIFOLD_INTERFACE.md v1.0.0 digest (interim per D2)
+4b00dd66a737ea0d9266fd5a137dfd58962d1a0f4f595ce8f3f148d5181e4040  CDC_MEMORY_MANIFOLD_INTERFACE.md
+git-blob-sha1: adbdeb015a1758e08d3b8a0e0ec0432350ea3043
+
+# v1.0.1 (grammar 1 + ABI 1.0 recorded)
+749dc7ef3f4edf96446acd6fba8a2e361ecf6e88402a42ac6af8f3c9d8b68fe8  CDC_MEMORY_MANIFOLD_INTERFACE.md
+git-blob-sha1: 1264de5dfae3a57533751119b5c9500e543ee916
+
+# v1.0.2 (ABI 1.1: contract verify at bootloader parity)
+ef93f4019fece240211b6074c5f7b099982278d8a2db8ab51bb8de215ac09b85  CDC_MEMORY_MANIFOLD_INTERFACE.md
+
+# v1.0.3 (ABI 1.2: statement introspection; CT3 typed test runner live)
+d1a353481728eb67d3d6b2bfa8befe9df16affc263bf80966472e3a2958399df  CDC_MEMORY_MANIFOLD_INTERFACE.md

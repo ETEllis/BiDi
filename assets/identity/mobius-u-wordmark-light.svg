@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 240" role="img" aria-labelledby="title desc">
+  <title id="title">Möbi𝒰s wordmark for light backgrounds</title>
+  <desc id="desc">Light-background rendering of the Möbius identity with literal eyes and the i to Universal Operator to s phase transition.</desc>
+  <defs>
+    <linearGradient id="phase" x1="399" y1="211" x2="664" y2="211" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#27316f"/>
+      <stop offset="0.56" stop-color="#126fdf"/>
+      <stop offset="1" stop-color="#008d9b"/>
+    </linearGradient>
+  </defs>
+  <g fill="#07152c">
+    <path transform="translate(34 176) scale(.098 -.17)" d="M70 0V640H320L790 160L1240 640H1510V0H1260V420L940 70H640L320 420V0Z"/>
+    <path transform="translate(191 178) scale(.102 -.176)" d="M510 -15Q351 -15 245.5 11Q140 37 87.5 94Q35 151 35 244Q35 337 87.5 394.5Q140 452 245.5 478.5Q351 505 510 505Q668 505 772.5 478.5Q877 452 929 394.5Q981 337 981 244Q981 151 929 94Q877 37 772.5 11Q668 -15 510 -15ZM510 130Q584 130 634 142.5Q684 155 710 180.5Q736 206 736 244Q736 282 710.5 308Q685 334 635 347Q585 360 510 360Q436 360 384.5 347Q333 334 306.5 308.5Q280 283 280 244Q280 206 306 180.5Q332 155 383.5 142.5Q435 130 510 130Z"/>
+    <path transform="translate(296 171) scale(.098 -.17)" d="M80 0V690H320V450C410 490 530 505 690 505C920 505 1063 410 1063 245C1063 80 920 -14 690 -14C530 -14 410 15 320 70V0ZM575 112C670 112 730 128 790 158C835 181 858 210 858 245C858 316 792 349 726 366C687 376 642 382 590 382C495 382 425 369 355 343C300 323 271 289 271 245C271 195 313 166 355 146C415 118 493 112 575 112Z"/>
+  </g>
+  <g fill="#08aebb"><circle cx="234" cy="70" r="6.2"/><circle cx="260" cy="70" r="6.2"/></g>
+  <path fill="#27316f" transform="translate(399 166) rotate(-7.16197) scale(.11 -.17)" d="M309 747V597H55V747ZM62 490H302V0H62Z"/>
+  <path transform="translate(427 180) scale(.18 -.16)" d="M272 -12C375 -12 439 50 482 97H485C490 38 507 -9 573 -9C645 -9 687 46 722 95L702 111C676 79 651 48 622 48C584 48 575 101 575 147C575 264 634 473 683 566C705 608 728 632 769 654L753 672C700 650 645 621 593 590C544 436 505 291 482 141C433 85 367 43 308 43C250 43 229 84 229 144C229 281 340 432 340 556C340 619 312 667 239 667C124 667 96 546 96 476V465H126C126 495 128 603 197 603C235 603 249 571 249 529C249 411 136 250 136 119C136 35 183 -12 272 -12Z"
+        fill="#ffffff" stroke="#0c6fd8" stroke-width="28" stroke-linejoin="round" paint-order="stroke fill"/>
+  <path fill="#008d9b" transform="translate(548 180) rotate(2) scale(.104 -.175)" d="M760 385C700 465 590 505 430 505C250 505 120 455 60 370L245 310C285 360 350 382 440 382C520 382 570 362 570 335C570 312 545 300 485 292L315 275C140 258 55 210 55 135C55 40 195 -15 410 -15C590 -15 720 25 780 105L600 170C560 125 495 105 415 105C330 105 280 125 280 153C280 175 310 188 370 194L535 210C710 227 800 278 800 350C800 365 785 382 760 385Z"/>
+  <g transform="rotate(-7.16197 527 211)" stroke="url(#phase)" stroke-width="4" stroke-linecap="square"><path d="M399 211H503"/><path d="M513 211H658"/></g>
+</svg>

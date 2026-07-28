@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Reduced Universal Operator body</title>
+  <desc id="desc">The notation-minimal 𝒰 body of the complete 𝒰_ Universal Operator sigil, white with a precise electric-blue boundary.</desc>
+  <path transform="translate(0 224) scale(.3 -.3)" d="M272 -12C375 -12 439 50 482 97H485C490 38 507 -9 573 -9C645 -9 687 46 722 95L702 111C676 79 651 48 622 48C584 48 575 101 575 147C575 264 634 473 683 566C705 608 728 632 769 654L753 672C700 650 645 621 593 590C544 436 505 291 482 141C433 85 367 43 308 43C250 43 229 84 229 144C229 281 340 432 340 556C340 619 312 667 239 667C124 667 96 546 96 476V465H126C126 495 128 603 197 603C235 603 249 571 249 529C249 411 136 250 136 119C136 35 183 -12 272 -12Z"
+        fill="#f8fbff" stroke="#137dff" stroke-width="28" stroke-linejoin="round" paint-order="stroke fill"/>
+</svg>

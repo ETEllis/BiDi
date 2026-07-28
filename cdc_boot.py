@@ -36,6 +36,7 @@ FORM_PRIMITIVES = {"deliberate": "council", "evolve": "evolve"}
 @dataclass
 class BootState:
     root: Path
+    dump: bool = False
     kernel: dict[str, str] = field(default_factory=dict)
     terms: set[str] = field(default_factory=set)
     rules: set[str] = field(default_factory=set)
@@ -98,6 +99,17 @@ def parse_file(state: BootState, path: Path) -> None:
         cmd, rest = tokens[0], tokens[1:]
         args, attrs = flags(rest), kv(rest)
         source = f"{path.name}:{line_no}"
+
+        if state.dump:
+            # Differential record for the grammar-1 frontend (gate CT1).
+            # Deletion gate: frontend-differential-dump -- removed together
+            # with the legacy line scanner once CT1 passes and the native
+            # frontend is the only parser (DECISIONS D7).
+            if cmd == "expect":
+                print(f"{source}|expect|{' '.join(rest)}|")
+            else:
+                attr_text = ";".join(f"{k}={v}" for k, v in attrs.items())
+                print(f"{source}|{cmd}|{','.join(args)}|{attr_text}|")
 
         if cmd == "kernel":
             if not args:
@@ -441,10 +453,14 @@ def report(state: BootState) -> bool:
 
 def main(argv: list[str]) -> int:
     root = Path(__file__).resolve().parent
+    dump = "--dump" in argv
+    argv = [arg for arg in argv if arg != "--dump"]
     paths = [root / arg for arg in argv] if argv else sorted(root.glob("*.cdc"))
-    state = BootState(root=root)
+    state = BootState(root=root, dump=dump)
     for path in paths:
         parse_file(state, path)
+    if dump:
+        return 0
     return 0 if report(state) else 1
 
 
