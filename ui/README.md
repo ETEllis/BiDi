@@ -81,10 +81,13 @@ Open `ui/web/console/index.html` directly, or serve the directory.
 
 ## Honest boundaries
 
-- **The Swift app is not compiled in the Linux verification container.** No
-  Swift toolchain or SwiftUI exists there, so this gate checks structure and
-  token parity only; compilation and visual QA happen on a macOS host, and
-  the gate compiles it automatically when a Swift toolchain is present.
+- **The Swift app is not compiled on Linux.** SwiftUI ships only on Apple
+  platforms, so a Swift toolchain alone is not sufficient — the GitHub
+  Ubuntu runner has `swift` but no SwiftUI, and attempting a build there
+  fails on `import SwiftUI` no matter how correct the source is. The gate
+  therefore builds CDC Studio only on macOS (`uname -s` = Darwin plus a
+  toolchain); everywhere else it enforces structure and token parity and
+  states the boundary. Compilation and visual QA happen on a macOS host.
 - **The web console is verified by rendering**: it was loaded in Chromium
   with zero page errors and zero external requests. That is a render check,
   not a cross-browser certification.

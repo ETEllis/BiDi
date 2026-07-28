@@ -168,11 +168,16 @@ print(f"macos app: {len(sources)} swift sources, no dependencies, "
       f"no placeholders, structurally balanced")
 PY
 
-if command -v swift >/dev/null 2>&1; then
-  echo "swift toolchain present; building CDC Studio"
+# CDC Studio is a SwiftUI application, and SwiftUI ships only on Apple
+# platforms. A Swift toolchain alone is not sufficient — the Linux CI runner
+# has swift but no SwiftUI — so the build is attempted only on macOS. Off
+# Apple platforms the structural gate above stands and the boundary is
+# stated rather than faked (ui/README.md).
+if [ "$(uname -s)" = "Darwin" ] && command -v swift >/dev/null 2>&1; then
+  echo "macOS host with swift toolchain; building CDC Studio"
   (cd ui/macos/CDCStudio && swift build)
 else
-  echo "swift toolchain unavailable in this environment; CDC Studio is"
+  echo "not an Apple platform (SwiftUI unavailable); CDC Studio is"
   echo "structurally gated here and compiled on a macOS host (see ui/README.md)"
 fi
 
