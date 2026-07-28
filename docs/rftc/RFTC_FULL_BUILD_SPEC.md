@@ -1,8 +1,8 @@
 # Reference-Frame Topological Coherence — Full Build Specification
 
-Status: **C1-C2 runtime core and C3 six-form language ingress active;
-distributed authority, transport, and recursive execution remain gated next
-work**
+Status: **C1-C2 runtime core and C3 six-form language ingress merged;
+authenticated local authority/transport supervisor implemented under D36;
+recursive execution and cross-host reconciliation remain gated next**
 
 ## 1. End state
 
@@ -138,8 +138,9 @@ transport lab-mesh
 |---|---|---|
 | `cdc_frame` | membership snapshots, clock/freshness, reducer dispatch | stale or incomplete frames hold |
 | `cdc_topology` | oriented complexes, winding, sector transitions | ambiguous orientation or boundary rejects |
-| `cdc_authority` | leases, scopes, quorum, revocation, nonce defense | missing/expired/duplicate authority rejects |
-| `cdc_transport` | authenticated envelopes, retry, deduplication, causal ordering | partition or schema mismatch holds |
+| `cdc_authority` | bounded versioned leases, subject/frame/action/horizon scope, local quorum input, expiry/revocation, nonce and forged-ticket defense | missing, wrong-scope, expired, revoked, replayed, or stale authority rejects |
+| `cdc_transport` | canonical versioned envelope, MAC-bound action/horizon/payload, recipient/key/schema checks, deduplication and causal order | partitions, duplicates, gaps, and parent mismatch hold; tamper/replay rejects |
+| `cdc_supervisor` | one mutex-owned authenticate → authority → reserve → all-or-nothing commit → consume/accept transaction | every precondition failure is pre-mutation; concurrent duplicate commits once |
 | existing store | append, snapshot, recovery, digest, replay | current fail-closed semantics retained |
 | existing bridge/council | cross-cell routing and guarded collective decision | no direct state mutation |
 | existing universal operator | lifted closure and enacted-coordinate agreement | remains derived, not foundational |
@@ -147,9 +148,10 @@ transport lab-mesh
 | `cdc_shared_record` | fragment publication and quorum recovery through sealed store history | missing quorum, duplicate fragments, conflict, corruption, or compacted payload loss reject |
 | `cdc_barrier` | shared balanced-ternary prefix-admissibility kernel | invalid carrier or negative prefix rejects |
 
-Fixed-size runtime arrays are replaced with bounded dynamic collections carrying
-explicit allocation limits. Every public operation is available through the
-native ABI before a network service or UI may depend on it.
+Control-plane collections are bounded dynamic allocations carrying explicit
+limits. Their public operations are exported through ABI 1.4 before a network
+service or UI may depend on them. Frame/topology and recursive-cell collections
+remain the next implementation lane.
 
 ## 5. Data contracts
 
@@ -225,13 +227,14 @@ Every artifact and UI surface carries one of these machine-readable levels:
 | Q0 | nonclassical physical witness | loophole-aware physical experiment, independent analysis |
 | Q1 | quantum computational advantage | accepted task and classical-resource comparison |
 
-The current seven-witness executable crucible targets C1-C2. Its per-event
+The seven-witness executable crucible targets C1-C2. Its per-event
 admissibility witness uses the same barrier as native and persistent commits,
 then observes durable store and typed-receipt effects. Its distributed-record
 witness closes and reopens independent fragment stores and recovers only
-through their authenticated sealed payloads. Parser-level forms, network
-transport, distributed authority, and recursive cross-host execution remain
-the C3 build. No software stage can self-promote to Q0 or Q1.
+through their integrity-checked sealed payloads. Parser forms and the
+authenticated local control-plane ABI are implemented; actual network session
+transport, public-key identity, recursive cells, and cross-host reconciliation
+remain in the C3 build. No software stage can self-promote to Q0 or Q1.
 
 ## 8. Full verification matrix
 

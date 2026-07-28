@@ -320,6 +320,9 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/toolchain/cmd_x.c \
   runtime/toolchain/cdc_manifest.c \
   runtime/cdc_abi.c \
+  runtime/cdc_supervisor.c \
+  runtime/cdc_authority.c \
+  runtime/cdc_transport.c \
   runtime/cdc_registry.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
@@ -336,7 +339,10 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   -lm \
   -o build/cdc
 run_step ./build/cdc version
-./build/cdc version | grep -q "abi=1.3 grammar=1"
+./build/cdc version | grep -q "abi=1.4 grammar=1"
+nm build/cdc > build/cdc_symbols.txt
+grep -q "cdc_supervisor_admit" build/cdc_symbols.txt
+echo "RFTC C3 supervisor is linked into the shipped native driver"
 # shellcheck disable=SC2086
 ./build/cdc verify --parse $CDC_ROOT_SOURCES | tee build/cdc_verify_parse.txt
 # Exact statement gate (review item C3): statements = dump records plus
@@ -1039,6 +1045,9 @@ for ROUND in a b; do
     runtime/toolchain/cmd_x.c \
     runtime/toolchain/cdc_manifest.c \
     runtime/cdc_abi.c \
+    runtime/cdc_supervisor.c \
+    runtime/cdc_authority.c \
+    runtime/cdc_transport.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
     runtime/cdc_ast.c \
@@ -1319,6 +1328,9 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/toolchain/cmd_x.c \
     runtime/toolchain/cdc_manifest.c \
     runtime/cdc_abi.c \
+    runtime/cdc_supervisor.c \
+    runtime/cdc_authority.c \
+    runtime/cdc_transport.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
     runtime/cdc_ast.c \

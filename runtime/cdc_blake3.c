@@ -1,4 +1,4 @@
-/* Portable BLAKE3, hash mode, 32-byte output. Structure follows the
+/* Portable BLAKE3, hash and keyed-hash modes, 32-byte output. Structure follows the
  * reference design: 1024-byte chunks of sixteen 64-byte blocks, compressed
  * with a 7-round ChaCha-derived permutation, combined as a binary Merkle
  * tree whose final compression carries the ROOT flag. See cdc_blake3.h for
@@ -13,7 +13,8 @@ enum {
     CHUNK_START = 1 << 0,
     CHUNK_END = 1 << 1,
     PARENT = 1 << 2,
-    ROOT = 1 << 3
+    ROOT = 1 << 3,
+    KEYED_HASH = 1 << 4
 };
 
 static const uint32_t IV[8] = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u,
@@ -110,6 +111,17 @@ static void words_from_block(const uint8_t block[BLOCK_LEN],
     }
 }
 
+static void words_from_key(const uint8_t key[CDC_BLAKE3_OUT_LEN],
+                           uint32_t words[8]) {
+    size_t i;
+    for (i = 0; i < 8; i++) {
+        words[i] = (uint32_t)key[i * 4] |
+                   ((uint32_t)key[i * 4 + 1] << 8) |
+                   ((uint32_t)key[i * 4 + 2] << 16) |
+                   ((uint32_t)key[i * 4 + 3] << 24);
+    }
+}
+
 /* A deferred compression: everything needed to produce either a chaining
  * value or the root output. */
 typedef struct {
@@ -152,12 +164,14 @@ static size_t chunk_len(const cdc_blake3_chunk *chunk) {
            (size_t)chunk->block_len;
 }
 
-static void chunk_init(cdc_blake3_chunk *chunk, uint64_t counter) {
-    memcpy(chunk->cv, IV, sizeof(chunk->cv));
+static void chunk_init(cdc_blake3_chunk *chunk, uint64_t counter,
+                       const uint32_t key_words[8], uint32_t flags) {
+    memcpy(chunk->cv, key_words, sizeof(chunk->cv));
     chunk->chunk_counter = counter;
     memset(chunk->block, 0, sizeof(chunk->block));
     chunk->block_len = 0;
     chunk->blocks_compressed = 0;
+    chunk->flags = flags;
 }
 
 static void chunk_update(cdc_blake3_chunk *chunk, const uint8_t *input,
@@ -170,7 +184,7 @@ static void chunk_update(cdc_blake3_chunk *chunk, const uint8_t *input,
             uint32_t state[16];
             words_from_block(chunk->block, words);
             compress(chunk->cv, words, chunk->chunk_counter, BLOCK_LEN,
-                     chunk_start_flag(chunk), state);
+                     chunk->flags | chunk_start_flag(chunk), state);
             memcpy(chunk->cv, state, 8 * sizeof(uint32_t));
             chunk->blocks_compressed++;
             memset(chunk->block, 0, sizeof(chunk->block));
@@ -190,28 +204,40 @@ static void chunk_output(const cdc_blake3_chunk *chunk, output_t *out) {
     words_from_block(chunk->block, out->block_words);
     out->counter = chunk->chunk_counter;
     out->block_len = chunk->block_len;
-    out->flags = chunk_start_flag(chunk) | (uint32_t)CHUNK_END;
+    out->flags = chunk->flags | chunk_start_flag(chunk) | (uint32_t)CHUNK_END;
 }
 
 static void parent_output(const uint32_t left[8], const uint32_t right[8],
+                          const uint32_t key_words[8], uint32_t flags,
                           output_t *out) {
-    memcpy(out->input_cv, IV, sizeof(out->input_cv));
+    memcpy(out->input_cv, key_words, sizeof(out->input_cv));
     memcpy(out->block_words, left, 8 * sizeof(uint32_t));
     memcpy(out->block_words + 8, right, 8 * sizeof(uint32_t));
     out->counter = 0;
     out->block_len = BLOCK_LEN;
-    out->flags = PARENT;
+    out->flags = flags | PARENT;
 }
 
 static void parent_cv(const uint32_t left[8], const uint32_t right[8],
+                      const uint32_t key_words[8], uint32_t flags,
                       uint32_t out[8]) {
     output_t parent;
-    parent_output(left, right, &parent);
+    parent_output(left, right, key_words, flags, &parent);
     output_chaining_value(&parent, out);
 }
 
 void cdc_blake3_init(cdc_blake3_hasher *hasher) {
-    chunk_init(&hasher->chunk, 0);
+    memcpy(hasher->key_words, IV, sizeof(hasher->key_words));
+    hasher->flags = 0;
+    chunk_init(&hasher->chunk, 0, hasher->key_words, hasher->flags);
+    hasher->cv_stack_len = 0;
+}
+
+void cdc_blake3_init_keyed(cdc_blake3_hasher *hasher,
+                           const uint8_t key[CDC_BLAKE3_OUT_LEN]) {
+    words_from_key(key, hasher->key_words);
+    hasher->flags = KEYED_HASH;
+    chunk_init(&hasher->chunk, 0, hasher->key_words, hasher->flags);
     hasher->cv_stack_len = 0;
 }
 
@@ -227,7 +253,8 @@ static void add_chunk_cv(cdc_blake3_hasher *hasher, uint32_t cv[8],
     while ((total_chunks & 1) == 0) {
         uint32_t merged[8];
         hasher->cv_stack_len--;
-        parent_cv(hasher->cv_stack[hasher->cv_stack_len], cv, merged);
+        parent_cv(hasher->cv_stack[hasher->cv_stack_len], cv,
+                  hasher->key_words, hasher->flags, merged);
         memcpy(cv, merged, sizeof(merged));
         total_chunks >>= 1;
     }
@@ -248,7 +275,8 @@ void cdc_blake3_update(cdc_blake3_hasher *hasher, const void *input,
             output_chaining_value(&output, cv);
             total_chunks = hasher->chunk.chunk_counter + 1;
             add_chunk_cv(hasher, cv, total_chunks);
-            chunk_init(&hasher->chunk, total_chunks);
+            chunk_init(&hasher->chunk, total_chunks, hasher->key_words,
+                       hasher->flags);
         }
         want = CHUNK_LEN - chunk_len(&hasher->chunk);
         take = len < want ? len : want;
@@ -267,7 +295,8 @@ void cdc_blake3_final(const cdc_blake3_hasher *hasher,
         uint32_t right[8];
         remaining--;
         output_chaining_value(&output, right);
-        parent_output(hasher->cv_stack[remaining], right, &output);
+        parent_output(hasher->cv_stack[remaining], right, hasher->key_words,
+                      hasher->flags, &output);
     }
     output_root_bytes(&output, out);
 }

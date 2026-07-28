@@ -118,8 +118,12 @@ field-computation, physics, neuroscience, systems, and polymath convergence is
 captured in
 [`docs/rftc/SPECIALIST_SYNTHESIS.md`](docs/rftc/SPECIALIST_SYNTHESIS.md).
 The six C3 language forms and their non-colliding R1-R6 capabilities live in
-[`rftc.cdc`](rftc.cdc); accepting those declarations is the language boundary,
-not a claim that authenticated distributed C3 execution is already complete.
+[`rftc.cdc`](rftc.cdc). ABI 1.4 additionally exposes the D36 authenticated
+local control plane: canonical keyed-BLAKE3 envelopes, scoped/versioned
+authority, causal replay defense, and an exactly-once serialized supervisor
+admission path. This is shared-key authenticity and a local cross-process wire
+proof—not Ed25519/mTLS identity, a deployed network, recursive cross-host C3,
+or a Q-level claim.
 
 ## Core Architecture
 
