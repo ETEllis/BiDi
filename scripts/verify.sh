@@ -151,6 +151,9 @@ PY
 run_step ./scripts/verify_identity_3d.sh
 
 echo
+run_step ./scripts/verify_ui.sh
+
+echo
 echo "== Native .cdc contract and witness suite =="
 python3 cdc_boot.py
 
