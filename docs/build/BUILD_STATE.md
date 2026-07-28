@@ -19,6 +19,26 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Foundation merged (2026-07-28).** PR #3 merged at pinned head `82ab066`
+  → merge commit `3e851ff` on `main`, after verifying remote head exactness,
+  a completed/success required check, and clean mergeability. Branch
+  restarted from the merged main per ADR D12; continuation is draft PR #4.
+
+- **Canonical BLAKE3 — D2 CLOSED (`e4ba69b`).** Vendored dependency-free
+  implementation; 31 reference vectors verified one-shot and through
+  irregular streaming splits under plain and ASan builds; evidence
+  re-digested by the implementation itself; interim sha256 manifest retained
+  unmodified. All store suites green under the new identities.
+
+- **Product surfaces landed (`41286c5`).** Canonical design tokens derived
+  from the shipped identity system; macOS CDC Studio (SwiftUI, SwiftPM, zero
+  dependencies, drives the real binary); self-contained web console whose
+  embedded record byte-matches `demo/replay.json`; `scripts/verify_ui.sh`
+  gating token parity, self-containment, and app structure. Swift compilation
+  is an external macOS step (recorded boundary); the console was
+  render-verified in Chromium with zero page errors and zero external
+  requests.
+
 - **2026-07-23 adversarial-review repairs: COMPLETE (this commit).** Both
   blocking defects fixed with permanent counterexamples hard-gated in
   `verify.sh`:

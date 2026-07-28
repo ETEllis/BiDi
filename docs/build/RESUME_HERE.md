@@ -9,6 +9,34 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
 `CDC_MEMORY_MANIFOLD_INTERFACE.md` → `docs/build/BUILD_STATE.md` →
 `docs/build/DECISIONS.md` (D1–D8).
 
+## Current head (2026-07-28)
+
+- `main` = `3e851ff` — **PR #3 merged** under the baton's Section 1
+  authorization (all three preconditions verified at the pinned head
+  `82ab066`; merge commit preserves commit identities). Do not reuse PR #3.
+- Work branch `claude/bun-equivalent-build-plan-lxe772`, restarted from the
+  merged `main` (ADR D12), now at `41286c5`, open as **draft PR #4**:
+  - `e4ba69b` — canonical BLAKE3 landed; **D2 interim-digest gate CLOSED**
+    (31 reference vectors one-shot + streaming, plain + ASan; evidence
+    re-digested by the vendored implementation; interim manifest retained).
+  - `41286c5` — **product surfaces**: `ui/design/mobius-tokens.json`
+    (single source of truth), `ui/macos/CDCStudio` (SwiftUI, zero deps),
+    `ui/web/console` (self-contained, replay-bound), and
+    `scripts/verify_ui.sh` wired into the main gate.
+- Full `./scripts/verify.sh` green locally at `41286c5`; CI running.
+- **UI is now a gate requirement**: no product gate closes without its
+  surface locked to the canonical tokens and its data bound to real runtime
+  output.
+
+## External actions needed (not blockers for CDC work)
+
+1. `ETEllis/Memory-Manifold` repository access — the `add_repo` request was
+   denied by this environment's classifier. Blocks Memory Phases A/E–H only.
+2. `ETEllis/GIST` access and the Superposition source bundle — blocks Phase K
+   and GIST Track M only.
+3. A macOS host to compile `ui/macos/CDCStudio` (no Swift toolchain in the
+   Linux container; the gate builds it automatically where `swift` exists).
+
 ## Where the build stands (exact)
 
 - **CT0 PARTIAL** — provenance recorded; binary reproducibility + embedded
