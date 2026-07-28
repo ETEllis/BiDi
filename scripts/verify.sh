@@ -340,11 +340,15 @@ echo "toolchain-verify-parity ok (byte-identical contract reports)"
 ./build/cdc verify --vectors $CDC_ROOT_SOURCES > build/vectors_native.txt
 ./build/cdc_frontend_check vectors-from-report build/contract_boot.txt \
   > build/vectors_oracle.txt
-cmp build/vectors_native.txt build/vectors_oracle.txt
-VECTOR_COUNT=$(wc -l < build/vectors_native.txt)
+# The oracle has no corpus record (the bootloader does not compute one),
+# so compare the check records and check the corpus line separately.
+grep -v '^corpus ' build/vectors_native.txt > build/vectors_native_checks.txt
+cmp build/vectors_native_checks.txt build/vectors_oracle.txt
+VECTOR_COUNT=$(wc -l < build/vectors_native_checks.txt)
 test "$VECTOR_COUNT" -ge 250
 # Every record carries all six section-7 fields.
-awk 'NF != 6 { print "malformed vector: " $0; exit 1 }' build/vectors_native.txt
+awk '$1 == "corpus" { next } NF != 6 { print "malformed vector: " $0; exit 1 }' \
+  build/vectors_native.txt
 echo "per-check vector parity ok records=${VECTOR_COUNT} fields=6"
 # Counterexample: ORDER is part of the compared value, not merely the
 # sequence of comparisons. Swapping two ADJACENT checks must diverge far
@@ -510,6 +514,12 @@ echo "effect receipts ok records=${RECEIPT_COUNT} empty-stream=1 prose-unchanged
 
 echo
 echo "== Typed test runner [gate CT3 seed] =="
+# The executable corpus, named once: the gate line, the vector export, the
+# determinism rounds, and the sanitizer sweep must all run the same set, or
+# the corpus identity they stamp would not be comparable.
+DET_FILES="native_reducer.cdc native_surface.cdc council_bridge.cdc \
+framework_transition.cdc framework_procedural.cdc framework_episodic.cdc \
+framework_deliberative.cdc framework_loop.cdc framework_persistence.cdc"
 # A7 policy: commit/hold/nest/fail reported separately (merged totals
 # forbidden); every hold must be declared expect-status=held on its job or
 # the gate fails, even when the underlying runtime exits 0.
@@ -522,7 +532,7 @@ echo "== Typed test runner [gate CT3 seed] =="
 # The persistence framework contributes 8 accepted and 3 held durable
 # records; all three holds are declared on their own persist statements, so
 # the A7 policy applies to durable mutation with no policy exception.
-grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0" \
+grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0 corpus=blake3:" \
   build/cdc_test_gate.txt
 # Negative: a source the legacy runtime fully accepts (exit 0) but whose
 # hold is undeclared must fail the typed gate with unexpected=1 fail=0.
@@ -532,7 +542,7 @@ if ./build/cdc test --gate tests/fixtures/test_runner/silent_hold.cdc \
   echo "typed gate accepted an undeclared hold" >&2
   exit 1
 fi
-grep -q "(expected=0 unexpected=1) nest=1 fail=0 parity=0" build/cdc_test_neg.txt
+grep -q "(expected=0 unexpected=1) nest=1 fail=0 parity=0 corpus=blake3:" build/cdc_test_neg.txt
 echo "typed gate rejects undeclared holds (runtime exit 0 notwithstanding)"
 # Review B3: an unrelated witness carrying the job name and
 # expect-status=held must NOT authorize the hold.
@@ -750,7 +760,7 @@ if ./build/cdc test --gate tests/fixtures/persistence/silent_persist_hold.cdc \
   echo "typed gate accepted an undeclared durable hold" >&2
   exit 1
 fi
-grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1) nest=0 fail=0 parity=0" build/persistence_silent.txt
+grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1) nest=0 fail=0 parity=0 corpus=blake3:" build/persistence_silent.txt
 echo "typed gate rejects undeclared durable holds"
 # Execution-side per-check vectors: one record per executed effect, in
 # execution order, rendered from the receipts so the two cannot describe
@@ -787,6 +797,79 @@ test "$UNWITNESSED" = "1"
 # counterexample: a deliberately unbound helper job, not a dropped witness.
 awk '$6 == "-"' build/test_vectors.txt | grep -q "rival-latch"
 echo "closure witnesses ok bound=${WITNESSED} unbound=${UNWITNESSED} (rival-latch, by design)"
+
+echo
+echo "== CT0: reproducible binaries and corpus-bound verdicts =="
+# A verdict that does not name what it ran on is a claim about nothing in
+# particular. Every native verdict now carries the corpus identity: an
+# ordered digest over (basename, content-digest) for the exact sources it
+# consumed.
+CORPUS_TEST=$(grep -o "corpus=blake3:[0-9a-f]*" build/cdc_test_gate.txt | head -1 | sed 's/corpus=//')
+test -n "$CORPUS_TEST"
+# Cross-checked by a DIFFERENT binary, so the gate is not trusting the same
+# code that produced the claim.
+# shellcheck disable=SC2086
+CORPUS_INDEPENDENT=$(./build/cdc_frontend_check corpus-digest $DET_FILES \
+  | awk '{print $2}')
+test "$CORPUS_TEST" = "$CORPUS_INDEPENDENT"
+# shellcheck disable=SC2086
+CORPUS_VECTORS=$(grep '^corpus ' build/vectors_native.txt | awk '{print $2}')
+# shellcheck disable=SC2086
+CORPUS_ROOT=$(./build/cdc_frontend_check corpus-digest $CDC_ROOT_SOURCES \
+  | awk '{print $2}')
+test "$CORPUS_VECTORS" = "$CORPUS_ROOT"
+echo "corpus-bound verdicts ok (cdc test and cdc verify --vectors agree with"
+echo "  an independently computed corpus identity)"
+
+# Counterexample: changing ANY consumed source must change the verdict's
+# corpus. The probe is restored before any assertion runs.
+CORPUS_PROBE=native_reducer.cdc
+cp "$CORPUS_PROBE" build/corpus_probe.bak
+printf '\n# corpus probe\n' >> "$CORPUS_PROBE"
+set +e
+# shellcheck disable=SC2086
+CORPUS_CHANGED=$(./build/cdc_frontend_check corpus-digest $DET_FILES \
+  | awk '{print $2}')
+set -e
+cp build/corpus_probe.bak "$CORPUS_PROBE"
+cmp "$CORPUS_PROBE" build/corpus_probe.bak
+if [ "$CORPUS_CHANGED" = "$CORPUS_TEST" ]; then
+  echo "corpus identity did not change when a consumed source changed" >&2
+  exit 1
+fi
+echo "corpus identity tracks source content (probe restored)"
+
+# Reproducible native binaries: the same sources, built twice, byte-identical.
+rm -f build/repro_a build/repro_b
+for ROUND in a b; do
+  cc -std=c99 -Wall -Wextra -pedantic -O2 \
+    runtime/toolchain/main.c \
+    runtime/toolchain/cmd_verify.c \
+    runtime/toolchain/cmd_test.c \
+    runtime/cdc_abi.c \
+    runtime/cdc_registry.c \
+    runtime/cdc_parser.c \
+    runtime/cdc_ast.c \
+    runtime/cdc_lexer.c \
+    runtime/cdc_diagnostic.c \
+    -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
+    runtime/cdc_native_runtime.c \
+    runtime/cdc_bridge_runtime.c \
+    runtime/cdc_source.c \
+    runtime/cdc_receipt.c \
+    runtime/cdc_store.c \
+    runtime/cdc_digest.c \
+    runtime/cdc_blake3.c \
+    -lm \
+    -o "build/repro_${ROUND}"
+done
+cmp build/repro_a build/repro_b
+./build/cdc_frontend_check digest-file build/repro_a > build/repro_digest.txt
+echo "reproducible build ok ($(awk '{print $1}' build/repro_digest.txt))"
+# Honest boundary: this is same-machine, same-compiler reproducibility. It
+# proves the build embeds no timestamp, path, or nondeterministic ordering.
+# Cross-toolchain and cross-machine reproducibility is a separate claim and
+# is NOT made here.
 echo "execution vector export ok records=${EXEC_VECTORS} commit=19 hold=8 nest=10 fail=0"
 
 echo
@@ -840,9 +923,6 @@ echo "cancellation ok (5 stop points, store intact at each, ${DISTINCT} replay i
 
 # Determinism: the same source produces byte-identical prose, receipts, and
 # vectors across runs.
-DET_FILES="native_reducer.cdc native_surface.cdc council_bridge.cdc \
-framework_transition.cdc framework_procedural.cdc framework_episodic.cdc \
-framework_deliberative.cdc framework_loop.cdc framework_persistence.cdc"
 for ROUND in a b; do
   rm -rf build/persistence-journal build/persistence-contended
   # shellcheck disable=SC2086
@@ -1051,7 +1131,7 @@ if [ "$SANITIZED" = "1" ]; then
   # shellcheck disable=SC2086
   ./build/cdc_asan test --gate --vectors build/vectors_exec_asan.txt \
     $DET_FILES > build/cdc_test_asan.txt
-  grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0" \
+  grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0 corpus=blake3:" \
     build/cdc_test_asan.txt
   cmp build/test_vectors.txt build/vectors_exec_asan.txt
   # The instrumented binary must agree with the plain one, not merely avoid

@@ -1155,6 +1155,23 @@ static int cmd_store_kill(const char *base) {
 
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
 
+/* Computes the corpus identity for a file set, from a DIFFERENT binary
+ * than the one that stamps verdicts. That makes the check independent:
+ * the gate can confirm a verdict names the corpus it actually ran on
+ * rather than trusting the same code that produced the claim. */
+static int cmd_corpus_digest(int count, char **paths) {
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char hex[96];
+    if (!cdc_digest_corpus((const char *const *)paths, (size_t)count,
+                           digest)) {
+        fprintf(stderr, "corpus-digest: a file was unreadable\n");
+        return 1;
+    }
+    cdc_digest_hex(digest, hex, sizeof(hex));
+    printf("corpus %s files=%d\n", hex, count);
+    return 0;
+}
+
 /* Opens a store and reports its state, so a shell gate can assert that a
  * run stopped by the lifecycle contract left durable state intact rather
  * than half-applied. */
@@ -2620,6 +2637,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
         return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "corpus-digest") == 0 && argc >= 3) {
+        return cmd_corpus_digest(argc - 2, argv + 2);
     }
     if (strcmp(argv[1], "store-inspect") == 0 && argc >= 3) {
         return cmd_store_inspect(argv[2]);

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../cdc_abi.h"
+#include "../cdc_digest.h"
 
 static int verify_parse(int argc, char **argv) {
     int i;
@@ -80,6 +81,24 @@ static int verify_contract_or_vectors(int argc, char **argv, int vectors) {
         return 1;
     }
     fputs(cdc_result_text(result), stdout);
+    if (vectors) {
+        /* CT0: a trailing record naming the corpus these vectors describe.
+         * The contract REPORT cannot carry it — it must stay byte-identical
+         * to the bootloader — so the identity lives on the vector stream,
+         * which has no oracle to match. That exclusion retires with
+         * cdc_boot.py. */
+        uint8_t digest[CDC_DIGEST_SIZE];
+        char corpus[96];
+        if (!cdc_digest_corpus((const char *const *)argv, (size_t)argc,
+                               digest)) {
+            fprintf(stderr, "cdc verify: corpus unreadable\n");
+            cdc_result_destroy(result);
+            cdc_runtime_destroy(runtime);
+            return 1;
+        }
+        cdc_digest_hex(digest, corpus, sizeof(corpus));
+        printf("corpus %s files=%d\n", corpus, argc);
+    }
     rc = cdc_result_error_count(result) == 0 ? 0 : 1;
     cdc_result_destroy(result);
     cdc_runtime_destroy(runtime);

@@ -43,4 +43,17 @@ void cdc_digest_hex(const uint8_t digest[CDC_DIGEST_SIZE], char *out,
 /* Digest a whole file; returns 0 on read failure. */
 int cdc_digest_file(const char *path, uint8_t out[CDC_DIGEST_SIZE]);
 
+/* CORPUS IDENTITY (gate CT0). Digests an ordered set of input files as
+ * (basename, content-digest) pairs, so a verdict can name the exact source
+ * set it was reached over. Order matters: the same files in a different
+ * order are a different corpus, because the checkers evaluate in load
+ * order and their results depend on it.
+ *
+ * A verdict without this is a claim about nothing in particular — it says
+ * a run passed, but not what it ran on. Returns 0 if any file is
+ * unreadable, so a partial corpus can never be digested into something
+ * that looks complete. */
+int cdc_digest_corpus(const char *const *paths, size_t count,
+                      uint8_t out[CDC_DIGEST_SIZE]);
+
 #endif

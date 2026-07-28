@@ -63,3 +63,32 @@ int cdc_digest_file(const char *path, uint8_t out[CDC_DIGEST_SIZE]) {
     cdc_digest_final(&ctx, out);
     return 1;
 }
+
+/* basename without the directory, so a corpus identity does not change
+ * when the same sources are checked out at a different path. */
+static const char *corpus_basename(const char *path) {
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+int cdc_digest_corpus(const char *const *paths, size_t count,
+                      uint8_t out[CDC_DIGEST_SIZE]) {
+    cdc_digest_ctx ctx;
+    size_t i;
+    if (!paths || count == 0) {
+        return 0;
+    }
+    cdc_digest_init(&ctx);
+    for (i = 0; i < count; i++) {
+        uint8_t file_digest[CDC_DIGEST_SIZE];
+        const char *name = corpus_basename(paths[i]);
+        if (!cdc_digest_file(paths[i], file_digest)) {
+            return 0; /* never digest a partial corpus */
+        }
+        cdc_digest_update(&ctx, name, strlen(name));
+        cdc_digest_update(&ctx, "\0", 1);
+        cdc_digest_update(&ctx, file_digest, CDC_DIGEST_SIZE);
+    }
+    cdc_digest_final(&ctx, out);
+    return 1;
+}

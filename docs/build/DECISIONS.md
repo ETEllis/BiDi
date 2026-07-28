@@ -46,6 +46,39 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D21 — 2026-07-28 — CT0: verdicts name their corpus; builds reproduce
+
+A verdict that does not say what it ran on is a claim about nothing in
+particular. `cdc test` and `cdc verify --vectors` now stamp a CORPUS
+IDENTITY: an ordered digest over (basename, content-digest) for the exact
+sources consumed.
+
+Order is part of it, because the checkers evaluate in load order and their
+results depend on it — the same files in a different order are a different
+corpus. A partial corpus is never digested: if any input is unreadable the
+digest is refused rather than computed over what happened to be readable,
+and `cdc test` marks the run failed rather than reporting an unidentifiable
+pass.
+
+**The cross-check uses a different binary.** `cdc_frontend_check
+corpus-digest` computes the same identity independently, and the gate
+requires the two to agree. Checking a verdict's corpus with the same code
+that produced the verdict would be circular. The counterexample completes
+it: appending a line to a consumed source must change the identity, with
+the probe restored before any assertion runs.
+
+**Why the contract report is excluded.** It must stay byte-identical to the
+bootloader, so it cannot carry a corpus line; the identity lives on the
+vector stream instead, which has no oracle to match. That exclusion is a
+consequence of bootloader parity and retires with `cdc_boot.py`, and it is
+recorded here rather than left for a reader to notice.
+
+**Reproducible builds, scoped honestly.** The unified binary built twice
+from the same sources is byte-identical, which proves the build embeds no
+timestamp, path, or nondeterministic ordering. That is same-machine,
+same-compiler reproducibility. Cross-toolchain and cross-machine
+reproducibility is a different and much stronger claim, and it is NOT made.
+
 ## D20 — 2026-07-28 — Closure witnesses complete the section-7 record
 
 The parity vector's sixth field rendered "-" everywhere, because nothing

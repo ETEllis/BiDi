@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "../cdc_abi.h"
+#include "../cdc_digest.h"
 #include "../cdc_receipt.h"
 
 int cdc_native_main(int argc, char **argv);
@@ -408,11 +409,34 @@ int cdc_cmd_test(int argc, char **argv) {
     {
         int failed = counts.fail > 0 || counts.unexpected_hold > 0 ||
                      counts.parity_breaks > 0 || counts.runs == 0;
+        /* CT0: the verdict names the corpus it was reached over. Without
+         * this a verdict says a run passed but not what it ran on, which
+         * is not evidence anyone can re-check. */
+        char corpus[96];
+        {
+            const char *inputs[256];
+            size_t input_count = 0;
+            uint8_t digest[CDC_DIGEST_SIZE];
+            int k;
+            for (k = 0; k < argc && input_count < 256; k++) {
+                if (argv[k][0] == '-' || k == vector_path_index) {
+                    continue;
+                }
+                inputs[input_count++] = argv[k];
+            }
+            if (input_count > 0 &&
+                cdc_digest_corpus(inputs, input_count, digest)) {
+                cdc_digest_hex(digest, corpus, sizeof(corpus));
+            } else {
+                snprintf(corpus, sizeof(corpus), "unavailable");
+                failed = 1; /* an unidentifiable corpus is not a pass */
+            }
+        }
         printf("cdc test %s runs=%ld commit=%ld hold=%ld (expected=%ld "
-               "unexpected=%ld) nest=%ld fail=%ld parity=%ld%s\n",
+               "unexpected=%ld) nest=%ld fail=%ld parity=%ld corpus=%s%s\n",
                failed ? "FAIL" : "ok", counts.runs, counts.commit,
                counts.hold, counts.expected_hold, counts.unexpected_hold,
-               counts.nest, counts.fail, counts.parity_breaks,
+               counts.nest, counts.fail, counts.parity_breaks, corpus,
                counts.runs == 0 ? " (no executable stage selected)" : "");
         (void)gate; /* strictness is unconditional; flag kept for CLI
                        stability */

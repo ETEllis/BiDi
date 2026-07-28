@@ -54,8 +54,11 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
 
 ## Where the build stands (exact)
 
-- **CT0 PARTIAL** — provenance recorded; binary reproducibility + embedded
-  verdict identity open (closes in step 4 below).
+- **CT0 CLOSED** (D21) — provenance manifest head-bound and gated on both
+  path set and bytes; verdicts carry a corpus identity cross-checked by an
+  independent binary; the unified binary reproduces byte-identically on the
+  same machine and compiler. Cross-toolchain reproducibility is explicitly
+  not claimed.
 - **CT1 PASS** — frontend differential + both review counterexamples,
   hard-gated incl. ASan/UBSan.
 - **CT2 SUBSTANTIALLY LIVE** — ABI 1.2; toolchain-verify-parity
@@ -118,8 +121,11 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    `witness=<id> closure=<digest>` and the vector carries it through, so
    the section-7 record is complete — every field holds an honest value or
    an explicit "-".
-   Remaining for CT2/CT3: CT0 completion — reproducible native binaries
-   plus the manifest digest embedded in every verdict line.
+   CT0 completed too (D21): verdicts carry a corpus identity cross-checked
+   by a second binary, and the unified binary reproduces byte-identically
+   (same machine, same compiler — cross-toolchain reproducibility is not
+   claimed).
+   **CT2/CT3 and CT0 are closed.** Next is step 3.
 3. **Deletion gates (this repo, after 2).** Migrate native/bridge runtime
    internals to the grammar-1 frontend (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`
