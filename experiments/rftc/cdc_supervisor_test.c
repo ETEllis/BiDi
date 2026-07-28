@@ -26,6 +26,12 @@ typedef struct {
 } commit_state;
 
 typedef struct {
+    cdc_supervisor_application_verdict next;
+    unsigned calls;
+    unsigned mutations;
+} typed_apply_state;
+
+typedef struct {
     cdc_supervisor *supervisor;
     const cdc_transport_envelope *envelope;
     commit_state *commit;
@@ -84,6 +90,21 @@ static int commit_once(const cdc_transport_envelope *envelope,
     }
     state->commits++;
     return 1;
+}
+
+static cdc_supervisor_application_verdict
+apply_typed(const cdc_transport_envelope *envelope,
+            const cdc_supervisor_receipt *receipt, void *context) {
+    typed_apply_state *state = context;
+    if (memcmp(receipt->proposal_digest, envelope->payload_digest,
+               CDC_TRANSPORT_TAG_SIZE) != 0) {
+        return CDC_SUPERVISOR_APPLICATION_HOLD;
+    }
+    state->calls++;
+    if (state->next == CDC_SUPERVISOR_APPLICATION_ACCEPT) {
+        state->mutations++;
+    }
+    return state->next;
 }
 
 static cdc_supervisor *make_supervisor(size_t stream_limit,
@@ -266,12 +287,72 @@ static int test_resource_exhaustion_is_precommit(void) {
     return 1;
 }
 
+static int test_typed_application_verdicts(void) {
+    cdc_supervisor *supervisor = make_supervisor(4, 8);
+    cdc_transport_envelope rejected, reused_nonce, retryable;
+    cdc_supervisor_receipt receipt;
+    typed_apply_state state = {
+        CDC_SUPERVISOR_APPLICATION_REJECT, 0, 0};
+
+    CHECK(supervisor != NULL && add_lease(supervisor));
+    CHECK(make_proposal(&rejected, "node-a", "supervisor", 1, NULL, 60, 12,
+                        "malformed-application-payload"));
+    CHECK(cdc_supervisor_admit_ex(supervisor, &rejected, 150, 2, apply_typed,
+                                  &state, &receipt) ==
+          CDC_SUPERVISOR_REJECT_APPLICATION);
+    CHECK(receipt.application_verdict ==
+              CDC_SUPERVISOR_APPLICATION_REJECT &&
+          state.calls == 1 && state.mutations == 0);
+    CHECK(cdc_supervisor_admit_ex(supervisor, &rejected, 150, 2, apply_typed,
+                                  &state, &receipt) ==
+          CDC_SUPERVISOR_HOLD_TRANSPORT);
+    CHECK(receipt.transport_verdict == CDC_TRANSPORT_HOLD_DUPLICATE &&
+          receipt.application_verdict ==
+              CDC_SUPERVISOR_APPLICATION_NOT_RUN &&
+          state.calls == 1);
+
+    CHECK(make_proposal(&reused_nonce, "node-a", "supervisor", 2,
+                        rejected.envelope_digest, 60, 12,
+                        "same-consumed-nonce"));
+    CHECK(cdc_supervisor_admit_ex(supervisor, &reused_nonce, 150, 2,
+                                  apply_typed, &state, &receipt) ==
+          CDC_SUPERVISOR_REJECT_AUTHORITY);
+    CHECK(receipt.authority_verdict == CDC_AUTHORITY_REJECT_REPLAY &&
+          state.calls == 1 && state.mutations == 0);
+
+    CHECK(make_proposal(&retryable, "node-a", "supervisor", 2,
+                        rejected.envelope_digest, 61, 12,
+                        "retryable-application-payload"));
+    state.next = CDC_SUPERVISOR_APPLICATION_HOLD;
+    CHECK(cdc_supervisor_admit_ex(supervisor, &retryable, 150, 2,
+                                  apply_typed, &state, &receipt) ==
+          CDC_SUPERVISOR_HOLD_COMMIT);
+    CHECK(receipt.application_verdict ==
+              CDC_SUPERVISOR_APPLICATION_HOLD &&
+          state.calls == 2 && state.mutations == 0);
+    state.next = CDC_SUPERVISOR_APPLICATION_ACCEPT;
+    CHECK(cdc_supervisor_admit_ex(supervisor, &retryable, 150, 2,
+                                  apply_typed, &state, &receipt) ==
+          CDC_SUPERVISOR_ACCEPT);
+    CHECK(receipt.application_verdict ==
+              CDC_SUPERVISOR_APPLICATION_ACCEPT &&
+          state.calls == 3 && state.mutations == 1);
+
+    cdc_transport_envelope_free(&rejected);
+    cdc_transport_envelope_free(&reused_nonce);
+    cdc_transport_envelope_free(&retryable);
+    cdc_supervisor_destroy(supervisor);
+    return 1;
+}
+
 int main(void) {
     if (!test_serialized_admission() ||
-        !test_resource_exhaustion_is_precommit()) {
+        !test_resource_exhaustion_is_precommit() ||
+        !test_typed_application_verdicts()) {
         return 1;
     }
     puts("RFTC supervisor PASS: authenticated+authorized+causal admission "
-         "serialized; duplicate=once commit-failure=retry exhaustion=precommit");
+         "serialized; accept/hold/reject typed; terminal reject consumes "
+         "causal position without application mutation");
     return 0;
 }

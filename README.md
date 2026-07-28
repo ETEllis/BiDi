@@ -118,12 +118,27 @@ field-computation, physics, neuroscience, systems, and polymath convergence is
 captured in
 [`docs/rftc/SPECIALIST_SYNTHESIS.md`](docs/rftc/SPECIALIST_SYNTHESIS.md).
 The six C3 language forms and their non-colliding R1-R6 capabilities live in
-[`rftc.cdc`](rftc.cdc). ABI 1.4 additionally exposes the D36 authenticated
-local control plane: canonical keyed-BLAKE3 envelopes, scoped/versioned
-authority, causal replay defense, and an exactly-once serialized supervisor
-admission path. This is shared-key authenticity and a local cross-process wire
-proof—not Ed25519/mTLS identity, a deployed network, recursive cross-host C3,
-or a Q-level claim.
+[`rftc.cdc`](rftc.cdc). ABI 1.5 exposes the D36-D37 execution kernel:
+canonical keyed-BLAKE3 envelopes, scoped/versioned authority, causal replay
+defense, typed accept/hold/reject supervision, canonical oriented frame and
+topology reduction, provenance-preserving recursive logical cells, a sealed
+bounded deterministic scheduler, and a durable journal that re-authenticates
+exact uncompacted history before restart replay. The rapid gate exercises
+release, ASan/UBSan, and ThreadSanitizer lanes for those components.
+
+This is a classical local durable execution kernel using shared-key
+authenticity. It is not Ed25519/mTLS identity, non-repudiation, a deployed
+multi-host session, cross-host C3 evidence, a physical qubit, entanglement, or
+quantum advantage. The exact implementation-to-claim boundary is tracked in
+[`docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md`](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md).
+The separately gated physical/cosmological program begins at
+[`docs/rftc/COSMOLOGICAL_RECORD_CLOSURE.md`](docs/rftc/COSMOLOGICAL_RECORD_CLOSURE.md),
+with the quantum crucible, Born derivation, horizon-foundry/atlas, and
+biological-transductive observer specifications linked from the full build
+spec. These are executable research obligations, not claims promoted by the
+classical kernel.
+The complete dependency graph and parallel baton policy are in
+[`docs/rftc/RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md`](docs/rftc/RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md).
 
 ## Core Architecture
 

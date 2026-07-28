@@ -19,6 +19,28 @@ runtime_sources=(
   runtime/cdc_digest.c
   runtime/cdc_blake3.c
 )
+cell_sources=(
+  runtime/cdc_scheduler.c
+  runtime/cdc_cell.c
+  runtime/cdc_frame.c
+  runtime/cdc_topology.c
+  runtime/cdc_rftc.c
+  runtime/cdc_digest.c
+  runtime/cdc_blake3.c
+)
+supervised_scheduler_sources=(
+  runtime/cdc_supervised_scheduler.c
+  runtime/cdc_scheduler_wire.c
+  "${cell_sources[@]}"
+  runtime/cdc_supervisor.c
+  runtime/cdc_authority.c
+  runtime/cdc_transport.c
+)
+journal_sources=(
+  runtime/cdc_scheduler_journal.c
+  "${supervised_scheduler_sources[@]}"
+  runtime/cdc_store.c
+)
 common_flags=(-std=c99 -Wall -Wextra -pedantic -pthread)
 
 mkdir -p "$out_dir"
@@ -51,6 +73,32 @@ echo "== RFTC: serialized supervisor admission =="
   runtime/cdc_blake3.c \
   -o "$out_dir/cdc_supervisor_test"
 "$out_dir/cdc_supervisor_test"
+
+echo "== RFTC: sealed logical cells and recursive scheduler =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_cell_test.c \
+  runtime/cdc_cell.c runtime/cdc_frame.c runtime/cdc_topology.c \
+  runtime/cdc_rftc.c runtime/cdc_digest.c runtime/cdc_blake3.c -lm \
+  -o "$out_dir/cdc_cell_test"
+"$out_dir/cdc_cell_test"
+
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_scheduler_test.c "${cell_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_test"
+"$out_dir/cdc_scheduler_test"
+
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_scheduler_wire_test.c \
+  "${supervised_scheduler_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_wire_test"
+"$out_dir/cdc_scheduler_wire_test"
+
+echo "== RFTC: authenticated durable scheduler journal =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_scheduler_journal_test.c \
+  "${journal_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_journal_test"
+"$out_dir/cdc_scheduler_journal_test"
 
 echo "== RFTC: canonical cross-process envelope =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
@@ -180,6 +228,34 @@ jq -e '.verdict == "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM"' \
   -o "$out_dir/cdc_supervisor_test_sanitized"
 "$out_dir/cdc_supervisor_test_sanitized"
 
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_cell_test.c \
+  runtime/cdc_cell.c runtime/cdc_frame.c runtime/cdc_topology.c \
+  runtime/cdc_rftc.c runtime/cdc_digest.c runtime/cdc_blake3.c -lm \
+  -o "$out_dir/cdc_cell_test_sanitized"
+"$out_dir/cdc_cell_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_scheduler_test.c "${cell_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_test_sanitized"
+"$out_dir/cdc_scheduler_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_scheduler_wire_test.c \
+  "${supervised_scheduler_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_wire_test_sanitized"
+"$out_dir/cdc_scheduler_wire_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_scheduler_journal_test.c \
+  "${journal_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_journal_test_sanitized"
+"$out_dir/cdc_scheduler_journal_test_sanitized"
+
 if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
   experiments/rftc/cdc_supervisor_test.c \
   runtime/cdc_supervisor.c runtime/cdc_authority.c runtime/cdc_transport.c \
@@ -189,6 +265,25 @@ if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
   echo "RFTC supervisor concurrency PASS under ThreadSanitizer"
 else
   echo "RFTC supervisor ThreadSanitizer unavailable; lane skipped (recorded)"
+fi
+
+if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
+  experiments/rftc/cdc_scheduler_test.c "${cell_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_test_tsan" 2>/dev/null; then
+  "$out_dir/cdc_scheduler_test_tsan"
+  echo "RFTC recursive scheduler concurrency PASS under ThreadSanitizer"
+else
+  echo "RFTC scheduler ThreadSanitizer unavailable; lane skipped (recorded)"
+fi
+
+if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
+  experiments/rftc/cdc_scheduler_journal_test.c \
+  "${journal_sources[@]}" -lm \
+  -o "$out_dir/cdc_scheduler_journal_test_tsan" 2>/dev/null; then
+  "$out_dir/cdc_scheduler_journal_test_tsan"
+  echo "RFTC scheduler journal concurrency PASS under ThreadSanitizer"
+else
+  echo "RFTC scheduler journal ThreadSanitizer unavailable; lane skipped (recorded)"
 fi
 
 "$compiler" "${common_flags[@]}" -Werror -O1 -g \

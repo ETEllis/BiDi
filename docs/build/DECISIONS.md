@@ -2,6 +2,149 @@
 
 Format: decision id, date, decision, rationale, consequences. Append-only.
 
+## D39 — 2026-07-28 — The end state includes one falsifiable multiscale closure program, not scale-specific analogies
+
+Edward extended the production mission from the distributed RFTC runtime into
+microscopic quantum closure, Born weighting, horizon foundries, holographic
+boundary sufficiency, cosmological frame atlases, emergent geometry, and the
+biological transductive observer/AI architecture.
+
+The extension is adopted under one hard constraint: every model uses the same
+typed operator and `FLOW/HOLD/COMMIT/RENORMALIZE/NEST` semantics. Similar
+vocabulary is not enough. Each cross-domain mapping declares the invariant,
+the domain-specific physical implementation, the translation hypotheses, the
+resource ledger, and the experiment that can reject the bridge.
+
+The constitutive candidate is that distributed possibility becomes locally
+actionable through durable boundary records; a closed record becomes the
+moving reference/zero of a subsequent frame; causal return changes the
+relations governing later closure; and an atlas of overlapping record domains
+may supply an effective compatibility geometry. Boundary information is
+therefore tested as external accountability, not assumed two-dimensional
+storage. Constitutive self-simulation names this state-and-relation recursion
+without positing an external simulator.
+
+The required documents are:
+
+- `COSMOLOGICAL_RECORD_CLOSURE.md`;
+- `HORIZON_FOUNDRY_SPEC.md`;
+- `BORN_CLOSURE_DERIVATION.md`;
+- `QUANTUM_CLASSICAL_DISSOLUTION_CRUCIBLE.md`;
+- `COSMOLOGICAL_HORIZON_ATLAS_SPEC.md`;
+- `BIOLOGICAL_TRANSDUCTIVE_OBSERVER_SPEC.md`;
+- `RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md`.
+
+The enlarged ladder adds `R0`, `H0`, `B0`, and `G0` without changing
+C0-C4/QS0-QS1/QH0/Q0-Q1. No tier self-promotes. The current D38 result remains
+a classical C3-capable local kernel.
+
+## D38 — 2026-07-28 — Frame epochs and journal outcomes are content-bound, atomic, and replay-policy complete
+
+The first D37 scheduler/journal implementation passed its positive paths but
+failed independent adversarial review in three material ways: stale
+application work was classified as terminal poison, replay verified a MAC
+without reapplying the configured peer policy, and frame membership could
+change without one coherent predecessor epoch. D38 closes all three with
+permanent counterexamples.
+
+`CDC_SCHEDULER_HOLD_STALE` is now a supervisor `HOLD`. It consumes no authority
+nonce or causal position and the exact authenticated command may succeed after
+the application state becomes current. Terminal semantic `REJECT` remains
+durable and consumes its reserved causal position without application
+mutation, preventing signed poison from blocking the stream.
+
+The scheduler journal stores a canonical `CDJR` v1 outcome record containing
+`ACCEPT` or `REJECT` plus the complete `RF3W` envelope. Restart reconstructs
+the configured transport peer and rechecks schema, recipient, key identifier,
+sequence, logical clock, causal parent, MAC, envelope identity, and terminal
+outcome before any scheduler publication. Wrong recipient/key/first sequence/
+parent and late malformed history leave the scheduler pristine. Ambiguous
+crash duplicates remain idempotent.
+
+Frame change is a configuration epoch, not an in-place graph edit. A new
+unsealed scheduler atomically imports scheduler-exported predecessor receipts
+whose source-configuration digest must each equal the one declared
+predecessor, then seals a new configuration.
+Same-frame carry-forward requires exact canonical structure; changed cells
+advance exactly one frame version and still require `FRAME_CHANGE` evidence.
+The canonical structure digest binds kind, versions, bounds, oriented ring, and
+for composites the child cell identifier assigned to every oriented member.
+An identical exterior ring with swapped children is therefore not the same
+cell.
+
+Epoch import validates the complete embedded `cdc_cell_state`: range,
+transition, lineage, hidden-class digest, and full canonical state digest are
+recomputed before any batch mutation. Tampered state, tampered structure,
+mixed valid receipts exported by different predecessor configurations,
+tampered/foreign predecessor digests, invalid changed/unchanged batches, or
+child rebinding fail atomically and permit an exact corrected retry.
+
+The permanent gate also starts publisher, witness, and drain workers behind one
+barrier, links `cdc_shared_record` into every unified-driver proof, and runs the
+scheduler and journal through release, ASan/UBSan, and ThreadSanitizer lanes.
+
+D38 strengthens the **C3-capable local durable kernel**. It does not earn the
+C3 label without a multi-host session and reconciliation receipt, and it adds
+no Q-level evidence.
+
+## D37 — 2026-07-28 — C3 execution is a sealed deterministic forest with authenticated exact-history recovery
+
+ABI 1.5 adds four composed runtime layers without weakening D36:
+
+1. `cdc_frame` seals an unordered observation set into one immutable oriented
+   ring snapshot. Successor links define topology, the lowest member identifier
+   is the canonical cyclic anchor, and stale, duplicate, incomplete, or
+   ambiguous frames fail closed.
+2. `cdc_topology` classifies oriented winding and requires explicit evidence
+   for a sector or frame transition. A phase delta on the `+/-pi` branch cut
+   is ambiguous and rejected rather than rounded into a sector.
+3. `cdc_cell` binds the frame, boundary, sector, hidden microstate class,
+   previous state, transition witness, causal horizon, and reduction versions
+   into one state digest. Equal macrostates never imply equal hidden states.
+4. `cdc_scheduler` constructs a bounded bottom-up forest, freezes it behind a
+   canonical graph seal, publishes observations and witnesses into a bounded
+   queue, and processes the canonical event order. A composite advances only
+   when every child reaches the same strictly newer logical clock. Parent
+   provenance is derived from child state digests.
+
+The scheduler payload wire is the canonical, versioned, bounded `CDCP` v1
+encoding. Floating phase is normalized to `(-pi, pi]` and quantized at the
+declared wire precision before it enters replay identity. Truncation, trailing
+bytes, reserved-field mutation, noncanonical phase aliases, malformed
+witnesses, and over-limit inputs reject.
+
+D36's boolean callback was insufficient to distinguish a retryable resource
+hold from a terminal authenticated semantic rejection. The typed supervisor
+callback now returns `ACCEPT`, `HOLD`, or `REJECT`. `HOLD` consumes neither
+authority nonce nor causal position and must leave application state
+unchanged. `REJECT` also leaves application state unchanged but consumes the
+already-reserved nonce and causal position so a signed poison packet cannot
+permanently block the stream. The original boolean callback remains as a
+compatibility wrapper.
+
+`cdc_scheduler_journal` is the durable ingress and restart boundary. It seals
+the complete authenticated envelope before supervisor admission commits. A
+store failure is a typed retryable hold. Recovery accepts only a fresh,
+already-sealed scheduler; validates the complete store before callbacks;
+re-authenticates every envelope; decodes every command before scheduler
+mutation; canonicalizes replay order; and reconstructs the scheduler
+deterministically. Exact duplicate commands are idempotent. Compacted history
+is refused because a commitment to discarded events is not an executable event
+stream.
+
+Permanent counterexamples cover reordered construction and publication,
+ambiguous topology, unwitnessed transitions, old-clock races, causal gaps,
+resource exhaustion, concurrent duplicate ingress, terminal poison followed
+by valid input, every store-commit crash boundary plus exact retry, restart, wrong replay key,
+log corruption with zero scheduler mutation, duplicate durable delivery,
+compacted history, ASan/UBSan, and ThreadSanitizer.
+
+This closes the **local durable C3 execution kernel**, not the C3 claim in the
+scientific ladder. A C3 artifact still requires an actual multi-host session
+and cross-host replay receipt. Shared-key authentication is not public-key
+identity or non-repudiation. The runtime is classical and establishes no qubit,
+entanglement, Bell, nonclassicality, or quantum-advantage claim.
+
 ## D36 — 2026-07-28 — C3 authority and transport close through one serialized supervisor
 
 RFTC transport uses a canonical, length-delimited `RF3W` v1 envelope. The

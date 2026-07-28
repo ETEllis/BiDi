@@ -1,0 +1,81 @@
+# C3-CELLS evidence — local durable recursive execution kernel
+date: 2026-07-28
+decision: D37-D38
+abi: 1.5
+command-wire: CDCP v1
+envelope-wire: RF3W v1
+
+## Claim
+
+The local ABI can seal canonical oriented frame snapshots, classify and
+witness topological transitions, preserve hidden provenance in logical-cell
+state, execute a bounded deterministic recursive scheduler, supervise
+authenticated commands with typed accept/hold/reject behavior, durably seal
+complete signed envelopes, and reconstruct a fresh scheduler from exact
+authenticated uncompacted history. D38 additionally binds atomic
+configuration-epoch migration to one predecessor digest, canonical recursive
+structure, and a canonically revalidated cell state. Journal restart replays
+durable ACCEPT/REJECT outcomes under the configured peer policy.
+
+This is a classical C3-capable local kernel. It is not a deployed multi-host
+session, cross-host reconciliation evidence, public-key identity,
+non-repudiation, a qubit, entanglement, nonclassicality, or quantum advantage.
+
+## Required verification
+
+./scripts/verify_rftc.sh
+./scripts/verify.sh --require-formal
+
+The rapid release, ASan/UBSan, and ThreadSanitizer lanes passed on the active
+D38 worktree. Independent permission-to-block review passes after three
+high-severity epoch-receipt counterexamples and one null-output replay API
+defect were found, repaired, permanently tested, and re-reviewed. The maximal
+command passes after every new source/evidence file is staged and the head-bound
+provenance manifest is regenerated. PR promotion and independent exact-head CI
+remain required before merge.
+
+## Permanent counterexamples
+
+- unordered and cyclically rotated observations cannot alter the frame seal
+- reversed orientation changes topology; a branch-cut edge is refused
+- sector or membership change without the required witness is refused
+- equal macrostate does not erase distinct hidden source provenance
+- reordered graph construction and publication produce identical execution
+- incomplete/old children cannot advance a composite
+- mixed logical clocks cannot form one sealed frame
+- a configuration-epoch batch with one invalid receipt imports no cell and the
+  exact corrected batch may retry
+- every exported epoch receipt binds its source scheduler configuration;
+  individually valid cell receipts from two predecessors cannot be spliced
+  into one epoch under a caller-selected digest
+- a second import call with a foreign predecessor digest is also refused
+- an unchanged composite cannot swap child bindings behind the same exterior
+  oriented ring
+- tampered structure, amplitude, lineage, transition, hidden-class, or state
+  digest cannot import as pristine predecessor state
+- bounded resource exhaustion is pre-mutation and retryable
+- stale authenticated application work holds and remains exactly retryable
+- malformed authenticated application payload is terminal without app mutation
+- a subsequent valid causal command is not poisoned by that terminal rejection
+- concurrent identical durable ingress seals once
+- every store-commit crash boundary holds; exact retry succeeds after recovery
+  whether the interrupted transaction was absent or durably latched
+- restart re-authenticates every envelope and reapplies schema, recipient, key
+  identifier, sequence, logical clock, and causal-parent policy; a wrong value
+  or key mutates no scheduler
+- terminal semantic rejection is a durable causal outcome but never an
+  application event
+- a valid early envelope followed by malformed authenticated history mutates no
+  scheduler because the complete stream is decoded before publication
+- duplicate durable delivery is idempotent
+- committed corruption invokes no replay mutation
+- compacted commitments are refused as non-executable history
+- release, ASan/UBSan, and ThreadSanitizer lanes
+
+## Composition boundary
+
+`cdc_scheduler_journal_admit` is the supported durable ingress. The journal
+owns its store transaction while admission is active; direct staging must not
+interleave on the same handle. `cdc_scheduler_journal_replay` accepts only a
+fresh sealed scheduler and exact uncompacted history. Actual network-session
+identity and cross-host reconciliation remain the next C3 composition gate.

@@ -32,7 +32,7 @@
  *   the process or prints. Every function returns cdc_status; out-values are
  *   NULL/0 on failure.
  *
- * Availability through ABI 1.4
+ * Availability through ABI 1.5
  *   Parse, diagnostics, canonical bytes, result serialization, registry
  *   loading, and contract verification (cdc_runtime_load +
  *   cdc_runtime_verify — the bootloader-parity report) are fully
@@ -43,7 +43,7 @@
  */
 
 #define CDC_ABI_VERSION_MAJOR 1
-#define CDC_ABI_VERSION_MINOR 4
+#define CDC_ABI_VERSION_MINOR 5
 
 /* ABI 1.3 added typed effect receipts (cdc_receipt.h), the structured
  * record of one executed effect. Consumers that need an outcome read a
@@ -54,9 +54,27 @@
  * the stable opaque boundary: keyed canonical transport, scoped authority,
  * causal admission, and an all-or-nothing commit callback are serialized
  * behind one supervisor. It is a shared-key integrity/authenticity boundary,
- * not a public-key signature or mTLS claim. */
+ * not a public-key signature or mTLS claim.
+ *
+ * ABI 1.5 adds sealed oriented-frame snapshots, witnessed topology
+ * transitions, provenance-preserving logical cells, the bounded recursive
+ * scheduler, its canonical wire payload, and the composed supervised
+ * scheduler admission boundary. It also adds the durable scheduler journal:
+ * complete signed envelopes are sealed before admission commits, and fresh
+ * schedulers can re-authenticate and deterministically reconstruct exact,
+ * uncompacted history after restart. D38 tightens the same ABI: durable journal
+ * outcomes retain terminal causal history; replay reapplies peer policy;
+ * scheduler-exported configuration-epoch receipts bind recursive structure;
+ * and imported cell state is canonically revalidated before atomic migration.
+ * These are deterministic classical reference-frame mechanisms; this ABI does
+ * not claim a qubit, entanglement, or quantum advantage. */
 #include "cdc_receipt.h"
+#include "cdc_scheduler.h"
+#include "cdc_scheduler_journal.h"
+#include "cdc_scheduler_wire.h"
+#include "cdc_shared_record.h"
 #include "cdc_supervisor.h"
+#include "cdc_supervised_scheduler.h"
 
 typedef enum {
     CDC_OK = 0,

@@ -7,8 +7,8 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- main: `4005a7b4922c2810d7af3ef0c5439a635f4786aa` (PR #7 merge);
-  active branch: `codex/c3-authority-transport`
+- main: `79a508aa1441877aaeeafe415ef285983b186388` (PR #8 merge);
+  active branch: `codex/c3-recursive-cells`
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -20,13 +20,57 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **D39 expanded end-state adopted (2026-07-28).** The runtime now carries a
+  binding dependency plan for Models A-D, R0/QS/Q/H/B/G gates, horizon foundry
+  and atlas experiments, and the biological transductive-observer/AI
+  architecture. The same closure operator and failure semantics must survive
+  every domain; cross-domain analogy alone earns nothing. These documents
+  extend the build/research mission without promoting the current evidence.
+
+- **D38 adversarial epoch/journal closure implemented and independently
+  re-reviewed PASS (2026-07-28).** Canonical `CDJR` outcome records preserve
+  accepted and terminally rejected causal history; restart reapplies the live
+  peer policy; stale work remains exactly retryable; configuration-epoch
+  migration is atomic and predecessor-bound; composite receipts bind child
+  identity as well as exterior topology; and imported cell state is
+  canonically revalidated. Permanent counterexamples reject wrong peer policy,
+  mixed lineage, child rebinding, structural/state receipt tampering, and
+  partial failed imports. The D38 rapid release, ASan/UBSan, and
+  ThreadSanitizer gate is green. Maximal formal verification passes after
+  staging every new source/evidence file and regenerating final provenance.
+
+- **D37 C3 local durable execution kernel implemented; maximal gate green
+  (2026-07-28).** On PR #8 merge `79a508a`, ABI 1.5 adds canonical immutable
+  oriented frames, strict topology classification and witnessed transitions,
+  provenance-preserving logical-cell state, a sealed bounded recursive
+  scheduler, canonical `CDCP` command wire, typed application
+  accept/hold/reject semantics, and an authenticated durable scheduler journal.
+  Current `./scripts/verify_rftc.sh` is green in release, ASan/UBSan, and
+  ThreadSanitizer lanes. Its permanent adversaries cover construction and
+  arrival permutation, branch-cut ambiguity, unwitnessed transitions, old
+  epochs, resource limits, concurrent duplicate ingress, terminal poison
+  consumption, every store-commit crash boundary plus exact retry,
+  deterministic fresh-scheduler restart,
+  wrong replay key, duplicate delivery, committed corruption with zero
+  scheduler mutation, and compacted-history refusal. The full formal/native/
+  paper gate and provenance bundle are green on the active staged source.
+  PR promotion, exact-head CI, and merge remain pending. This is a local
+  classical kernel; actual cross-host session/reconciliation remains required
+  for a C3 evidence label and no Q-level claim is made.
+
+- **PR #8 MERGED — authenticated C3 local control plane (2026-07-28).**
+  Exact head `54cff9a` passed both exact-head CI lanes; merge commit
+  `79a508a`. ABI 1.4, D36, canonical shared-key envelopes, scoped authority,
+  causal/partition defense, and serialized supervisor admission are now on
+  main.
+
 - **PR #7 MERGED — C3 six-form language ingress (2026-07-28).** Exact head
   `cdcf14ca1c691839b3fa56283b333b73cddeedf2` passed the full native/formal/
   paper lane and CDC Studio macOS lane; merge commit `4005a7b`. The active
   D36 branch layers the authenticated C3 control plane on that merged source.
 
-- **C3 authenticated control-plane ABI implemented and full local gate green;
-  PR promotion pending (2026-07-28, D36).** ABI 1.4 exports keyed canonical
+- **C3 authenticated control-plane ABI merged and full gate green
+  (2026-07-28, D36).** ABI 1.4 exports keyed canonical
   transport, scoped authority leases, replay/nonce and causal-order defense,
   and one opaque serialized supervisor admission boundary. Requested action
   and horizon are MAC-bound rather than supplied out of band. The maximal
@@ -36,8 +80,9 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   wrong recipient/subject/frame/horizon/action/quorum/expiry, forged tickets,
   resource exhaustion before mutation, retry after commit failure, exactly-once
   simultaneous admission, ASan/UBSan, and ThreadSanitizer. This is shared-key
-  authenticity, not Ed25519/mTLS or non-repudiation; recursive cells,
-  reconciliation, and full C3 remain open.
+  authenticity, not Ed25519/mTLS or non-repudiation. Recursive local execution
+  is implemented on the D37 branch; network-session identity,
+  reconciliation, and cross-host C3 evidence remain open.
 
 - **PR #6 MERGED — C1-C2 RFTC converged on the post-PR5 mainline
   (2026-07-28).** Exact head `f73a12c` passed the full native/formal/paper
@@ -54,8 +99,9 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   reservation untouched. `rftc.cdc` declares the canonical boundary, and
   the RFTC gate proves all six forms parse with their attributes while
   identifier-free forms and unknown quantum-shaped aliases reject with typed
-  diagnostics. PR #7 merged this ingress; D36 now implements the authenticated
-  authority/transport ABI, while recursive cells and C3 as a whole remain open.
+  diagnostics. PR #7 merged this ingress, PR #8 merged the authenticated
+  authority/transport ABI, and D37 now implements the local recursive
+  execution/restart kernel while cross-host C3 evidence remains open.
 
 - **PR #4 MERGED; bootloader Option A executed (2026-07-28, D33).** The
   operator approved pinned head `6784ab5` after independent macOS
