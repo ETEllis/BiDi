@@ -189,11 +189,9 @@ test "$FRONTEND_RECORDS" -ge 5000
 echo "frontend differential ok records=${FRONTEND_RECORDS}"
 # shellcheck disable=SC2086
 run_step ./build/cdc_frontend_check roundtrip $CDC_ROOT_SOURCES
-# shellcheck disable=SC2086
-./build/cdc_frontend_check attr-parity $CDC_ROOT_SOURCES | tee build/frontend_attr_parity.txt
-grep -q " collision=0 " build/frontend_attr_parity.txt
-grep -q " duplicate=0 " build/frontend_attr_parity.txt
-grep -q " failed=0" build/frontend_attr_parity.txt
+# attr-parity retired with the legacy scanner it compared against (D26).
+# The independent oracle is the dump differential above — cdc_boot.py's
+# parse against the grammar-1 frontend's — and that is unaffected.
 run_step ./build/cdc_frontend_check bounds
 run_step ./build/cdc_frontend_check oom framework_loop.cdc
 # Attribute-key boundaries [deletion-gate step 1]. The legacy reader matched

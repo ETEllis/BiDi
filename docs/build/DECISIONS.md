@@ -46,6 +46,50 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D26 — 2026-07-28 — Legacy scanner deleted; `--dump` deliberately OUTLIVES it
+
+`cdc_source.c` loses the line scanner: `cdc_starts_with`, `cdc_trim`,
+`cdc_trim_newline`, `cdc_strip_comment`, `cdc_first_token_after`, and the
+four `cdc_read_*` attribute readers. 124 lines down to 33. What remains is
+not a parser — the checked-expectation primitives (`cdc_expect_string`,
+`cdc_expect_int`, `cdc_expect_double`, `cdc_close_enough`,
+`cdc_source_fail`) that compare a computed value against a declared one.
+
+An unused parser for a language that already has one is a second source of
+truth waiting to disagree with the first, so it is deleted rather than kept
+in case someone wants it.
+
+**`attr-parity` retires with it.** That mode compared the legacy reader's
+attribute extraction against the frontend's, field for field, across the
+whole corpus. Once the legacy reader had no production callers (D25) it was
+measuring a reader nothing used — a green result proving nothing about the
+shipped path. Keeping it would have been worse than deleting it: a gate
+that cannot fail for any reason anyone cares about still costs review
+attention and implies coverage it does not provide.
+
+**`attr-boundary` is repointed, not deleted.** Its cases pinned a property
+— key matching must not let a longer attribute name shadow a shorter one —
+and the property outlives the implementation that used to hold it. The
+cases now parse through the grammar-1 frontend and query
+`cdc_stmt_attr_first`. Two expected values changed with the reader, and the
+change is the point: key matching is now exact by construction because the
+statement is tokenized before any lookup, and a quoted value comes back
+COMPLETE and unquoted where the legacy reader truncated it at the first
+space. The old expectation encoded a defect; the new one encodes the fix.
+
+**`cdc_boot.py --dump` STAYS, correcting the original gate ordering.** The
+plan recorded in D7 named `frontend-differential-dump` as the gate under
+which the legacy scanner and `--dump` would be deleted TOGETHER. That is
+wrong, and D23 is why: `--dump` is the last INDEPENDENT oracle for the
+frontend. The legacy scanner was a second implementation inside the same
+binary; the bootloader is a separate implementation in a different
+language. Deleting both at once would leave the grammar-1 frontend checked
+only against itself.
+
+So the gate splits: the scanner goes now, `--dump` goes with `cdc_boot.py`
+itself, and until then the dump differential (5342 records, byte-compared
+every run) remains the thing that makes the frontend trustworthy.
+
 ## D25 — 2026-07-28 — Native runtime migrated; the legacy scanner is now dead code
 
 `runtime/cdc_native_runtime.c` no longer parses source. All 21 declaration

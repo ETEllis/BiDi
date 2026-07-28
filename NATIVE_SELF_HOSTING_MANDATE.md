@@ -186,6 +186,16 @@ They carry no persistence semantics and are covered by the existing
 produce a byte-identical report to the bootloader on every run, so these
 entries retire with `cdc_boot.py` itself under this gate.
 
+The **frontend-differential-dump** gate has been split, and the reason is
+recorded in DECISIONS D26. It originally named the legacy line scanner and
+`cdc_boot.py --dump` for deletion together. The scanner is now deleted: both
+runtimes parse through the grammar-1 frontend, so it had no callers. But
+`--dump` stays until `cdc_boot.py` itself goes, because it is the last
+INDEPENDENT oracle for the frontend — the scanner was a second implementation
+inside the same binary, while the bootloader is a separate implementation in
+another language. Retiring both at once would leave the frontend checked only
+against itself.
+
 ## Immediate Rule
 
 From this point forward, new behavior must be added first as `.cdc` source or

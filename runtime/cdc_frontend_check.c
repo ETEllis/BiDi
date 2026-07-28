@@ -5,9 +5,6 @@
  *                          byte-compared against `cdc_boot.py --dump`
  *   canon <files...>       emit canonical grammar-1 serialization
  *   roundtrip <files...>   parse -> canonical -> reparse -> structural equal
- *   attr-parity <files...> field-for-field comparison of frontend attribute
- *                          extraction vs the legacy cdc_read_attr scanner,
- *                          with typed divergence classes
  *   bounds                 adversarial corpus: typed diagnostics, no crash
  *   oom <file>             allocator-failure injection at every allocation
  *   reject <files...>      every file must produce >=1 error diagnostic
@@ -218,180 +215,10 @@ static int cmd_roundtrip(int argc, char **argv) {
     return 0;
 }
 
-/* ---- attr-parity ---------------------------------------------------- */
-
-typedef struct {
-    long checked;
-    long quoting;
-    long collision;
-    long duplicate;
-    long skipped_long;
-    long failed;
-} parity_counts;
-
-static void parity_line(const cdc_unit *program, const cdc_stmt *stmt,
-                        const char *raw_line, parity_counts *counts) {
-    char stripped[8192];
-    size_t i, j;
-
-    snprintf(stripped, sizeof(stripped), "%s", raw_line);
-    cdc_strip_comment(stripped);
-
-    for (i = 1; i < stmt->token_count; i++) {
-        const char *eq =
-            memchr(stmt->tokens[i].text, '=', stmt->tokens[i].length);
-        char key[256];
-        char legacy[4096];
-        const char *frontend_first;
-        const char *frontend_last;
-        size_t key_len;
-        int duplicated = 0;
-
-        if (!eq) {
-            continue;
-        }
-        key_len = (size_t)(eq - stmt->tokens[i].text);
-        if (key_len == 0 || key_len >= sizeof(key)) {
-            counts->skipped_long++;
-            continue;
-        }
-        memcpy(key, stmt->tokens[i].text, key_len);
-        key[key_len] = '\0';
-        if (strlen(key) > 60) { /* legacy needle buffer is 64 with "=" */
-            counts->skipped_long++;
-            continue;
-        }
-        /* only evaluate each key once per line (at its first occurrence) */
-        {
-            int earlier = 0;
-            for (j = 1; j < i; j++) {
-                const char *prior_eq = memchr(stmt->tokens[j].text, '=',
-                                              stmt->tokens[j].length);
-                if (prior_eq &&
-                    (size_t)(prior_eq - stmt->tokens[j].text) == key_len &&
-                    strncmp(stmt->tokens[j].text, key, key_len) == 0) {
-                    earlier = 1;
-                    break;
-                }
-            }
-            if (earlier) {
-                continue;
-            }
-        }
-        for (j = i + 1; j < stmt->token_count; j++) {
-            const char *later_eq = memchr(stmt->tokens[j].text, '=',
-                                          stmt->tokens[j].length);
-            if (later_eq &&
-                (size_t)(later_eq - stmt->tokens[j].text) == key_len &&
-                strncmp(stmt->tokens[j].text, key, key_len) == 0) {
-                duplicated = 1;
-                break;
-            }
-        }
-
-        frontend_first = cdc_stmt_attr_first(stmt, key);
-        frontend_last = cdc_stmt_attr(stmt, key);
-        counts->checked++;
-        if (duplicated ||
-            (frontend_first && frontend_last &&
-             strcmp(frontend_first, frontend_last) != 0)) {
-            counts->duplicate++;
-        }
-
-        if (!cdc_read_attr(stripped, key, legacy, sizeof(legacy))) {
-            counts->failed++;
-            fprintf(stderr, "attr-parity FAIL %s:%d %s: legacy scanner "
-                            "found nothing\n",
-                    base_name(program->file), stmt->line, key);
-            continue;
-        }
-        if (frontend_first && strcmp(legacy, frontend_first) == 0) {
-            continue; /* exact agreement */
-        }
-        /* collision: the legacy strstr hit begins before this token */
-        {
-            char needle[64];
-            const char *hit;
-            snprintf(needle, sizeof(needle), "%s=", key);
-            hit = strstr(stripped, needle);
-            /* a hit not immediately preceded by start-of-line or whitespace
-             * sits inside another token: the legacy scanner read from the
-             * middle of an unrelated attribute (substring collision) */
-            if (hit && hit != stripped && hit[-1] != ' ' &&
-                hit[-1] != '\t') {
-                counts->collision++;
-                fprintf(stderr, "attr-parity collision %s:%d %s\n",
-                        base_name(program->file), stmt->line, key);
-                continue;
-            }
-        }
-        /* quoting divergence: legacy retains quotes / truncates at space */
-        if (frontend_first && legacy[0] == '"') {
-            const char *body = legacy + 1;
-            size_t body_len = strlen(body);
-            if (body_len > 0 && body[body_len - 1] == '"') {
-                body_len--;
-            }
-            if (strncmp(frontend_first, body, body_len) == 0 &&
-                (frontend_first[body_len] == '\0' ||
-                 strchr(frontend_first + body_len, ' ') != NULL ||
-                 frontend_first[body_len] == ' ')) {
-                counts->quoting++;
-                continue;
-            }
-        }
-        counts->failed++;
-        fprintf(stderr,
-                "attr-parity FAIL %s:%d %s: legacy=%s frontend=%s\n",
-                base_name(program->file), stmt->line, key, legacy,
-                frontend_first ? frontend_first : "<none>");
-    }
-}
-
-static int cmd_attr_parity(int argc, char **argv) {
-    parity_counts counts;
-    int i;
-    memset(&counts, 0, sizeof(counts));
-    for (i = 0; i < argc; i++) {
-        cdc_unit program;
-        cdc_diag_list diags;
-        FILE *fp;
-        char raw[8192];
-        int line_no = 0;
-        size_t s = 0;
-
-        cdc_diag_list_init(&diags);
-        if (!parse_or_report(argv[i], &program, &diags)) {
-            cdc_unit_free(&program);
-            cdc_diag_list_free(&diags);
-            return 1;
-        }
-        fp = fopen(argv[i], "r");
-        if (!fp) {
-            fprintf(stderr, "cdc-frontend: cannot reopen %s\n", argv[i]);
-            return 1;
-        }
-        while (fgets(raw, sizeof(raw), fp)) {
-            line_no++;
-            cdc_trim_newline(raw);
-            while (s < program.count && program.stmts[s].line < line_no) {
-                s++;
-            }
-            if (s < program.count && program.stmts[s].line == line_no &&
-                program.stmts[s].kind != CDC_STMT_END) {
-                parity_line(&program, &program.stmts[s], raw, &counts);
-            }
-        }
-        fclose(fp);
-        cdc_unit_free(&program);
-        cdc_diag_list_free(&diags);
-    }
-    printf("frontend attr-parity checked=%ld quoting=%ld collision=%ld "
-           "duplicate=%ld skipped=%ld failed=%ld\n",
-           counts.checked, counts.quoting, counts.collision,
-           counts.duplicate, counts.skipped_long, counts.failed);
-    return counts.failed == 0 ? 0 : 1;
-}
+/* attr-parity retired with the legacy scanner it compared against (D26):
+ * it measured a reader nothing used. The independent oracle for the
+ * frontend is the dump differential against cdc_boot.py, which is
+ * untouched. */
 
 /* ---- bounds --------------------------------------------------------- */
 
@@ -1157,14 +984,20 @@ static int cmd_store_kill(const char *base) {
 
 /* Attribute-key boundary counterexamples.
  *
- * The legacy reader matched `key=` as a bare substring, so an attribute
- * whose NAME ends with the key was read instead of the key itself:
- * `gain` read `action-gain=9.0` as 9.0. Confidently wrong rather than
- * missing, so nothing downstream could notice. These cases pin the
- * boundary rule permanently. */
+ * History: the legacy reader matched `key=` as a bare substring, so an
+ * attribute whose NAME ended with the key was read instead of the key —
+ * `gain` read `action-gain=9.0` as 9.0, confidently wrong rather than
+ * missing (D22). That reader has been deleted; these cases now pin the same
+ * properties on the reader that REPLACED it, because the property is what
+ * matters, not the implementation that happened to hold it.
+ *
+ * Two expected values changed with the reader, and the change is the point:
+ * key matching is now exact by construction (the statement is tokenized
+ * before any lookup), and a quoted value is returned COMPLETE and unquoted
+ * where the legacy reader truncated it at the first space. */
 static int cmd_attr_boundary(void) {
     static const struct {
-        const char *line;
+        const char *source;
         const char *key;
         int present;
         const char *value;
@@ -1180,44 +1013,53 @@ static int cmd_attr_boundary(void) {
          "first occurrence wins and is the whole token"},
         {"cell c subtheta=9.9 theta=1.5", "theta", 1, "1.5",
          "order does not let a suffix name win"},
-        {"job j precision=1.0", "precision", 1, "1.0", "exact key reads"},
-        {"job j imprecision=7.0", "precision", 0, "",
+        {"guard g precision=1.0", "precision", 1, "1.0", "exact key reads"},
+        {"guard g imprecision=7.0", "precision", 0, "",
          "a suffix match with no boundary is not a match"},
-        {"a=1 b=2", "a", 1, "1", "a key at the very start of the line reads"},
-        /* The reason scripts/verify.sh forbids a quoted value on any
-         * runtime-consumed attribute: this reader stops at the first space,
-         * so a quoted value arrives TRUNCATED and wrong rather than
-         * rejected. The grammar-1 frontend would strip the quotes and keep
-         * the whole value, which is why the two must not both be live on
-         * the same attribute. */
+        {"cell c theta=1.5 theta=9.9", "theta", 1, "1.5",
+         "first occurrence wins on a duplicated key"},
+        {"evolve e expect-contains=\"witness memory\" output=x",
+         "expect-contains", 1, "witness memory",
+         "a quoted value is returned complete, not truncated at a space"},
         {"evolve e expect-contains=\"witness memory\" output=x", "output", 1,
          "x", "a later attribute still reads past a quoted value"},
-        {"evolve e expect-contains=\"witness memory\"", "expect-contains", 1,
-         "\"witness", "a quoted value truncates at the first space"},
     };
     size_t i;
     int failures = 0;
 
     for (i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++) {
-        char value[64];
-        int got = cdc_read_attr(CASES[i].line, CASES[i].key, value,
-                                sizeof(value));
-        if (got != CASES[i].present) {
-            fprintf(stderr, "attr-boundary FAIL: %s (presence %d, want %d)\n",
-                    CASES[i].why, got, CASES[i].present);
+        cdc_unit unit;
+        cdc_diag_list diags;
+        const char *got;
+        cdc_diag_list_init(&diags);
+        cdc_unit_init(&unit);
+        if (!cdc_unit_parse_buffer(CASES[i].source, strlen(CASES[i].source),
+                                   "<attr-boundary>", &unit, &diags) ||
+            diags.errors > 0 || unit.count != 1) {
+            fprintf(stderr, "attr-boundary FAIL: could not parse: %s\n",
+                    CASES[i].source);
             failures++;
+            cdc_diag_list_free(&diags);
+            cdc_unit_free(&unit);
             continue;
         }
-        if (got && strcmp(value, CASES[i].value) != 0) {
-            fprintf(stderr, "attr-boundary FAIL: %s (got %s, want %s)\n",
-                    CASES[i].why, value, CASES[i].value);
+        cdc_diag_list_free(&diags);
+        got = cdc_stmt_attr_first(&unit.stmts[0], CASES[i].key);
+        if ((got != NULL) != (CASES[i].present != 0)) {
+            fprintf(stderr, "attr-boundary FAIL: %s (presence %d, want %d)\n",
+                    CASES[i].why, got != NULL, CASES[i].present);
+            failures++;
+        } else if (got && strcmp(got, CASES[i].value) != 0) {
+            fprintf(stderr, "attr-boundary FAIL: %s (got [%s], want [%s])\n",
+                    CASES[i].why, got, CASES[i].value);
             failures++;
         }
+        cdc_unit_free(&unit);
     }
     if (failures) {
         return 1;
     }
-    printf("attr-boundary ok cases=%zu shadowing=0 quoted-truncation=documented\n",
+    printf("attr-boundary ok cases=%zu shadowing=0 quoted-value=complete\n",
            sizeof(CASES) / sizeof(CASES[0]));
     return 0;
 }
@@ -2657,7 +2499,7 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr,
                 "usage: cdc_frontend_check "
-                "dump|canon|roundtrip|attr-parity|bounds|oom|reject ...\n");
+                "dump|canon|roundtrip|bounds|oom|reject ...\n");
         return 2;
     }
     if (strcmp(argv[1], "dump") == 0) {
@@ -2668,9 +2510,6 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "roundtrip") == 0) {
         return cmd_roundtrip(argc - 2, argv + 2);
-    }
-    if (strcmp(argv[1], "attr-parity") == 0) {
-        return cmd_attr_parity(argc - 2, argv + 2);
     }
     if (strcmp(argv[1], "bounds") == 0) {
         return cmd_bounds();
