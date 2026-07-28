@@ -29,7 +29,7 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
     compare-and-set fence, on a resumable replay chain (D14).
   - `1ea1ddd` — out-of-process **kill-based** crash matrix (SIGKILL in a
     forked child; recovery asserted by the surviving parent).
-  - `98e4077` — **G10: persistence is a language form** (D15).
+  - `bad2297` — **G10: persistence is a language form** (D15).
     `store`/`persist` source directives, capability `H6`,
     `framework_persistence.cdc`; `op=append` routes through the same
     `execute_commit` barrier, so durable mutation is unreachable except
