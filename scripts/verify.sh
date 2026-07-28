@@ -1010,9 +1010,20 @@ fi
 echo "corpus identity tracks source content (probe restored)"
 
 # Reproducible native binaries: the same sources, built twice, byte-identical.
+# On Darwin, Apple's linker mints a per-link LC_UUID — identification
+# metadata the inputs do not determine, and the ONLY byte that differed
+# when the macOS lane first ran this gate (D31). It is excluded there so
+# the comparison covers everything the sources DO determine: code, data,
+# layout, and the ad-hoc signature computed over them. The exclusion is
+# stated here, not hidden in a weaker comparison.
+REPRO_LDFLAGS=""
+if [ "$(uname)" = "Darwin" ]; then
+  REPRO_LDFLAGS="-Wl,-no_uuid"
+fi
 rm -f build/repro_a build/repro_b
 for ROUND in a b; do
-  cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
+  # shellcheck disable=SC2086
+  cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread $REPRO_LDFLAGS \
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \

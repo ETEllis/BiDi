@@ -46,6 +46,25 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D31 — 2026-07-28 — The linker's UUID is not the build's content
+
+The new macOS full-suite lane earned its keep on its first run: every
+native, store, persistence, and coordination gate passed on BSD userland,
+and the ONE failure was `cmp build/repro_a build/repro_b` — two
+identical-input links differing at a single region, the Mach-O
+`LC_UUID` load command. Apple's linker mints that identifier per link; it
+is identification metadata the inputs do not determine, in the same
+category as an archive timestamp, not code.
+
+The repro gate now links with `-Wl,-no_uuid` ON DARWIN ONLY, and says so
+at the comparison. Scope of the D21 claim, restated precisely: on every
+platform the byte-compare covers everything the sources determine —
+code, data, layout, and (on Darwin) the ad-hoc signature computed over
+them; on Darwin the linker's per-link identifier is excluded and the
+exclusion is visible in the gate, not buried in a fuzzier comparison.
+Cross-toolchain and cross-machine reproducibility remain unclaimed, as
+before.
+
 ## D30 — 2026-07-28 — Second review round at 810f1f6: four narrow repairs
 
 The reviewer accepted D29's mechanism, ran the suite on a real Mac, and
