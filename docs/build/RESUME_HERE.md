@@ -1,179 +1,99 @@
-# RESUME_HERE — BiDi/CDC lane: full baton to completion
+# RESUME_HERE — BiDi/CDC lane: baton complete in this repository
 
-Updated 2026-07-24. This is the complete continuation contract from the
-current head through the end of the amendment's Phase L, written for
-whichever agent holds the baton next (per amendment §14 the integration
-lane inherits when this lane's capacity ends). Read in order:
-`CDC_TOOLCHAIN_PLAN.md` (with Amendment Record) → the two operator-held
-documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
-`CDC_MEMORY_MANIFOLD_INTERFACE.md` → `docs/build/BUILD_STATE.md` →
-`docs/build/DECISIONS.md` (D1–D18).
+Updated 2026-07-28. **Every component executable in this repository is
+COMPLETE and gated.** What remains is queued-with-reason, blocked on
+external access, or awaiting one operator decision — all listed below with
+their exact blockers. Read in order: `CDC_TOOLCHAIN_PLAN.md` (with
+Amendment Record) → the two operator-held documents (2026-07-22 amendment;
+2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D28).
 
 ## Current head (2026-07-28)
 
 - `main` = `3e851ff` — **PR #3 merged** under the baton's Section 1
-  authorization (all three preconditions verified at the pinned head
-  `82ab066`; merge commit preserves commit identities). Do not reuse PR #3.
-- Work branch `claude/bun-equivalent-build-plan-lxe772`, restarted from the
-  merged `main` (ADR D12), open as **draft PR #4**:
-  - `e4ba69b` — canonical BLAKE3 landed; **D2 interim-digest gate CLOSED**
-    (31 reference vectors one-shot + streaming, plain + ASan; evidence
-    re-digested by the vendored implementation; interim manifest retained).
-  - `41286c5` — **product surfaces**: `ui/design/mobius-tokens.json`
-    (single source of truth), `ui/macos/CDCStudio` (SwiftUI, zero deps),
-    `ui/web/console` (self-contained, replay-bound), and
-    `scripts/verify_ui.sh` wired into the main gate.
-  - `0ea36ae` — CI repair: the CDC Studio build is gated on **Darwin**, not
-    merely on a `swift` binary (the Ubuntu runner has swift, not SwiftUI).
-  - `1722d96` — **store protocol complete**: snapshot, compact, and the
-    compare-and-set fence, on a resumable replay chain (D14).
-  - `1ea1ddd` — out-of-process **kill-based** crash matrix (SIGKILL in a
-    forked child; recovery asserted by the surviving parent).
-  - `bad2297` — **G10: persistence is a language form** (D15).
-    `store`/`persist` source directives, capability `H6`,
-    `framework_persistence.cdc`; `op=append` routes through the same
-    `execute_commit` barrier, so durable mutation is unreachable except
-    through an accepted commit decision.
-  - **review repair (2026-07-28)** — store generations + interprocess
-    lock, head-bound provenance, required macOS CI lane (D16).
-- Full `./scripts/verify.sh` green locally at the current head.
-- **UI is now a gate requirement**: no product gate closes without its
-  surface locked to the canonical tokens and its data bound to real runtime
-  output.
+  authorization. PR #3 is finished and must not be reused.
+- Work branch `claude/bun-equivalent-build-plan-lxe772`, open as **draft
+  PR #4**, carries the whole post-merge arc. Rather than pinning SHAs that
+  drift, the arc is indexed by its decision record: BLAKE3 + product
+  surfaces + store protocol (D13–D14), persistence as a language form
+  (D15), the 2026-07-28 review repair — store generations, real
+  interprocess serialization, head-bound provenance, required macOS CI
+  lane, claims withdrawn (D16), CT2/CT3/CT0 closure — typed receipts,
+  ordered vectors with a chained trace digest, lifecycle contract,
+  whole-binary sanitizers, closure witnesses, corpus-bound verdicts
+  (D17–D21), the deletion gates through the scanner (D22–D27), and
+  Phase I — `cdc build` / `cdc install` / `cdc x` (D28).
+- Full `./scripts/verify.sh` green locally at this head, including the
+  Phase I gate section and the sanitized Phase I sweep.
+- The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
+  never merged and every finding is repaired with permanent
+  counterexamples (D16 records the withdrawn claims). **Do not merge PR #4
+  without operator sign-off.**
 
-## External actions needed (not blockers for CDC work)
+## COMPLETE in this repository (all hard-gated in `./scripts/verify.sh`)
 
-1. `ETEllis/Memory-Manifold` repository access — the `add_repo` request was
-   denied by this environment's classifier. Blocks Memory Phases A/E–H only.
-2. `ETEllis/GIST` access and the Superposition source bundle — blocks Phase K
-   and GIST Track M only.
-3. A macOS host to compile `ui/macos/CDCStudio`. There is no Swift
-   toolchain in this container at all, so the required `macos-14` CI lane
-   is the compiler of record — every Swift change here is unverified until
-   that lane runs.
+1. **Canonical frontend + ABI** (grammar 1, ABI 1.3), differential oracle,
+   adversarial/allocator/sanitizer sweeps (D5, D7, D13, D17).
+2. **Unified `cdc` driver**: verify/run/test/build/install/x + legacy verb
+   passthrough, byte-identical to the standalone binaries.
+3. **Durable store**: sealed transactions, typed recovery, generations
+   with atomic activation, fcntl serialization, triple fence token,
+   attest-from-byte-0; in-process + SIGKILL crash matrices; 8-boundary
+   transition matrix; fresh-after-crash (D10–D16, D27).
+4. **Persistence as a language form**: `store`/`persist` directives gated
+   by the same commit barrier; durable/replay observed, never declared
+   (D15).
+5. **Typed effect receipts, parity vectors, lifecycle contract, closure
+   witnesses, corpus-bound verdicts, same-machine reproducible builds**
+   (D17–D21). CT0, CT2, CT3 CLOSED.
+6. **Deletion gates**: legacy scanner deleted after a real defect fix and
+   a pinned migration precondition; both runtimes migrated to `cdc_stmt`
+   accessors with differential evidence; `attr-parity` retired;
+   `attr-boundary` repointed; `cdc_boot.py --dump` deliberately kept as
+   the last independent oracle (D22–D26).
+7. **Phase I**: `cdc build` proof-carrying bundles (deterministic,
+   cross-checked, refusal-first); `cdc install` crash-durable journaled
+   installs on the cdc_store substrate (kill matrix, held-writes-nothing,
+   zero-evidence refusal, idempotent/divergent reinstalls, typed
+   receipts); `cdc x` manifest-verified trusted-local execution (D28).
 
-## Where the build stands (exact)
+## QUEUED, with recorded reasons (not blockers, not claims)
 
-- **CT0 CLOSED** (D21) — provenance manifest head-bound and gated on both
-  path set and bytes; verdicts carry a corpus identity cross-checked by an
-  independent binary; the unified binary reproduces byte-identically on the
-  same machine and compiler. Cross-toolchain reproducibility is explicitly
-  not claimed.
-- **CT1 PASS** — frontend differential + both review counterexamples,
-  hard-gated incl. ASan/UBSan.
-- **CT2 SUBSTANTIALLY LIVE** — ABI 1.2; toolchain-verify-parity
-  (byte-identical bootloader reports, success + failure); unified binary
-  passthrough parity (12 modes, exit codes included). Open: ordered
-  per-check vector export; full-binary sanitizer sweep.
-- **CT3 SUBSTANTIALLY LIVE** — `cdc test --gate` with the A7 typed policy
-  (separate commit/hold/nest/fail; undeclared holds fail the gate even at
-  runtime exit 0 — silent_hold.cdc fixture); `cdc run` is the fused
-  single-process executor (universal closure path; multi-stage chaining
-  over one live Runtime; fail-closed). Open: cancellation/budget/
-  deterministic-mode contract; per-check vectors; cycles=N (blocked on
-  per-cycle expectation families — inline expect-* pins first-cycle
-  state; this is a language-design item, not a runtime bug).
-- **CT4/MM1 SUBSTANTIALLY LIVE** — `cdc_store`: append-only sealed
-  transactions, tag-checked record framing (v2, UNKEYED — corruption not
-  forgery), typed three-way recovery (torn tail / corrupt prefix / I/O
-  fault), fsync(file+dir) boundaries, canonical BLAKE3 identities, replay
-  determinism, attest covering the HEAD; **generations** — the compaction
-  base lives in the log's HEAD, `snapshot` prepares and `compact` activates
-  atomically (fsync/rename/dir-fsync), identity-bound by store uuid and
-  monotonic generation (D16); **interprocess fcntl lock** held across
-  re-scan+append+both fsyncs and across compaction, with the fence token a
-  (generation, sealed, replay-state) triple (D16); crash matrix green at
-  all 7 commit boundaries in-process **and** out-of-process via SIGKILL,
-  plus 8 transition boundaries old-or-new-never-mixed (plain + ASan).
-  **Persistence is a language form** (D15): `store`/`persist` directives,
-  capability `H6`, `op=append` gated by the same balanced-ternary barrier
-  as `commit`; `durable`/`replay` observed rather than declared.
-  Open: keyed authentication (Ed25519 over the HEAD) and an external
-  anchor so whole-file generation rollback is detectable; typed effect
-  receipts / closure witnesses through the ABI; binding the episodic
-  framework (`H3`) onto a declared store.
-- **PC6 HARD-PAUSED** (unchanged, untouchable from this lane).
-- PR #3: **merged** at `3e851ff` — finished, never to be reused. PR #4:
-  draft, open. The 2026-07-28 review requested changes at `1ea1ddd` and
-  that head must not be merged; the repair is D16. **Do not merge without
-  operator sign-off.**
+- **Ed25519 keyed authentication + external anchor** — integrity tags are
+  unkeyed (corruption detection, not forgery resistance); whole-file
+  generation rollback is detectable only against an externally retained
+  anchor. Stated in D16; queued behind CT5-adjacent key management.
+- **CT5: sealed capability environment + hostile-package
+  counterexamples** — until these pass, `cdc x` is TRUSTED-LOCAL-ONLY
+  (no network, no registries, no archives; verification is drift/tamper
+  detection, not a sandbox). Stated in code, docs, and matrix (D28).
+- **`package.cdc` manifest layer, versioning, lockfile** — packages are
+  plain directories installed by name; versioned coexistence arrives with
+  the manifest layer (plan Amendment Record).
+- **`cycles=N` per-cycle expectation families** — inline expect-* pins
+  first-cycle state; a language-design item, not a runtime bug (D19 era).
+- **Fuzzing beyond the deterministic corpus** — queued for CT1 full
+  closure.
 
-## Baton: remaining work in dependency order
+## AWAITING EDWARD (one decision; nothing proceeds without it)
 
-1. **Phase D — COMPLETE.** BLAKE3 vendored and evidence re-digested (D2
-   closed); snapshot/compact/fence landed on a resumable replay chain
-   (D14); kill-based out-of-process crash injection landed; persistence
-   declared as `.cdc` jobs with durable mutation routed through a BiDi
-   commit decision (D15, amendment D.6 + A10). Remaining Phase-D-adjacent
-   work has moved into step 2: typed effect receipts and closure witnesses
-   through the ABI.
-2. **CT2/CT3 closure (this repo).** Landed: typed effect receipts (D17,
-   ABI 1.3) — outcomes are structured records, `cdc test` classifies from
-   fields rather than prose, receipt/prose parity gated; ordered per-check
-   parity vectors (D18) from `cdc verify --vectors` and
-   `cdc test --vectors`, with ordering made load-bearing by the chained
-   trace digest; lifecycle contract and whole-binary sanitizer sweep (D19)
-   — budgets and cancellation at effect boundaries with the store proven
-   intact at every stop point, determinism gated over prose/receipts/
-   vectors, and the unified `cdc` binary now instrumented and required to
-   agree with the plain build field-for-field.
-   Closure witnesses landed too (D20): receipts carry
-   `witness=<id> closure=<digest>` and the vector carries it through, so
-   the section-7 record is complete — every field holds an honest value or
-   an explicit "-".
-   CT0 completed too (D21): verdicts carry a corpus identity cross-checked
-   by a second binary, and the unified binary reproduces byte-identically
-   (same machine, same compiler — cross-toolchain reproducibility is not
-   claimed).
-   **CT2/CT3 and CT0 are closed.** Next is step 3.
-3. **Deletion gates (this repo, after 2).** IN PROGRESS.
-   Done so far: D22 fixed a live defect in the legacy reader (`gain` read
-   `action-gain=9.0` as 9.0 — confidently wrong, never exercised by the
-   corpus); D23 pinned the migration precondition (no runtime-consumed
-   attribute may be quoted, 101 consumed, 0 quoted, gated); D24 migrated
-   the BRIDGE runtime (no fgets / cdc_starts_with / cdc_read_attr remain
-   in it, 14 of 16 invocations byte-identical against a pre-migration
-   build, the 2 differences being improved error paths with unchanged exit
-   codes).
-   What remains of step 1 is the SAME pattern applied to
-   `runtime/cdc_native_runtime.c`, which is larger: swap the `add_*`
-   functions from raw lines to `cdc_stmt` accessors, reusing the
-   `stmt_attr_copy` shim from the bridge migration so loop bodies stay
-   unchanged, and differential the result against a stashed-source build
-   rather than trusting inspection.
-   DONE (D26): the scanner is deleted, `attr-parity` retired with it,
-   `attr-boundary` was repointed at the surviving reader, and
-   `cdc_boot.py --dump` deliberately STAYS as the last independent oracle.
-   The frontend-differential-dump gate is split accordingly.
-   Deleting `cdc_boot.py` itself is written up in
-   `docs/build/BOOTLOADER_DELETION_PROPOSAL.md` and is BLOCKED on Edward's
-   choice between freeze / replace-then-delete / delete-now. Do not touch
-   the kernel floor until he answers.
-   Then migrate the remaining internals (byte-identical outputs; greps are
-   the net) → delete legacy scanner + `cdc_boot.py --dump`
-   (frontend-differential-dump gate) → after toolchain-verify-parity
-   holds a full release cycle, delete `cdc_boot.py` and renegotiate
-   `python-files == 1` → `== 0` in kernel.cdc (operator-approved kernel
-   change). External fuzzing lands here for CT1 full closure.
-4. **Phase I (this repo).** `cdc install/build/x` per the plan +
-   amendment A3/A4/A8: BLAKE3 manifests binding
-   source/deps/toolchain/grammar-ABI/artifact/test/proof digests;
-   crash-durable installs on the cdc_store substrate (the store's sealed
-   transactions ARE the install journal); `cdc x` trusted-local-only
-   until the sealed capability environment passes hostile-package gates
-   (CT5).
-5. **Phases E–H (Memory Manifold repo — NOT this repo).** Blocked in this
-   environment until that repository is added to a session (or executed
-   locally). The interface contract v1.0.3 (H12–H17, data contracts,
-   store protocol, read/decide/apply semantics) is the binding surface;
-   the cdc_store sealed-transaction + replay-digest model is the intended
-   persistence core. MM0–MM6 gates as specified in the amendment.
-6. **Phases J–L.** Product/SDK conformance (MM7), Superposition backend
-   substitution (MM8 — requires the operator-side worktree; the adapter
-   contract is interface §5), comparative/adversarial evidence (MM9),
-   independent reproduction (RG0). These are integration-lane and
-   operator-gated; nothing here may convert local evidence into device
-   claims, and PC6 stays paused until its own gate.
+- **`cdc_boot.py` deletion** — `docs/build/BOOTLOADER_DELETION_PROPOSAL.md`
+  lays out freeze (A) / replace-then-delete (B) / delete-now (C) with the
+  exact `kernel.cdc` gate diff. Until he chooses, the status quo IS
+  option A: the bootloader stays, `python-files == 1` stays, and the
+  toolchain-verify-parity gate keeps both honest. **Do not touch the
+  kernel floor.**
+
+## BLOCKED EXTERNAL (unchanged)
+
+1. `ETEllis/Memory-Manifold` repository access — blocks Phases E–H. The
+   interface contract v1.0.3 is the binding surface; the cdc_store sealed
+   transaction + replay-digest model is the intended persistence core.
+2. `ETEllis/GIST` access + the Superposition source bundle — blocks
+   Phase K and GIST Track M.
+3. A macOS host — the required `macos-14` CI lane is the Swift compiler
+   of record for `ui/macos/CDCStudio`.
+4. **PC6 stays HARD-PAUSED.** Nothing in this lane may resume it.
 
 ## Hard rules in force (unchanged)
 
@@ -183,4 +103,5 @@ paths until recorded removal gates. Unreadable/non-regular sources are
 CDC_ERR_IO; diagnostics never truncate. Balanced ternary stays typed;
 merged pass totals forbidden; durable mutation behind commit semantics;
 single writer per worktree; interface versions change only by new digest;
-no identifier reuse. No public claim rests on an interim digest.
+no identifier reuse. No public claim rests on an interim digest. Always
+run `./scripts/regen_provenance.sh` and re-stage before committing.

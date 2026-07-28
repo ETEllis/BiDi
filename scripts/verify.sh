@@ -312,6 +312,9 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/toolchain/main.c \
   runtime/toolchain/cmd_verify.c \
   runtime/toolchain/cmd_test.c \
+  runtime/toolchain/cmd_build.c \
+  runtime/toolchain/cmd_install.c \
+  runtime/toolchain/cmd_x.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
   runtime/cdc_parser.c \
@@ -890,6 +893,9 @@ for ROUND in a b; do
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \
+    runtime/toolchain/cmd_build.c \
+    runtime/toolchain/cmd_install.c \
+    runtime/toolchain/cmd_x.c \
     runtime/cdc_abi.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
@@ -1149,6 +1155,9 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \
+    runtime/toolchain/cmd_build.c \
+    runtime/toolchain/cmd_install.c \
+    runtime/toolchain/cmd_x.c \
     runtime/cdc_abi.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
@@ -1186,6 +1195,23 @@ if [ "$SANITIZED" = "1" ]; then
   grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0 corpus=blake3:" \
     build/cdc_test_asan.txt
   cmp build/test_vectors.txt build/vectors_exec_asan.txt
+  # Phase I under instrumentation: the full build/install/x flow, including
+  # a held install, runs through the sanitized binary. The sanitized bundle
+  # goes to its own directory; the Phase I section (which runs after this)
+  # byte-compares it against the plain binary's artifact.
+  mkdir -p build/asan_build
+  # shellcheck disable=SC2086
+  CDC_BUILD_DIR=build/asan_build run_step ./build/cdc_asan build $CDC_ROOT_SOURCES
+  rm -rf build/cdc_modules_asan
+  CDC_MODULES=build/cdc_modules_asan run_step ./build/cdc_asan install \
+    tests/fixtures/packages/ternary-stats
+  CDC_MODULES=build/cdc_modules_asan run_step ./build/cdc_asan x \
+    ternary-stats stats.cdc
+  if CDC_MODULES=build/cdc_modules_asan ./build/cdc_asan install \
+    tests/fixtures/packages/broken-stats >/dev/null 2>&1; then
+    echo "sanitized cdc install latched a failing package" >&2
+    exit 1
+  fi
   # The instrumented binary must agree with the plain one, not merely avoid
   # crashing: identical contract report, identical vectors, identical gate.
   echo "whole-binary sanitizer sweep ok (verify/run/test/bridge under ASan+UBSan,"
@@ -1193,6 +1219,216 @@ if [ "$SANITIZED" = "1" ]; then
 else
   echo "sanitizers unavailable; skipping whole-binary sweep"
 fi
+
+echo
+echo "== Phase I: cdc build / cdc install / cdc x [gate CT5 seed] =="
+# cdc build: a proof-carrying bundle. The artifact is the canonical
+# serialization of the source set; the manifest binds grammar/ABI versions,
+# per-source digests, the corpus identity (D21), the artifact digest, and
+# the contract verdict. A red corpus is never bundled, and a bundle that
+# does not re-verify with the same checks and verdicts is never emitted.
+rm -f build/cdc-bundle.cdc build/cdc-bundle.manifest
+# shellcheck disable=SC2086
+./build/cdc build $CDC_ROOT_SOURCES | tee build/cdc_build.txt
+grep -q "cdc build ok files=19 statements=[0-9]* checks=253/253 corpus=blake3:" \
+  build/cdc_build.txt
+# determinism: build twice, both artifacts byte-identical (no timestamps,
+# no absolute paths — D21's reproducibility extended to artifacts)
+cp build/cdc-bundle.cdc build/bundle_round_a.cdc
+cp build/cdc-bundle.manifest build/manifest_round_a.txt
+# shellcheck disable=SC2086
+./build/cdc build $CDC_ROOT_SOURCES > /dev/null
+cmp build/bundle_round_a.cdc build/cdc-bundle.cdc
+cmp build/manifest_round_a.txt build/cdc-bundle.manifest
+# the instrumented binary produced the identical artifacts earlier in the
+# sanitizer sweep (skipped silently when sanitizers are unavailable)
+if [ -f build/asan_build/cdc-bundle.cdc ]; then
+  cmp build/asan_build/cdc-bundle.cdc build/cdc-bundle.cdc
+  cmp build/asan_build/cdc-bundle.manifest build/cdc-bundle.manifest
+fi
+# independent cross-check from a DIFFERENT binary: the bundle must equal
+# the concatenated canonical serialization of the sources
+# shellcheck disable=SC2086
+./build/cdc_frontend_check canon $CDC_ROOT_SOURCES > build/canon_concat.txt
+cmp build/canon_concat.txt build/cdc-bundle.cdc
+# and the manifest's corpus line must equal the independently computed
+# corpus identity from the CT0 section
+BUILD_CORPUS=$(grep '^corpus ' build/cdc-bundle.manifest | awk '{print $2}')
+test "$BUILD_CORPUS" = "$CORPUS_ROOT"
+# shellcheck disable=SC2086
+run_step ./build/cdc build --check $CDC_ROOT_SOURCES
+# Counterexample: a tampered bundle is detected, typed as a bundle/manifest
+# disagreement (which side moved cannot be attributed from inside, and is
+# not pretended).
+printf 'x' >> build/cdc-bundle.cdc
+# shellcheck disable=SC2086
+if ./build/cdc build --check $CDC_ROOT_SOURCES > build/build_tamper.txt 2>&1; then
+  echo "cdc build --check accepted a tampered bundle" >&2
+  exit 1
+fi
+grep -q "artifact-mismatch" build/build_tamper.txt
+# shellcheck disable=SC2086
+./build/cdc build $CDC_ROOT_SOURCES > /dev/null
+# Counterexample: source drift is detected and NAMED. The probe is restored
+# before any assertion runs.
+cp kernel.cdc build/kernel_probe.bak
+printf '\n# drift probe\n' >> kernel.cdc
+set +e
+# shellcheck disable=SC2086
+./build/cdc build --check $CDC_ROOT_SOURCES > build/build_drift.txt 2>&1
+DRIFT_RC=$?
+set -e
+cp build/kernel_probe.bak kernel.cdc
+cmp kernel.cdc build/kernel_probe.bak
+test "$DRIFT_RC" != "0"
+grep -q "source-drift (kernel.cdc)" build/build_drift.txt
+# Counterexample: a red corpus is refused and existing artifacts are
+# untouched by the refusal.
+cp build/cdc-bundle.cdc build/bundle_red.bak
+cp build/cdc-bundle.manifest build/manifest_red.bak
+# shellcheck disable=SC2086
+if ./build/cdc build $CDC_ROOT_SOURCES build/fixture_fail_expect.cdc \
+  > build/build_red.txt 2>&1; then
+  echo "cdc build bundled a red corpus" >&2
+  exit 1
+fi
+grep -q "refused" build/build_red.txt
+cmp build/bundle_red.bak build/cdc-bundle.cdc
+cmp build/manifest_red.bak build/cdc-bundle.manifest
+echo "cdc build ok (deterministic, cross-checked, tamper/drift/red-corpus refused)"
+
+# cdc install: crash-durable directory packages on the store substrate.
+# The journal's sealed transactions ARE the install record; the directory
+# latch is staging + fsync + rename, so a crash leaves either no package
+# or a complete one — never a partial tree wearing the real name.
+rm -rf build/cdc_modules
+CDC_MODULES=build/cdc_modules CDC_RECEIPTS=build/install_receipt.txt \
+  ./build/cdc install tests/fixtures/packages/ternary-stats \
+  | tee build/install.txt
+grep -q "cdc install ok name=ternary-stats files=1 sealed=1 corpus=blake3:" \
+  build/install.txt
+test -f build/cdc_modules/ternary-stats/stats.cdc
+test -f build/cdc_modules/ternary-stats/.manifest
+./build/cdc_frontend_check store-inspect build/cdc_modules/.journal \
+  | tee build/install_journal.txt
+grep -q "open=ok recovered=0 sealed=1 events=2 generation=0 verify=ok" \
+  build/install_journal.txt
+# The install effect carries a typed receipt (D17 carrier): outcome,
+# durability, and the journal position it latched at.
+grep -q "kind=install job=ternary-stats op=latch outcome=+1 reason=none declared-hold=0 durable=1 sealed=1 events=2" \
+  build/install_receipt.txt
+# idempotent reinstall: no journal growth, no divergence
+CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/ternary-stats | tee build/install_idem.txt
+grep -q "already-installed=identical" build/install_idem.txt
+./build/cdc_frontend_check store-inspect build/cdc_modules/.journal \
+  | grep -q " sealed=1 "
+# cdc x: manifest-verified execution through the fused executor.
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
+  | tee build/x.txt
+grep -q "cdc x package=ternary-stats entry=stats.cdc members=1 manifest=verified trusted=local" \
+  build/x.txt
+grep -q "cdc fused ok stages=1 source=build/cdc_modules/ternary-stats/stats.cdc" \
+  build/x.txt
+grep -q "cdc x ok package=ternary-stats entry=stats.cdc" build/x.txt
+# x leaves the project tree untouched (trusted-local execution is not a
+# license to write into the repository)
+git status --porcelain > build/x_tree_before.txt
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
+git status --porcelain > build/x_tree_after.txt
+cmp build/x_tree_before.txt build/x_tree_after.txt
+echo "cdc install + cdc x ok (journaled, latched, receipt-carried, tree untouched)"
+
+# Counterexamples, each named:
+# 1. a held package writes NOTHING — the journal is byte-identical and no
+#    directory appears (the persistence gate's byte-identity check, at the
+#    package level)
+cp build/cdc_modules/.journal/log.cdcstore build/journal_before_hold.bin
+if CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/broken-stats > build/install_hold.txt 2>&1; then
+  echo "cdc install latched a package whose contract fails" >&2
+  exit 1
+fi
+grep -q "cdc install held name=broken-stats reason=closure-violation" \
+  build/install_hold.txt
+cmp build/journal_before_hold.bin build/cdc_modules/.journal/log.cdcstore
+test ! -d build/cdc_modules/broken-stats
+# 2. zero expectations carry no evidence: refused, not installed
+if CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/silent-stats > build/install_silent.txt 2>&1; then
+  echo "cdc install accepted a package with no expectations" >&2
+  exit 1
+fi
+grep -q "reason=zero-evidence" build/install_silent.txt
+test ! -d build/cdc_modules/silent-stats
+# 3. kill matrix: the process genuinely dies at each named boundary; the
+#    package directory is NEVER present after a kill, the journal always
+#    opens and verifies, and a plain re-run heals the window
+for PHASE in before-journal after-journal before-latch; do
+  rm -rf build/cdc_modules
+  set +e
+  CDC_MODULES=build/cdc_modules CDC_INSTALL_KILL="$PHASE" \
+    ./build/cdc install tests/fixtures/packages/ternary-stats \
+    > /dev/null 2>&1
+  KILL_RC=$?
+  set -e
+  test "$KILL_RC" = "137"
+  test ! -d build/cdc_modules/ternary-stats
+  if [ "$PHASE" = "before-journal" ]; then
+    WANT_SEALED=0
+  else
+    WANT_SEALED=1
+  fi
+  ./build/cdc_frontend_check store-inspect build/cdc_modules/.journal \
+    | grep -q "open=ok recovered=0 sealed=${WANT_SEALED} .*verify=ok"
+  CDC_MODULES=build/cdc_modules ./build/cdc install \
+    tests/fixtures/packages/ternary-stats > /dev/null
+  test -f build/cdc_modules/ternary-stats/stats.cdc
+  CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
+    > /dev/null
+done
+echo "install kill matrix ok (3 boundaries: no partial directory, journal intact, re-run heals)"
+# 4. a tampered installed member is refused BY NAME before anything runs
+printf '#\n' >> build/cdc_modules/ternary-stats/stats.cdc
+if CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
+  > build/x_tamper.txt 2>&1; then
+  echo "cdc x executed a tampered member" >&2
+  exit 1
+fi
+grep -q "member stats.cdc does not match its manifest digest" build/x_tamper.txt
+rm -rf build/cdc_modules/ternary-stats
+CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/ternary-stats > /dev/null
+# 5. path traversal is a parse error of the request, not a filesystem walk
+if CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats '../../evil.cdc' \
+  > build/x_traversal.txt 2>&1; then
+  echo "cdc x accepted a path as an entry" >&2
+  exit 1
+fi
+grep -q "plain names, never paths" build/x_traversal.txt
+# 6. unmanifested code does not run, even when the entry itself is clean
+printf '# smuggled\n' > build/cdc_modules/ternary-stats/smuggled.cdc
+if CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
+  > build/x_smuggled.txt 2>&1; then
+  echo "cdc x ran with unmanifested code present" >&2
+  exit 1
+fi
+grep -q "unmanifested code does not run" build/x_smuggled.txt
+rm build/cdc_modules/ternary-stats/smuggled.cdc
+# 7. a divergent reinstall is refused, never silently replaced
+rm -rf build/ternary-stats
+mkdir -p build/ternary-stats
+cp tests/fixtures/packages/ternary-stats/stats.cdc build/ternary-stats/
+printf '# divergent\n' >> build/ternary-stats/stats.cdc
+if CDC_MODULES=build/cdc_modules ./build/cdc install build/ternary-stats \
+  > build/install_divergent.txt 2>&1; then
+  echo "cdc install silently replaced an installed package" >&2
+  exit 1
+fi
+grep -q "reason=already-installed-divergent" build/install_divergent.txt
+rm -rf build/ternary-stats
+echo "Phase I counterexamples ok (held-writes-nothing, zero-evidence, kill x3,"
+echo "  tamper-by-name, traversal, unmanifested, divergent-reinstall)"
 
 echo
 echo "== Native reducer runtime =="

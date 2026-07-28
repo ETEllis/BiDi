@@ -308,6 +308,27 @@ build/cdc_native_runtime universal framework_loop.cdc        # U720 closure: one
 build/cdc_native_runtime persist framework_persistence.cdc   # durable state, gated by the commit barrier
 ```
 
+The unified `cdc` driver carries the full toolchain surface:
+
+```bash
+build/cdc verify --contract *.cdc     # bootloader-parity contract report
+build/cdc verify --vectors *.cdc      # ordered per-check parity vectors
+build/cdc run framework_loop.cdc      # fused single-process executor
+build/cdc test --gate *.cdc           # typed ternary test runner (receipts)
+build/cdc build *.cdc                 # proof-carrying canonical bundle + manifest
+build/cdc install <package-dir>       # crash-durable install, journaled on cdc_store
+build/cdc x <package> <entry.cdc>     # manifest-verified execution (trusted-local-only)
+```
+
+`cdc build` refuses a red corpus and never emits a bundle that does not
+re-verify with the sources' own verdicts. `cdc install` seals each install
+as one durable store transaction — the journal IS the install record — and
+latches the directory atomically, so a crash leaves either no package or a
+complete one. `cdc x` re-digests every member against the install manifest
+before anything executes; it is trusted-local-only until the CT5
+hostile-package gates land, and that boundary is stated rather than
+sandboxed around.
+
 Persistence is a language form, not a host service the source reaches
 around the language to call. `store` declares a durable log the way `field`
 declares a continuum; `persist ... op=append` runs the **identical**

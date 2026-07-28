@@ -19,6 +19,40 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Phase I COMPLETE — `cdc build` / `cdc install` / `cdc x`
+  (2026-07-28, D28).** The last three toolchain commands are live and
+  hard-gated:
+  - `cdc build` emits the canonical bundle plus a manifest binding
+    grammar/ABI versions, per-source digests, the corpus identity, the
+    artifact digest, and the contract verdict. A red corpus is refused; a
+    bundle that does not re-verify with the sources' own verdicts is never
+    emitted; outputs are temp-then-rename, deterministic (built twice,
+    byte-compared), and cross-checked byte-for-byte against
+    `cdc_frontend_check canon`. `--check` types source-drift by file,
+    manifest-malformed by line, and bundle/manifest disagreement as
+    `artifact-mismatch` (which side moved is not guessable from inside).
+  - `cdc install` journals every member through a sealed `cdc_store`
+    transaction (the journal IS the install record) and latches the
+    directory by staging + fsync + rename. Kill matrix at three named
+    boundaries (process genuinely SIGKILLed, rc=137): the package
+    directory is never present after a kill, the journal always opens and
+    verifies, a plain re-run heals. A held package writes NOTHING (journal
+    byte-identity gated); zero expectations refuse (`zero-evidence`);
+    reinstalls are idempotent when identical and refused typed when
+    divergent. The install effect carries a D17 receipt.
+  - `cdc x` re-digests every member against the install manifest, requires
+    the directory to be exactly the manifest's member set (unmanifested
+    code does not run), recomputes the corpus identity, and rejects path
+    separators in the request itself. TRUSTED-LOCAL-ONLY until CT5; the
+    boundary is stated in code, docs, and matrix, not sandboxed around.
+  - The sanitized sweep runs Phase I too, and caught a real bug on first
+    contact (unterminated `read_all` buffers walked into the heap).
+  - `deletion gates status`: scanner deleted, `attr-parity` retired,
+    `attr-boundary` repointed, `--dump` kept as the last independent
+    oracle (D22–D27); `cdc_boot.py` deletion awaits Edward's A/B/C choice
+    (`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`); kernel floor
+    untouched.
+
 - **Independent review of `1ea1ddd` repaired (2026-07-28).** Two mechanism
   defects and three overclaims. Recorded as D16; the withdrawn claims are
   listed there rather than softened here.
@@ -356,31 +390,22 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 ## Next executable action
 
-Phase D is complete. Next is **CT2/CT3 closure**, in this order:
+None in this repository. Every component executable here is complete and
+gated (Phases A–D, CT0–CT3 closure, the deletion gates through the
+scanner, Phase I). Remaining items by category:
 
-0. **Keyed authentication and an external anchor (from the 2026-07-28
-   review).** Integrity tags are unkeyed: they catch corruption, not a
-   motivated forger. Ed25519 over the HEAD, plus an anchor retained outside
-   the store directory, is what would make whole-file generation rollback
-   detectable. Until then the boundary is stated, not claimed.
-1. **Typed effect receipts through the ABI.** A persist job's outcome is
-   currently only a report line that `cdc test` greps. It should be
-   retrievable as a structured record (job id, op, ternary status, typed
-   reason, sealed/event counts, durable and replay observations) so a
-   consumer does not parse prose. This is also the natural carrier for
-   closure witnesses.
-2. **Ordered per-check vector export** (interface §7 format) from
-   `cdc test` and `cdc verify`, gated against the bootloader per-check
-   ordering, not just the aggregate report.
-3. **Lifecycle contract for `cdc run`** — cancellation, budgets, and a
-   deterministic mode; then the full-binary sanitizer sweep (today only the
-   frontend and the persistence path are instrumented).
-4. **CT0 completion** — reproducible native binaries plus the manifest
-   digest embedded in every verdict line.
-
-Then the deletion gates (legacy scanner, `--dump`, eventually
-`cdc_boot.py`), then Phase I. Fuzzing beyond the deterministic corpus
-remains queued for CT1 PASS.
+- **Queued with recorded reasons**: Ed25519 keyed authentication +
+  external anchor; CT5 sealed capability environment + hostile-package
+  counterexamples (until then `cdc x` is trusted-local-only);
+  `package.cdc` manifest layer / versioning / lockfile; `cycles=N`
+  per-cycle expectation families; fuzzing beyond the deterministic corpus
+  (CT1 full closure).
+- **Awaiting Edward**: the `cdc_boot.py` deletion choice
+  (`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`, options A/B/C). Status
+  quo is option A; the kernel floor stays untouched until he chooses.
+- **Blocked external**: Memory Manifold repository (Phases E–H); GIST /
+  Superposition bundle (Phase K, Track M); macOS host (CI lane is the
+  Swift compiler of record). PC6 stays hard-paused.
 
 ## External blockers
 

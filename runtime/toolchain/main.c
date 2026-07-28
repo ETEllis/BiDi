@@ -7,8 +7,11 @@
 #include <string.h>
 
 #include "../cdc_abi.h"
+#include "cmd_build.h"
+#include "cmd_install.h"
 #include "cmd_test.h"
 #include "cmd_verify.h"
+#include "cmd_x.h"
 
 /* Transitional passthrough entry points (gate CT2): the legacy runtimes'
  * guarded mains, linked with CDC_NATIVE_NO_MAIN / CDC_BRIDGE_NO_MAIN so the
@@ -36,12 +39,6 @@ static int cmd_version(void) {
     uint32_t version = cdc_abi_version();
     printf("cdc abi=%u.%u grammar=1\n", version >> 16, version & 0xffffu);
     return 0;
-}
-
-static int cmd_unavailable(const char *name, const char *phase) {
-    fprintf(stderr, "cdc %s: lands with %s (see CDC_TOOLCHAIN_PLAN.md)\n",
-            name, phase);
-    return 3;
 }
 
 static void usage(FILE *stream) {
@@ -86,9 +83,14 @@ int main(int argc, char **argv) {
         usage(stderr);
         return 2;
     }
-    if (strcmp(argv[1], "install") == 0 || strcmp(argv[1], "build") == 0 ||
-        strcmp(argv[1], "x") == 0) {
-        return cmd_unavailable(argv[1], "Phase I");
+    if (strcmp(argv[1], "build") == 0) {
+        return cdc_cmd_build(argc - 2, argv + 2);
+    }
+    if (strcmp(argv[1], "install") == 0) {
+        return cdc_cmd_install(argc - 2, argv + 2);
+    }
+    if (strcmp(argv[1], "x") == 0) {
+        return cdc_cmd_x(argc - 2, argv + 2);
     }
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
         usage(stdout);

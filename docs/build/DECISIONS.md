@@ -46,6 +46,81 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D28 — 2026-07-28 — Phase I: cdc build / cdc install / cdc x
+
+The last three toolchain commands are live. Design decisions worth pinning,
+in the order they bit:
+
+**`cdc build` is a refusal machine first and an emitter second.** A red
+corpus is never bundled — an artifact is a claim that its sources stood
+behind their contract, and a failing tree cannot make that claim. A bundle
+that does not re-verify with the same checks, verdicts, and evaluated
+labels as its sources (compared modulo the [file:line] provenance suffix,
+which legitimately differs) is never emitted. Outputs are temp-then-rename,
+so a refusal or crash never leaves a partial artifact wearing the real
+name. Both outputs are deterministic and the gate builds twice and
+byte-compares — D21's reproducibility extended to artifacts. The bundle is
+cross-checked by a DIFFERENT binary (`cdc_frontend_check canon` must equal
+it byte-for-byte), and the manifest's corpus line must equal the
+independently computed corpus identity.
+
+**`--check` refuses to over-attribute.** `source-drift` names the file;
+`manifest-malformed` names the line. But when the bundle and the manifest
+disagree, which side moved cannot be determined from inside the pair, so
+the type is `artifact-mismatch` — not a guess dressed as a diagnosis.
+
+**`cdc install` reuses D16's machinery instead of growing a second
+durability mechanism.** The journal is a cdc_store; its sealed transactions
+ARE the install record (member name, content digest, content, corpus
+identity — one atomic seal). The directory latch is staging + fsync +
+rename. The kill matrix runs the process to actual death at three named
+boundaries and asserts the invariants that matter: the package directory is
+NEVER present after a kill, the journal always opens clean and verifies,
+and a plain re-run heals. The one window — a sealed journal entry whose
+directory never appeared (kill between journal and latch) — is documented
+and healed, not hidden.
+
+**Zero expectations refuse the install.** The same rule B4 imposed on the
+test gate: zero executed checks carry no evidence, and a package manager
+that silently installs unevidenced code is the install-time version of a
+merged pass total. A held package writes NOTHING, gated externally by
+byte-comparing the journal — the persistence gate's discipline at the
+package level. Reinstalls are idempotent when identical (no journal
+growth) and refused typed when divergent; nothing is silently replaced.
+
+**`cdc x` verifies, then runs, and states what it is not.** Every member
+re-digests to its manifest digest (tamper refused BY NAME), the directory
+must contain exactly the manifest's members (unmanifested code does not
+run), the corpus identity must recompute, and entries are plain basenames —
+`cdc x name ../../evil.cdc` is a parse error of the request, not a
+filesystem question. TRUSTED-LOCAL-ONLY is stated in the code, the docs,
+and the matrix: no network, no registries, no archives, and the
+verification is drift/tamper detection for trusted content, NOT a sandbox.
+The sealed capability environment and hostile-package counterexamples are
+CT5, and they are queued, not claimed.
+
+**The install effect carries a D17 receipt** (kind=install, latch/hold,
+durability observation, journal position). The build's typed record is the
+manifest itself — digest-bound, stronger than a receipt line — and `cdc x`
+executes runtime verbs that already emit their own receipts. That mapping
+is a factoring decision, not an omission.
+
+**The ASan sweep caught a real bug on first contact:** the Phase I
+`read_all` helpers did not NUL-terminate, and the manifest parsers walked
+`strchr`/`strlen` into the heap. The plain build passed on lucky heap
+contents; the instrumented run refused. Fixed by terminating (the
+terminator is not part of the content length), and Phase I now runs under
+instrumentation in the sweep — build, check, install, x, and a held
+install.
+
+**No new grammar and no kernel churn.** build/install/x are driver
+commands consuming the existing language surface; nothing was added to
+kernel.cdc, so the language contract is untouched by the entire phase.
+The original plan's per-command capability allocations (H6–H11) are
+superseded — H6 went to persistence (D15) and Phase I introduced no new
+frameworks. Package versioning and the `package.cdc` manifest layer remain
+queued with the CT5 work.
+
 ## D27 — 2026-07-28 — Backwards-pass fix: mode=fresh now survives a snapshot-crash
 
 A high-level review pass over the D14–D26 work found one real defect.
