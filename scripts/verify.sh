@@ -226,6 +226,46 @@ else
 fi
 
 echo
+echo "== CT0 provenance manifest is head-bound [2026-07-28 review, finding 4] =="
+# The manifest used to claim "all tracked files" while drifting to 166
+# entries against 186 tracked files, omitting the BLAKE3 implementation that
+# produced it, and carrying stale digests nothing checked. Two assertions
+# now bind it to the head: the PATH SET catches added or removed files, and
+# the BYTES catch modified ones.
+./scripts/regen_provenance.sh build/blake3-manifest.txt
+git ls-files | LC_ALL=C sort \
+  | grep -v '^evidence/gates/CT0/blake3-manifest\.txt$' > build/tracked_paths.txt
+grep '^blake3:' evidence/gates/CT0/blake3-manifest.txt \
+  | sed 's/^blake3:[0-9a-f]*  //' | LC_ALL=C sort > build/manifest_paths.txt
+if ! cmp -s build/tracked_paths.txt build/manifest_paths.txt; then
+  echo "CT0 manifest does not cover the tracked set; regenerate with:" >&2
+  echo "  ./scripts/regen_provenance.sh" >&2
+  diff build/tracked_paths.txt build/manifest_paths.txt | head -20 >&2
+  exit 1
+fi
+assert_fresh_file build/blake3-manifest.txt \
+  evidence/gates/CT0/blake3-manifest.txt "./scripts/regen_provenance.sh"
+echo "CT0 provenance ok entries=$(grep -c '^blake3:' evidence/gates/CT0/blake3-manifest.txt) tracked=$(wc -l < build/tracked_paths.txt)"
+# Counterexample: modifying ANY tracked file must break the gate. The probe
+# file is restored before any assertion runs, so a failure here cannot leave
+# the working tree dirty.
+PROVENANCE_PROBE=CITATION.cff
+cp "$PROVENANCE_PROBE" build/provenance_probe.bak
+printf '\n' >> "$PROVENANCE_PROBE"
+set +e
+./scripts/regen_provenance.sh build/manifest_probe.txt > /dev/null 2>&1
+PROBE_RC=$?
+set -e
+cp build/provenance_probe.bak "$PROVENANCE_PROBE"
+cmp "$PROVENANCE_PROBE" build/provenance_probe.bak
+test "$PROBE_RC" = "0"
+if cmp -s build/manifest_probe.txt evidence/gates/CT0/blake3-manifest.txt; then
+  echo "provenance gate did not notice a modified tracked file" >&2
+  exit 1
+fi
+echo "provenance gate rejects a modified tracked file (probe restored)"
+
+echo
 echo "== Stable ABI and unified driver skeleton [gate CT2 seed] =="
 rm -f build/cdc
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
@@ -461,9 +501,12 @@ grep -q "store-crash ok boundaries=7 old=3 new=4" build/store_crash.txt
 # flipped one at a time must fail closed (ECORRUPT, no handle,
 # recovered=0, log bytes untouched), including the named high-byte length
 # mutation; a fully valid unsealed tail stays recoverable and
-# distinguished from corruption.
+# distinguished from corruption. The swept span grew from 726 to 903 bytes
+# when the compaction base moved into the log's HEAD record (2026-07-28
+# review, finding 1): the base is now covered by this sweep instead of
+# living in a separate file open() had to trust.
 ./build/cdc_frontend_check store-corrupt build/store_corrupt | tee build/store_corrupt.txt
-grep -q "store-corrupt ok swept=726 named=1 controls=2" build/store_corrupt.txt
+grep -q "store-corrupt ok swept=903 named=1 controls=2" build/store_corrupt.txt
 # I/O-fault regressions (f1f68c0 re-review): read faults are EIO, never
 # torn tails — a directory as log, a fault before any seal, and a fault
 # after a seal must all fail closed with no handle, no truncation, and
@@ -491,7 +534,11 @@ rm -rf build/store_protocol
 mkdir -p build/store_protocol
 ./build/cdc_frontend_check store-protocol build/store_protocol \
   | tee build/store_protocol.txt
-grep -q "store-protocol snapshot sweep: 85/85 bytes fail closed" build/store_protocol.txt
+# The compaction base is the log's own HEAD record now, so tampering with
+# it is tampering with the log: every byte of a compacted log fails closed.
+# This replaces the old separate-snapshot sweep, which could only check a
+# file open() should never have trusted in the first place.
+grep -q "store-protocol HEAD sweep: 177/177 bytes fail closed" build/store_protocol.txt
 grep -q "store-protocol ok snapshot=1 compact=1 fence=1 replay-identity-preserved=1" \
   build/store_protocol.txt
 if [ "$SANITIZED" = "1" ]; then
@@ -503,6 +550,42 @@ if [ "$SANITIZED" = "1" ]; then
   rm -rf build/store_protocol_asan
   mkdir -p build/store_protocol_asan
   run_step ./build/cdc_frontend_check_asan store-protocol build/store_protocol_asan
+fi
+
+# 2026-07-28 review, findings 1 and 2. Both defects lived BETWEEN two
+# individually-correct operations, so neither the crash matrix nor the
+# protocol suite could see them:
+#   1. the base was published as active before compaction truncated the
+#      log (crash window), carried no store identity (substitutable), and
+#      was invisible to attest (two histories, one attestation);
+#   2. commit checked the sealed count and then appended with no mutual
+#      exclusion (check-then-act race the sequential test could not enter).
+# Both suites were verified to FAIL against deliberately re-broken builds
+# before being accepted here.
+rm -rf build/store_generation build/store_race
+mkdir -p build/store_generation build/store_race
+./build/cdc_frontend_check store-generation build/store_generation \
+  | tee build/store_generation.txt
+grep -q "snapshot-only reopen=ok handle=yes generation=0" build/store_generation.txt
+grep -q "kill matrix: boundaries=8 .* mixed=0 unusable=0" build/store_generation.txt
+grep -q "substitution twin-history=1 reopen=ok foreign-base-activated=0" \
+  build/store_generation.txt
+grep -q "compacted-attest store-diff=1 history-diff=1 attest-equal=0" \
+  build/store_generation.txt
+grep -q "stale-generation-base activated=0" build/store_generation.txt
+grep -q "special-paths typed-eio=1 blocked=0" build/store_generation.txt
+grep -q "store-generation ok atomic-transition=1 identity-bound=1 attest-covers-base=1" \
+  build/store_generation.txt
+./build/cdc_frontend_check store-race build/store_race | tee build/store_race.txt
+grep -q "store-race ok rounds=3 winners=1/round refused=1/round corrupt=0" \
+  build/store_race.txt
+grep -q "commit-vs-compact commit-preserved=1" build/store_race.txt
+if [ "$SANITIZED" = "1" ]; then
+  rm -rf build/store_generation_asan build/store_race_asan
+  mkdir -p build/store_generation_asan build/store_race_asan
+  run_step ./build/cdc_frontend_check_asan store-generation \
+    build/store_generation_asan
+  run_step ./build/cdc_frontend_check_asan store-race build/store_race_asan
 fi
 
 echo

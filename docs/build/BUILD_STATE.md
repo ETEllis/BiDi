@@ -7,7 +7,7 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #4; PR #3 merged at `3e851ff`)
+- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #4; PR #3 merged at `3e851ff`). PR #3 is finished and must not be reused.
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -18,6 +18,47 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   and `evidence/gates/CT0/sha256-manifest.txt` (interim SHA-256, see D2)
 
 ## Last completed phase and gate
+
+- **Independent review of `1ea1ddd` repaired (2026-07-28).** Two mechanism
+  defects and three overclaims. Recorded as D16; the withdrawn claims are
+  listed there rather than softened here.
+
+  - **Snapshot/compaction is now ONE atomic generation transition.** The
+    base moved into the log's own HEAD record (store uuid, monotonic
+    generation, base sealed/events/state, anchor over the replaced HEAD).
+    `snapshot` prepares `base.pending`, which `open` never reads; `compact`
+    rebuilds the log and activates it with fsync -> rename -> directory
+    fsync. Killing a child at each of the 8 boundaries of that transition
+    leaves the old generation or the new one, never a mixture, and the
+    store always opens and verifies.
+  - **The fence is backed by real mutual exclusion.** An fcntl write lock
+    on `lock.cdcstore` is held across re-scan + append + fsync(file) +
+    fsync(dir), and across compaction. The armed token is the whole
+    (generation, sealed, replay-state) triple. Two forked writers released
+    from a barrier after both fenced now yield exactly one commit and one
+    refusal, three rounds running; the previous test was sequential and
+    could not enter that window.
+  - **Attestation covers the base**, so two different histories compacted
+    to the same sealed count attest differently, and two stores with
+    identical histories attest differently.
+  - Both new suites (`store-generation`, `store-race`) were verified to
+    FAIL against deliberately re-broken builds before being accepted —
+    removing the lock reproduces the reviewer's `writer-a=ok writer-b=ok
+    reopen=corrupt-tail`; removing the identity binding activates a foreign
+    base; skipping the HEAD in attest collapses distinct histories.
+  - **Provenance is head-bound.** `scripts/regen_provenance.sh` regenerates
+    the manifest from `git ls-files`; the gate checks the path set and the
+    bytes, with a counterexample that modifies a tracked file and restores
+    it. The old manifest claimed "all tracked files" at 166 entries against
+    186 tracked.
+  - **CDC Studio has a required macOS CI lane** (`macos-14`, `swift build`
+    then `swift test`). The Linux structural gate was correct as a platform
+    guard but was the only required UI check, so a surface that did not
+    compile reached a green PR. The compile error is fixed (`padded` was a
+    `String` method applied to `ReversedCollection<String>`), and the
+    subprocess drain now reads stdout and stderr concurrently with a
+    SIGTERM/SIGKILL timeout — draining one to EOF before the other
+    deadlocks deterministically once the child fills the undrained pipe.
 
 - **Phase D COMPLETE — persistence became a language form (2026-07-28).**
   `store` and `persist` are source directives (capability `H6`,
@@ -317,6 +358,11 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 Phase D is complete. Next is **CT2/CT3 closure**, in this order:
 
+0. **Keyed authentication and an external anchor (from the 2026-07-28
+   review).** Integrity tags are unkeyed: they catch corruption, not a
+   motivated forger. Ed25519 over the HEAD, plus an anchor retained outside
+   the store directory, is what would make whole-file generation rollback
+   detectable. Until then the boundary is stated, not claimed.
 1. **Typed effect receipts through the ABI.** A persist job's outcome is
    currently only a report line that `cdc test` greps. It should be
    retrievable as a structured record (job id, op, ternary status, typed

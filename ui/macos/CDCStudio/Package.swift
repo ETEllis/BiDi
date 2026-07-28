@@ -14,6 +14,11 @@ let package = Package(
         .executableTarget(
             name: "CDCStudio",
             path: "Sources/CDCStudio"
+        ),
+        .testTarget(
+            name: "CDCStudioTests",
+            dependencies: ["CDCStudio"],
+            path: "Tests/CDCStudioTests"
         )
     ]
 )

@@ -34,44 +34,129 @@ final class ToolchainService: ObservableObject {
     /// Failure is a value, not an exception: a nonzero exit is ordinary
     /// information in this product, and the caller decides how to read it.
     @discardableResult
-    func run(_ arguments: [String]) async -> Invocation {
+    func run(_ arguments: [String], timeout: TimeInterval = 120) async -> Invocation {
         isRunning = true
         defer { isRunning = false }
 
+        let outcome = await Self.execute(
+            binary: binaryURL,
+            arguments: arguments,
+            workingDirectory: repositoryURL,
+            timeout: timeout
+        )
+        let invocation = Invocation(
+            command: "cdc " + arguments.joined(separator: " "),
+            stdout: outcome.stdout,
+            stderr: outcome.stderr,
+            exitCode: outcome.exitCode
+        )
+
+        history.insert(invocation, at: 0)
+        if history.count > 50 { history.removeLast(history.count - 50) }
+        return invocation
+    }
+
+    struct Outcome: Sendable {
+        let stdout: String
+        let stderr: String
+        let exitCode: Int32
+    }
+
+    /// Launches the child off the main actor and drains stdout and stderr
+    /// CONCURRENTLY.
+    ///
+    /// 2026-07-28 review, finding 3: reading one stream to EOF before
+    /// starting the other deadlocks deterministically. A child that fills
+    /// the undrained pipe's buffer (64 KiB on Darwin) blocks on write; the
+    /// parent is blocked reading the other stream, which the child can no
+    /// longer reach the end of. Neither side can proceed. Both handles are
+    /// therefore drained on their own queues, and a timeout escalates
+    /// SIGTERM then SIGKILL so a wedged child can never wedge the UI.
+    nonisolated private static func execute(
+        binary: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeout: TimeInterval
+    ) async -> Outcome {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: runBlocking(
+                    binary: binary,
+                    arguments: arguments,
+                    workingDirectory: workingDirectory,
+                    timeout: timeout
+                ))
+            }
+        }
+    }
+
+    nonisolated private static func runBlocking(
+        binary: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeout: TimeInterval
+    ) -> Outcome {
         let process = Process()
-        process.executableURL = binaryURL
+        process.executableURL = binary
         process.arguments = arguments
-        process.currentDirectoryURL = repositoryURL
+        process.currentDirectoryURL = workingDirectory
 
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
 
-        var invocation: Invocation
         do {
             try process.run()
-            let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            invocation = Invocation(
-                command: "cdc " + arguments.joined(separator: " "),
-                stdout: String(decoding: outData, as: UTF8.self),
-                stderr: String(decoding: errData, as: UTF8.self),
-                exitCode: process.terminationStatus
-            )
         } catch {
-            invocation = Invocation(
-                command: "cdc " + arguments.joined(separator: " "),
+            return Outcome(
                 stdout: "",
-                stderr: "could not launch \(binaryURL.path): \(error.localizedDescription)",
+                stderr: "could not launch \(binary.path): \(error.localizedDescription)",
                 exitCode: -1
             )
         }
 
-        history.insert(invocation, at: 0)
-        if history.count > 50 { history.removeLast(history.count - 50) }
-        return invocation
+        let lock = NSLock()
+        var outData = Data()
+        var errData = Data()
+        let group = DispatchGroup()
+
+        func drain(_ handle: FileHandle, into sink: @escaping (Data) -> Void) {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let data = handle.readDataToEndOfFile()
+                lock.lock()
+                sink(data)
+                lock.unlock()
+                group.leave()
+            }
+        }
+        drain(outPipe.fileHandleForReading) { outData = $0 }
+        drain(errPipe.fileHandleForReading) { errData = $0 }
+
+        var timedOut = false
+        if group.wait(timeout: .now() + timeout) == .timedOut {
+            timedOut = true
+            process.terminate()
+            if group.wait(timeout: .now() + 5) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                group.wait()
+            }
+        }
+        process.waitUntilExit()
+
+        lock.lock()
+        let out = String(decoding: outData, as: UTF8.self)
+        var err = String(decoding: errData, as: UTF8.self)
+        lock.unlock()
+        if timedOut {
+            err += "\ncdc studio: timed out after \(Int(timeout))s; child terminated\n"
+        }
+        return Outcome(
+            stdout: out,
+            stderr: err,
+            exitCode: timedOut ? -2 : process.terminationStatus
+        )
     }
 
     func sources() -> [URL] {

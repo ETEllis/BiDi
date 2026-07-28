@@ -286,14 +286,29 @@ claimed:
   patch.
 - **Council/evolve generalization** into the main reducer and trace/window
   policy layer remains queued in the matrix, unchanged by this layer.
-- **Persistence claims are per-run and single-writer.** The durable
-  guarantees `H6` exercises are runtime-checked on each execution, not
-  proved: the barrier gate, the byte-identity of a held append, and the
-  replay/attest divergence under compaction are observed outcomes with
-  permanent counterexamples, not theorems. `cdc_store` takes no locks — the
-  fence makes a stale writer fail closed exactly once, after which its
-  handle is spent and must be reopened. Multi-process contention beyond that
-  single refusal, and any distributed or networked store, are queued.
+- **Persistence claims are per-run, not proved.** The durable guarantees
+  `H6` exercises are runtime-checked on each execution: the barrier gate,
+  the byte-identity of a held append, and the replay/attest divergence under
+  compaction are observed outcomes with permanent counterexamples, not
+  theorems.
+- **Concurrency scope is exactly one lock.** Writers are serialized across
+  PROCESSES by an fcntl write lock held through re-scan, append, both
+  fsyncs, and the whole compaction transition. Two handles inside one
+  process do not block each other; there the fence token does the work, and
+  it is compared against on-disk state under the same lock. A writer that
+  loses the compare-and-set has a spent handle and must be reopened.
+  Distributed or networked stores are queued.
+- **Compaction discards history and keeps a commitment to it.** What
+  survives is the replay IDENTITY, not replayable events. After compacting,
+  the events are gone; the HEAD carries a digest that any future replay
+  resumes from.
+- **Integrity tags are unkeyed.** They detect corruption and accidental
+  mutation, not a motivated forger. The compaction base is identity-bound
+  (store uuid plus monotonic generation), which defeats substituting a base
+  from another store and replaying a stale one. It does NOT defeat rewriting
+  the whole log: rolling a file back to a previous generation is detectable
+  only by an observer who retained that generation externally. Ed25519
+  signing over the HEAD plus an external anchor is the queued repair.
 - **The loop composition spans four runtime invocations** over one declared
   source: the reducer chain (both cycles), the surface pass, the council pass,
   and the enactment pass. A single-process executor that fuses all modes over

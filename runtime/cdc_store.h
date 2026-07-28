@@ -12,11 +12,8 @@
  *   append replay snapshot rebuild transaction compare-and-set/fence
  *   commit rollback recover compact attest verify
  *
- * This header carries the whole protocol; the reference backend implements
- * the event-log core (append/transaction/commit/rollback/replay/recover/
- * attest/verify). Snapshot, compaction, and the CAS/fence verb are
- * declared and fail closed with CDC_STORE_EUNSUPPORTED until their gate
- * (recorded in BUILD_STATE) — never silently absent.
+ * All of these verbs are implemented. Their guarantees are runtime-checked
+ * per run by permanent counterexamples in scripts/verify.sh, not proved.
  *
  * Durability and integrity contract of the reference backend
  * (2026-07-24 independent review, B1/B2):
@@ -30,26 +27,56 @@
  *   digest, sequence continuity, seal digest, type, or length — is
  *   CDC_STORE_ECORRUPT: open fails, no handle, and the log bytes are
  *   never mutated. Corrupted evidence is preserved, not repaired.
- * - Framing metadata is AUTHENTICATED (record format v2, 3122af5
- *   re-review): every record header carries a framing tag digested over
- *   magic, type, sequence, and length, verified BEFORE the length field
- *   is trusted or any allocation happens; a mutated length can never
- *   masquerade as a torn tail. Records above a documented bound
- *   (64 MiB) fail closed pre-allocation.
+ * - Framing metadata is TAG-CHECKED before it is trusted (record format
+ *   v2, 3122af5 re-review): every record header carries a tag digested
+ *   over magic, type, sequence, and length, verified BEFORE the length
+ *   field is trusted or any allocation happens; a mutated length can never
+ *   masquerade as a torn tail. Records above a documented bound (64 MiB)
+ *   fail closed pre-allocation. The tags are UNKEYED digests: they detect
+ *   corruption and accidental mutation, not a motivated forger. Keyed
+ *   authentication (Ed25519 over the HEAD) is queued, not claimed.
  * - Sequence numbers are monotonic and verified (DATA: global event
  *   ordinal; SEAL: transaction ordinal). Each SEAL digest is recomputed
  *   from its transaction's DATA digests and must match.
  * - open/verify/replay/attest share one typed scan; none can bypass
  *   integrity state. replay/attest operate on the sealed prefix only and
  *   refuse corrupt logs.
- * - Every record carries its payload digest (interim sha256 per D2).
+ * - Every record carries its payload digest (canonical BLAKE3; the
+ *   interim sha256 of D2 was retired when BLAKE3 was vendored).
  * - Commit path: write(all records) -> fflush -> fsync(log fd) ->
  *   fsync(directory fd). The injectable failure hook aborts at each
  *   boundary to prove recovery (cdc_store_set_fail_after).
- * - Single writer per store directory; no locks are taken (the caller is
- *   the concurrency boundary at this stage). A writer that armed a fence
- *   and lost the compare-and-set has a SPENT handle: its cached sealed and
- *   event counters are stale, so it must be reopened rather than reused.
+ * - Writers are serialized ACROSS PROCESSES by an fcntl write lock on
+ *   `lock.cdcstore`, held across re-scan + append + fsync(file) +
+ *   fsync(dir), and across the whole compaction transition (2026-07-28
+ *   review, finding 2). Before that lock existed, commit checked the
+ *   sealed count and then appended, so two writers could both pass the
+ *   check before either wrote — a check-then-act race that a sequential
+ *   test cannot enter. Scope, precisely: fcntl locks serialize PROCESSES;
+ *   two handles onto one directory inside a single process do not block
+ *   each other, and there the fence token is the mechanism. Both paths
+ *   compare against on-disk state under the same lock, so the outcome is
+ *   the same.
+ * - A writer that armed a fence and lost the compare-and-set has a SPENT
+ *   handle: its cached counters are stale, so it must be reopened rather
+ *   than reused.
+ * - GENERATIONS. The log begins with a HEAD record carrying the store
+ *   uuid, a monotonic generation, the compaction base, and an anchor over
+ *   the HEAD it replaced. `snapshot` PREPARES a base in `base.pending`
+ *   that open() never reads; `compact` verifies it still belongs to this
+ *   store and still covers the current sealed prefix, both under the lock,
+ *   then rebuilds the log and activates it with fsync -> rename ->
+ *   directory fsync. A crash anywhere in that transition leaves the old
+ *   generation or the new one, never a mixture.
+ * - Attest covers the HEAD, so two different histories compacted to the
+ *   same sealed count attest differently, and two stores with identical
+ *   histories still attest differently.
+ * - NOT claimed: rollback of an entire log file to a previous generation
+ *   is detectable only by an observer who retained the generation
+ *   externally. Nothing inside a single directory can distinguish "never
+ *   compacted" from "rolled back", and unkeyed digests do not stop an
+ *   attacker who can rewrite the whole file. An external anchor plus
+ *   Ed25519 signing is the queued repair.
  *
  * Language surface (capability H6, framework_persistence.cdc). This library
  * is not reachable from `.cdc` source as a service call. The `store` and
@@ -72,7 +99,7 @@ typedef enum {
                                    fail closed, log NEVER mutated */
     CDC_STORE_ECRASH = 5,       /* injected failure fired (test harness) */
     CDC_STORE_ESTATE = 6,
-    CDC_STORE_EUNSUPPORTED = 7, /* declared verb not yet landed */
+    CDC_STORE_EUNSUPPORTED = 7, /* reserved; no verb uses it now */
     CDC_STORE_EUNSEALED = 8,    /* verify: valid but unsealed/torn tail
                                    present (recoverable by open) */
 } cdc_store_status;
@@ -92,12 +119,16 @@ uint64_t cdc_store_sealed_count(const cdc_store *store);
 /* Number of sealed events (payload records) visible. */
 uint64_t cdc_store_event_count(const cdc_store *store);
 
-/* Removes exactly this store's own artifacts (the log and the snapshot)
- * from `dir`, leaving every other path in that directory untouched, so a
- * declared store can be opened from a known-empty state. Artifacts that
- * are absent are not an error; the directory itself is never removed.
- * This is the only deletion path in the store and it never widens: the two
- * filenames are the ones cdc_store_open constructs. */
+/* Monotonic compaction generation carried by the log's HEAD record. 0 is a
+ * never-compacted store; each activated compaction advances it by one. */
+uint64_t cdc_store_generation(const cdc_store *store);
+
+/* Removes exactly this store's own artifacts (the log and any prepared
+ * base) from `dir`, leaving every other path in that directory untouched,
+ * so a declared store can be opened from a known-empty state. Artifacts
+ * that are absent are not an error; the directory itself is never
+ * removed. This is the only deletion path in the store and it never
+ * widens: the filenames are the ones cdc_store_open constructs. */
 cdc_store_status cdc_store_reset(const char *dir);
 
 /* Transaction: stage any number of event payloads, then commit (all
@@ -109,8 +140,11 @@ cdc_store_status cdc_store_commit(cdc_store *store);
 cdc_store_status cdc_store_rollback(cdc_store *store);
 
 /* Replay: folds every sealed event's digest into a deterministic state
- * digest ("sha256:<hex>" written to out). Identical event history yields
- * an identical state digest on any platform. */
+ * digest ("blake3:<hex>" written to out), resuming from the compaction
+ * base in the HEAD. Identical event history yields an identical state
+ * digest on any platform and across compaction. NOTE: compaction keeps a
+ * COMMITMENT to the discarded history, not the history itself — after
+ * compacting, the events are gone and only this identity survives. */
 cdc_store_status cdc_store_replay(cdc_store *store, char *out,
                                   size_t out_size);
 
@@ -121,9 +155,19 @@ cdc_store_status cdc_store_attest(cdc_store *store, char *out,
 /* Verify: full structural re-scan of the log (lengths, digests, seals). */
 cdc_store_status cdc_store_verify(cdc_store *store);
 
-/* Declared, not yet landed (fail closed): */
+/* Two-phase compaction. snapshot() prepares a base for generation+1 that
+ * open() never trusts; compact() activates it atomically or refuses.
+ * compact() returns ESTATE when nothing is prepared, when the prepared base
+ * no longer covers the sealed prefix (a transaction landed after it was
+ * prepared), or when it targets a generation other than the next one;
+ * ECORRUPT when the base belongs to a different store. */
 cdc_store_status cdc_store_snapshot(cdc_store *store);
 cdc_store_status cdc_store_compact(cdc_store *store);
+
+/* Arms a compare-and-set at the store's current (generation, sealed,
+ * replay-state) triple, refusing with ESTATE if `expected_seal` is already
+ * stale. The armed token is re-checked under the store lock inside
+ * commit(). */
 cdc_store_status cdc_store_fence(cdc_store *store, uint64_t expected_seal);
 
 /* Failure injection (crash matrix): abort the commit path after N

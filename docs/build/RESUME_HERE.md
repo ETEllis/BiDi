@@ -7,7 +7,7 @@ lane inherits when this lane's capacity ends). Read in order:
 `CDC_TOOLCHAIN_PLAN.md` (with Amendment Record) → the two operator-held
 documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
 `CDC_MEMORY_MANIFOLD_INTERFACE.md` → `docs/build/BUILD_STATE.md` →
-`docs/build/DECISIONS.md` (D1–D8).
+`docs/build/DECISIONS.md` (D1–D16).
 
 ## Current head (2026-07-28)
 
@@ -34,7 +34,9 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
     `framework_persistence.cdc`; `op=append` routes through the same
     `execute_commit` barrier, so durable mutation is unreachable except
     through an accepted commit decision.
-- Full `./scripts/verify.sh` green locally; CI green at `1ea1ddd`.
+  - **review repair (2026-07-28)** — store generations + interprocess
+    lock, head-bound provenance, required macOS CI lane (D16).
+- Full `./scripts/verify.sh` green locally at the current head.
 - **UI is now a gate requirement**: no product gate closes without its
   surface locked to the canonical tokens and its data bound to real runtime
   output.
@@ -45,8 +47,10 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    denied by this environment's classifier. Blocks Memory Phases A/E–H only.
 2. `ETEllis/GIST` access and the Superposition source bundle — blocks Phase K
    and GIST Track M only.
-3. A macOS host to compile `ui/macos/CDCStudio` (no Swift toolchain in the
-   Linux container; the gate builds it automatically where `swift` exists).
+3. A macOS host to compile `ui/macos/CDCStudio`. There is no Swift
+   toolchain in this container at all, so the required `macos-14` CI lane
+   is the compiler of record — every Swift change here is unverified until
+   that lane runs.
 
 ## Where the build stands (exact)
 
@@ -67,23 +71,29 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
   per-cycle expectation families — inline expect-* pins first-cycle
   state; this is a language-design item, not a runtime bug).
 - **CT4/MM1 SUBSTANTIALLY LIVE** — `cdc_store`: append-only sealed
-  transactions, authenticated record framing (v2), typed three-way
-  recovery (torn tail / corrupt prefix / I/O fault), fsync(file+dir)
-  boundaries, canonical BLAKE3 identities, replay determinism, attest,
-  **snapshot / compact / compare-and-set fence** on a resumable replay
-  chain (D14); crash matrix green at all 7 commit boundaries in-process
-  **and** out-of-process via SIGKILL (plain + ASan). **Persistence is now
-  a language form** (D15): `store`/`persist` directives, capability `H6`,
-  `op=append` gated by the same balanced-ternary barrier as `commit`;
-  `durable`/`replay` observed rather than declared; four permanent
-  counterexamples plus an external byte-identity check on held appends.
-  Open: typed effect receipts / closure witnesses through the ABI;
-  multi-process contention beyond a single fence refusal; binding the
-  episodic framework (`H3`) onto a declared store.
+  transactions, tag-checked record framing (v2, UNKEYED — corruption not
+  forgery), typed three-way recovery (torn tail / corrupt prefix / I/O
+  fault), fsync(file+dir) boundaries, canonical BLAKE3 identities, replay
+  determinism, attest covering the HEAD; **generations** — the compaction
+  base lives in the log's HEAD, `snapshot` prepares and `compact` activates
+  atomically (fsync/rename/dir-fsync), identity-bound by store uuid and
+  monotonic generation (D16); **interprocess fcntl lock** held across
+  re-scan+append+both fsyncs and across compaction, with the fence token a
+  (generation, sealed, replay-state) triple (D16); crash matrix green at
+  all 7 commit boundaries in-process **and** out-of-process via SIGKILL,
+  plus 8 transition boundaries old-or-new-never-mixed (plain + ASan).
+  **Persistence is a language form** (D15): `store`/`persist` directives,
+  capability `H6`, `op=append` gated by the same balanced-ternary barrier
+  as `commit`; `durable`/`replay` observed rather than declared.
+  Open: keyed authentication (Ed25519 over the HEAD) and an external
+  anchor so whole-file generation rollback is detectable; typed effect
+  receipts / closure witnesses through the ABI; binding the episodic
+  framework (`H3`) onto a declared store.
 - **PC6 HARD-PAUSED** (unchanged, untouchable from this lane).
-- PR #3: **merged** at `3e851ff`. PR #4: draft, open, CI green at
-  `1ea1ddd`, `mergeable_state: clean`. **Do not merge without operator
-  sign-off.**
+- PR #3: **merged** at `3e851ff` — finished, never to be reused. PR #4:
+  draft, open. The 2026-07-28 review requested changes at `1ea1ddd` and
+  that head must not be merged; the repair is D16. **Do not merge without
+  operator sign-off.**
 
 ## Baton: remaining work in dependency order
 

@@ -46,6 +46,61 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D16 — 2026-07-28 — Store generations, real serialization, and the claims withdrawn
+
+An independent review of `1ea1ddd` found two mechanism defects and three
+claims the code did not support. All are repaired; the claims that were
+wrong are withdrawn rather than softened.
+
+**Repaired — snapshot/compaction is one atomic generation transition.**
+Previously `snapshot` published a base that `open` immediately treated as
+active, and `compact` truncated the log afterwards: two public operations
+with a crash window between them that left the store unopenable. The base
+now lives in the log's own HEAD record, carrying the store uuid, a
+monotonic generation, and an anchor over the HEAD it replaces. `snapshot`
+writes `base.pending`, which `open` never reads; `compact` rebuilds the log
+and activates it with fsync -> rename -> directory fsync. A kill at any of
+the eight boundaries of that transition leaves the old generation or the
+new one, never a mixture.
+
+**Repaired — the fence is now backed by real mutual exclusion.** `commit`
+scanned the sealed count and then appended with no lock, so two writers
+could both pass the check before either wrote. An fcntl write lock on
+`lock.cdcstore` is now held across re-scan + append + fsync(file) +
+fsync(dir), and across compaction. The armed token is the whole
+(generation, sealed, replay-state) triple, because a compaction can leave
+the sealed count identical while replacing the representation underneath
+it. The old test could not have caught this: it was sequential, so the
+winner always finished before the loser checked.
+
+**Repaired — attestation covers the base.** It digests from byte zero,
+which now includes the HEAD, so two different histories compacted to the
+same sealed count attest differently, and two stores with identical
+histories still attest differently.
+
+**Withdrawn claims.** "Authenticated snapshot" is wrong: the tags are
+unkeyed digests that detect corruption, not forgery. The base is now
+IDENTITY-BOUND (uuid plus generation), which defeats substitution and
+stale replay, and that is the claim made. "Real compare-and-set" was wrong
+at the reviewed head and is only true now that the lock exists. "Completed
+store protocol" was premature. Compaction does not preserve replayable
+history — it keeps a commitment to that history and discards the events;
+the surviving property is replay IDENTITY, and the documents now say so.
+
+**Not claimed, recorded as an open boundary.** Rolling an entire log file
+back to a previous generation is detectable only by an observer who
+retained the generation externally; nothing inside one directory can
+distinguish "never compacted" from "rolled back". Unkeyed digests do not
+stop an attacker who can rewrite the whole file. An external anchor plus
+Ed25519 signing over the HEAD is the queued repair.
+
+**Process change.** The provenance manifest is regenerated from
+`git ls-files` and gated byte-for-byte, because a hand-maintained manifest
+had drifted to 166 entries against 186 tracked files while claiming to
+cover all of them. And the macOS app now has a required CI lane: the Linux
+structural gate was correct as a platform guard but was the only required
+UI check, so a surface that did not compile reached a green PR.
+
 ## D15 — 2026-07-28 — Persistence is a language form, not a host service (G10/H6)
 
 `store` and `persist` are source directives (capability `H6`,
@@ -95,6 +150,13 @@ persistence semantics; they retire with the file under the existing
 **toolchain-verify-parity** gate, recorded in the mandate.
 
 ## D14 — 2026-07-28 — Store protocol completion: resumable replay chain
+
+> **Partly superseded by D16.** The "real compare-and-set" claim below
+> was wrong when written: commit checked the sealed count and then
+> appended with no mutual exclusion, so two writers could both pass.
+> The snapshot/compaction sequence described below also had a crash
+> window between publishing the base and truncating the log. Both are
+> repaired in D16; read that entry for the mechanism in force.
 
 snapshot, compact, and compare-and-set fence are implemented, completing the
 generic store protocol. The replay digest changed from a one-pass fold to a

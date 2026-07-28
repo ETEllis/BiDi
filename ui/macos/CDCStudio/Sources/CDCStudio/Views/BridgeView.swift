@@ -85,8 +85,10 @@ struct BridgeView: View {
         return high * 100 + mid * 10 + low
     }
 
+    /// Six-bit dyadic rendering, zero-padded on the left.
     private func dyadic(_ index: Int) -> String {
-        String(String(index, radix: 2).reversed().padded(to: 6).reversed())
+        let bits = String(index, radix: 2)
+        return String(repeating: "0", count: max(0, 6 - bits.count)) + bits
     }
 
     private func readout(_ label: String, _ value: String) -> some View {
@@ -98,11 +100,5 @@ struct BridgeView: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(Mobius.Hinge.paper.opacity(0.45))
         }
-    }
-}
-
-private extension String {
-    func padded(to length: Int) -> String {
-        count >= length ? self : self + String(repeating: "0", count: length - count)
     }
 }

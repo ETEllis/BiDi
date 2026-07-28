@@ -53,3 +53,28 @@ jobs:
 
       - name: Run full verification gate
         run: ./scripts/verify.sh --require-formal
+
+  studio:
+    name: CDC Studio (macOS) builds and passes its tests
+    runs-on: macos-14
+    timeout-minutes: 25
+
+    # 2026-07-28 review, finding 3. The Linux guard in verify_ui.sh is
+    # correct as a platform guard — the Ubuntu runner has a swift binary but
+    # no SwiftUI — but it was the ONLY required UI check, so a product
+    # surface that did not compile reached a green PR. This lane is the
+    # compiler of record for the macOS app and is required, not optional.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Toolchain version
+        run: swift --version
+
+      - name: Build CDC Studio
+        working-directory: ui/macos/CDCStudio
+        run: swift build
+
+      - name: Run CDC Studio tests
+        working-directory: ui/macos/CDCStudio
+        run: swift test

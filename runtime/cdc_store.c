@@ -42,25 +42,50 @@ typedef struct {
     size_t size;
 } staged_event;
 
+/* HEAD record (2026-07-28 review, finding 1). Every log begins with one
+ * type-'H' record whose sequence field is the store GENERATION and whose
+ * payload is:
+ *   [16] store uuid   [8] base sealed   [8] base events
+ *   [32] base replay state             [32] prior-generation anchor
+ * The base is therefore part of the log itself, not a second file that
+ * open() has to trust. Compaction rebuilds the whole log to a temporary
+ * file and activates it with fsync -> rename -> directory fsync, so a
+ * crash anywhere in the transition leaves either the old generation or the
+ * new one and never a mixture. `base.pending` is a PREPARED base written
+ * by cdc_store_snapshot that open() never reads; it becomes real only when
+ * compaction activates it. */
+enum {
+    STORE_UUID_SIZE = 16,
+    HEAD_BODY = STORE_UUID_SIZE + 8 + 8 + 2 * CDC_DIGEST_SIZE
+};
+
 struct cdc_store {
     char dir[512];
     char log_path[600];
-    char snapshot_path[620];
+    char pending_path[620];
+    char lock_path[620];
+    uint8_t uuid[STORE_UUID_SIZE];
+    uint64_t generation;
+    uint8_t prior_anchor[CDC_DIGEST_SIZE];
     uint64_t sealed;      /* sealed transactions visible (base + log) */
     uint64_t events;      /* events in sealed transactions (base + log) */
     long valid_bytes;     /* log byte length covering the sealed prefix */
-    /* Compaction base: a snapshot lets the log be truncated while the
-     * REPLAY identity is preserved, because the replay digest is a chain
-     * that can resume from a recorded state. */
-    int has_base;
+    /* Compaction base carried by the HEAD record. */
     uint64_t base_sealed;
     uint64_t base_events;
     uint8_t base_state[CDC_DIGEST_SIZE];
-    /* Compare-and-set: an armed fence pins the sealed count a writer
-     * believes it is extending; commit re-reads the log and refuses if
-     * another writer moved it (stale writer). */
+    /* Compare-and-set: an armed fence pins the (generation, sealed,
+     * replay state) TRIPLE a writer believes it is extending. Sealed count
+     * alone is not enough — a compaction can leave it unchanged while the
+     * representation underneath it is entirely different. */
     int fence_armed;
+    uint64_t fence_generation;
     uint64_t fence_seal;
+    uint8_t fence_state[CDC_DIGEST_SIZE];
+    /* Interprocess serialization: an fcntl write lock held across
+     * re-scan + append + fsync(file) + fsync(dir), and across the whole
+     * compaction transition, so check-then-act is not a race. */
+    int lock_fd;
     staged_event *staged;
     size_t staged_count;
     size_t staged_cap;
@@ -69,19 +94,8 @@ struct cdc_store {
     int kill_after;       /* injection: SIGKILL after N boundary ops */
 };
 
-/* Snapshot record: magic | version | sealed | events | state | tag.
- * The tag authenticates every preceding byte, so a mutated snapshot can
- * never resurrect a wrong base — it fails closed exactly like the log. */
-enum {
-    SNAP_BODY = 4 + 1 + 8 + 8 + CDC_DIGEST_SIZE,
-    SNAP_SIZE = SNAP_BODY + CDC_DIGEST_SIZE
-};
-static const uint8_t SNAP_MAGIC[4] = {'C', 'D', 'C', 'S'};
-
-static cdc_store_status snapshot_load(const char *path, int *found,
-                                      uint64_t *sealed, uint64_t *events,
-                                      uint8_t state[CDC_DIGEST_SIZE]);
 static int sync_path(const char *path);
+static int injected_crash(cdc_store *store);
 
 const char *cdc_store_status_name(cdc_store_status status) {
     switch (status) {
@@ -167,6 +181,14 @@ typedef struct {
     uint64_t events; /* events within the sealed prefix */
     long valid_bytes;
     scan_state state;
+    /* HEAD record contents (the log's own identity and compaction base). */
+    int has_head;
+    uint8_t uuid[STORE_UUID_SIZE];
+    uint64_t generation;
+    uint64_t base_sealed;
+    uint64_t base_events;
+    uint8_t base_state[CDC_DIGEST_SIZE];
+    uint8_t prior_anchor[CDC_DIGEST_SIZE];
     /* Chained replay identity: state_0 is the base (all zero, or the state
      * a snapshot recorded), and each sealed record folds in as
      * state_i = digest(state_{i-1} || record_digest_i). The chain is
@@ -209,16 +231,14 @@ static int scan_read_faulted(FILE *fp) {
     return ferror(fp) || scan_read_injected;
 }
 
-/* base_events/base_sealed continue sequence numbering across a compaction;
- * base_state seeds the replay chain. */
-static cdc_store_status scan_log_from(const char *path, uint64_t base_events,
-                                      uint64_t base_sealed,
-                                      const uint8_t base_state[CDC_DIGEST_SIZE],
-                                      scan_result *result) {
+/* Scans a log from its own HEAD record. The compaction base is carried by
+ * the log, so no caller can supply a base the log does not itself claim —
+ * which is what made a foreign or dangling snapshot dangerous before. */
+static cdc_store_status scan_log(const char *path, scan_result *result) {
     FILE *fp = fopen(path, "rb");
     long offset = 0;
-    uint64_t expect_event = base_events + 1;
-    uint64_t expect_seal = base_sealed + 1;
+    uint64_t expect_event;
+    uint64_t expect_seal;
     cdc_digest_ctx txn_ctx;
     int txn_open = 0;
     uint8_t chain[CDC_DIGEST_SIZE];
@@ -226,11 +246,6 @@ static cdc_store_status scan_log_from(const char *path, uint64_t base_events,
 
     memset(result, 0, sizeof(*result));
     result->state = SCAN_CLEAN;
-    result->sealed = base_sealed;
-    result->events = base_events;
-    memcpy(chain, base_state, CDC_DIGEST_SIZE);
-    memcpy(sealed_chain, base_state, CDC_DIGEST_SIZE);
-    memcpy(result->replay_state, base_state, CDC_DIGEST_SIZE);
     if (!fp) {
         return errno == ENOENT ? CDC_STORE_OK : CDC_STORE_EIO;
     }
@@ -243,6 +258,72 @@ static cdc_store_status scan_log_from(const char *path, uint64_t base_events,
             return CDC_STORE_EIO;
         }
     }
+    /* The HEAD record: the log's identity and its compaction base. An
+     * empty file is "no store yet" (open creates one); anything present
+     * but not a valid HEAD is corruption, because the HEAD is only ever
+     * published by an atomic rename and can never be legitimately torn. */
+    {
+        uint8_t header[HEADER_SIZE];
+        uint8_t body[HEAD_BODY];
+        uint8_t digest[CDC_DIGEST_SIZE];
+        uint8_t tag[CDC_DIGEST_SIZE];
+        size_t got = scan_fread(header, sizeof(header), fp);
+        if (got < sizeof(header) && scan_read_faulted(fp)) {
+            fclose(fp);
+            return CDC_STORE_EIO;
+        }
+        if (got == 0) {
+            fclose(fp);
+            return CDC_STORE_OK; /* has_head stays 0: nothing here yet */
+        }
+        if (got < sizeof(header)) {
+            fclose(fp);
+            result->state = SCAN_CORRUPT;
+            return CDC_STORE_OK;
+        }
+        cdc_digest(header, FRAMING_SIZE, tag);
+        if (memcmp(header, MAGIC, sizeof(MAGIC)) != 0 || header[4] != 'H' ||
+            memcmp(tag, header + OFF_TAG, CDC_DIGEST_SIZE) != 0 ||
+            get_u32(header + 13) != (uint32_t)HEAD_BODY) {
+            fclose(fp);
+            result->state = SCAN_CORRUPT;
+            return CDC_STORE_OK;
+        }
+        if (scan_fread(body, sizeof(body), fp) != sizeof(body)) {
+            if (scan_read_faulted(fp)) {
+                fclose(fp);
+                return CDC_STORE_EIO;
+            }
+            fclose(fp);
+            result->state = SCAN_CORRUPT;
+            return CDC_STORE_OK;
+        }
+        cdc_digest(body, sizeof(body), digest);
+        if (memcmp(digest, header + OFF_DIGEST, CDC_DIGEST_SIZE) != 0) {
+            fclose(fp);
+            result->state = SCAN_CORRUPT;
+            return CDC_STORE_OK;
+        }
+        result->has_head = 1;
+        result->generation = get_u64(header + 5);
+        memcpy(result->uuid, body, STORE_UUID_SIZE);
+        result->base_sealed = get_u64(body + STORE_UUID_SIZE);
+        result->base_events = get_u64(body + STORE_UUID_SIZE + 8);
+        memcpy(result->base_state, body + STORE_UUID_SIZE + 16,
+               CDC_DIGEST_SIZE);
+        memcpy(result->prior_anchor,
+               body + STORE_UUID_SIZE + 16 + CDC_DIGEST_SIZE,
+               CDC_DIGEST_SIZE);
+        offset = (long)(HEADER_SIZE + HEAD_BODY);
+    }
+    result->sealed = result->base_sealed;
+    result->events = result->base_events;
+    result->valid_bytes = offset;
+    expect_event = result->base_events + 1;
+    expect_seal = result->base_sealed + 1;
+    memcpy(chain, result->base_state, CDC_DIGEST_SIZE);
+    memcpy(sealed_chain, result->base_state, CDC_DIGEST_SIZE);
+    memcpy(result->replay_state, result->base_state, CDC_DIGEST_SIZE);
     for (;;) {
         uint8_t header[HEADER_SIZE];
         size_t got = scan_fread(header, sizeof(header), fp);
@@ -366,6 +447,144 @@ static int sync_path(const char *path) {
     return 0;
 }
 
+/* ---- interprocess serialization (2026-07-28 review, finding 2) --------
+ *
+ * commit and compact are check-then-act sequences. Without mutual
+ * exclusion two writers can both pass the check before either writes,
+ * which is exactly the race the old sequential test could not see. An
+ * fcntl write lock on a dedicated file is held across the whole sequence:
+ * re-scan, append, fflush, fsync(log), fsync(dir).
+ *
+ * Scope, stated precisely: fcntl locks serialize PROCESSES. Two handles
+ * onto one directory inside a single process do not block each other —
+ * there the fence token is the mechanism, and it is checked against the
+ * on-disk state under the same lock, so the outcome is identical. */
+static cdc_store_status store_lock(cdc_store *store) {
+    struct flock lock;
+    if (store->lock_fd < 0) {
+        return CDC_STORE_EIO;
+    }
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0;
+    while (fcntl(store->lock_fd, F_SETLKW, &lock) != 0) {
+        if (errno != EINTR) {
+            return CDC_STORE_EIO;
+        }
+    }
+    return CDC_STORE_OK;
+}
+
+static void store_unlock(cdc_store *store) {
+    struct flock lock;
+    if (store->lock_fd < 0) {
+        return;
+    }
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_UNLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0;
+    while (fcntl(store->lock_fd, F_SETLK, &lock) != 0 && errno == EINTR) {
+        /* retry */
+    }
+}
+
+/* ---- generation records ---------------------------------------------- */
+
+static cdc_store_status fill_uuid(uint8_t uuid[STORE_UUID_SIZE]) {
+    FILE *fp = fopen("/dev/urandom", "rb");
+    if (!fp) {
+        return CDC_STORE_EIO;
+    }
+    if (fread(uuid, 1, STORE_UUID_SIZE, fp) != STORE_UUID_SIZE) {
+        fclose(fp);
+        return CDC_STORE_EIO;
+    }
+    fclose(fp);
+    return CDC_STORE_OK;
+}
+
+static void build_head_body(uint8_t body[HEAD_BODY],
+                            const uint8_t uuid[STORE_UUID_SIZE],
+                            uint64_t base_sealed, uint64_t base_events,
+                            const uint8_t base_state[CDC_DIGEST_SIZE],
+                            const uint8_t prior_anchor[CDC_DIGEST_SIZE]) {
+    memcpy(body, uuid, STORE_UUID_SIZE);
+    put_u64(body + STORE_UUID_SIZE, base_sealed);
+    put_u64(body + STORE_UUID_SIZE + 8, base_events);
+    memcpy(body + STORE_UUID_SIZE + 16, base_state, CDC_DIGEST_SIZE);
+    memcpy(body + STORE_UUID_SIZE + 16 + CDC_DIGEST_SIZE, prior_anchor,
+           CDC_DIGEST_SIZE);
+}
+
+static void build_head_record(uint8_t record[HEADER_SIZE + HEAD_BODY],
+                              uint64_t generation,
+                              const uint8_t body[HEAD_BODY]) {
+    memcpy(record, MAGIC, sizeof(MAGIC));
+    record[4] = 'H';
+    put_u64(record + 5, generation);
+    put_u32(record + 13, (uint32_t)HEAD_BODY);
+    cdc_digest(record, FRAMING_SIZE, record + OFF_TAG);
+    cdc_digest(body, HEAD_BODY, record + OFF_DIGEST);
+    memcpy(record + HEADER_SIZE, body, HEAD_BODY);
+}
+
+/* Publishes `bytes` as the log in ONE atomic step: write a temporary file,
+ * make it durable, rename it over the log, then make the directory entry
+ * durable. A crash at any point leaves either the previous log or the new
+ * one — never a mixture, and never a store that cannot be opened. */
+static cdc_store_status publish_log(cdc_store *store, const uint8_t *bytes,
+                                    size_t size) {
+    char temp_path[640];
+    FILE *fp;
+    int written = snprintf(temp_path, sizeof(temp_path), "%s.next",
+                           store->log_path);
+    if (written < 0 || (size_t)written >= sizeof(temp_path)) {
+        return CDC_STORE_EARG;
+    }
+    fp = fopen(temp_path, "wb");
+    if (!fp) {
+        return CDC_STORE_EIO;
+    }
+    if (injected_crash(store)) {
+        fclose(fp); /* before the new generation has any content */
+        return CDC_STORE_ECRASH;
+    }
+    if ((size > 0 && fwrite(bytes, 1, size, fp) != size) ||
+        fflush(fp) != 0) {
+        fclose(fp);
+        unlink(temp_path);
+        return CDC_STORE_EIO;
+    }
+    if (injected_crash(store)) {
+        fclose(fp); /* written but not yet durable */
+        return CDC_STORE_ECRASH;
+    }
+    if (fsync(fileno(fp)) != 0) {
+        fclose(fp);
+        unlink(temp_path);
+        return CDC_STORE_EIO;
+    }
+    fclose(fp);
+    if (injected_crash(store)) {
+        return CDC_STORE_ECRASH; /* durable, but not yet activated */
+    }
+    if (rename(temp_path, store->log_path) != 0) {
+        unlink(temp_path);
+        return CDC_STORE_EIO;
+    }
+    if (injected_crash(store)) {
+        return CDC_STORE_ECRASH; /* activated, directory entry not durable */
+    }
+    if (sync_path(store->dir) != 0) {
+        return CDC_STORE_EIO;
+    }
+    return CDC_STORE_OK;
+}
+
 cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
                                 int *recovered_out) {
     cdc_store *store;
@@ -398,38 +617,70 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
         free(store);
         return CDC_STORE_EARG;
     }
-    written = snprintf(store->snapshot_path, sizeof(store->snapshot_path),
-                       "%s/snapshot.cdcstore", dir);
-    if (written < 0 || (size_t)written >= sizeof(store->snapshot_path)) {
+    written = snprintf(store->pending_path, sizeof(store->pending_path),
+                       "%s/base.pending", dir);
+    if (written < 0 || (size_t)written >= sizeof(store->pending_path)) {
         free(store);
         return CDC_STORE_EARG;
     }
-    /* A snapshot, if present, is the compaction base. It is authenticated
-     * before it is trusted: a tampered snapshot fails the open rather than
-     * silently seeding a wrong history. */
-    {
-        int found = 0;
-        cdc_store_status snap = snapshot_load(store->snapshot_path, &found,
-                                              &store->base_sealed,
-                                              &store->base_events,
-                                              store->base_state);
-        if (snap != CDC_STORE_OK) {
-            free(store);
-            return snap;
-        }
-        store->has_base = found;
+    written = snprintf(store->lock_path, sizeof(store->lock_path),
+                       "%s/lock.cdcstore", dir);
+    if (written < 0 || (size_t)written >= sizeof(store->lock_path)) {
+        free(store);
+        return CDC_STORE_EARG;
     }
-    status = scan_log_from(store->log_path, store->base_events,
-                           store->base_sealed, store->base_state, &scan);
+    store->lock_fd = open(store->lock_path, O_RDWR | O_CREAT, 0666);
+    if (store->lock_fd < 0) {
+        free(store);
+        return CDC_STORE_EIO;
+    }
+    status = scan_log(store->log_path, &scan);
     if (status != CDC_STORE_OK) {
+        close(store->lock_fd);
         free(store);
         return status;
     }
     if (scan.state == SCAN_CORRUPT) {
         /* Committed-prefix integrity violation: fail closed, preserve the
          * evidence bytes exactly as found (review B1). */
+        close(store->lock_fd);
         free(store);
         return CDC_STORE_ECORRUPT;
+    }
+    if (!scan.has_head) {
+        /* A directory with no log yet: publish generation 0 atomically, so
+         * a store either exists completely or not at all. */
+        uint8_t record[HEADER_SIZE + HEAD_BODY];
+        uint8_t body[HEAD_BODY];
+        uint8_t zero[CDC_DIGEST_SIZE];
+        cdc_store_status created;
+        memset(zero, 0, sizeof(zero));
+        created = fill_uuid(store->uuid);
+        if (created != CDC_STORE_OK) {
+            close(store->lock_fd);
+            free(store);
+            return created;
+        }
+        build_head_body(body, store->uuid, 0, 0, zero, zero);
+        build_head_record(record, 0, body);
+        if (store_lock(store) != CDC_STORE_OK) {
+            close(store->lock_fd);
+            free(store);
+            return CDC_STORE_EIO;
+        }
+        created = publish_log(store, record, sizeof(record));
+        store_unlock(store);
+        if (created != CDC_STORE_OK) {
+            close(store->lock_fd);
+            free(store);
+            return created;
+        }
+        status = scan_log(store->log_path, &scan);
+        if (status != CDC_STORE_OK || !scan.has_head) {
+            close(store->lock_fd);
+            free(store);
+            return status == CDC_STORE_OK ? CDC_STORE_EIO : status;
+        }
     }
     if (scan.state == SCAN_TAIL) {
         /* Latch-or-hold recovery: only a physically incomplete final
@@ -439,6 +690,7 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
         if (truncate(store->log_path, scan.valid_bytes) != 0 ||
             sync_path(store->log_path) != 0 ||
             sync_path(store->dir) != 0) {
+            close(store->lock_fd);
             free(store);
             return CDC_STORE_EIO;
         }
@@ -446,6 +698,12 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
             *recovered_out = 1;
         }
     }
+    memcpy(store->uuid, scan.uuid, STORE_UUID_SIZE);
+    store->generation = scan.generation;
+    store->base_sealed = scan.base_sealed;
+    store->base_events = scan.base_events;
+    memcpy(store->base_state, scan.base_state, CDC_DIGEST_SIZE);
+    memcpy(store->prior_anchor, scan.prior_anchor, CDC_DIGEST_SIZE);
     store->sealed = scan.sealed;
     store->events = scan.events;
     store->valid_bytes = scan.valid_bytes;
@@ -461,8 +719,15 @@ void cdc_store_close(cdc_store *store) {
     for (i = 0; i < store->staged_count; i++) {
         free(store->staged[i].payload);
     }
+    if (store->lock_fd >= 0) {
+        close(store->lock_fd);
+    }
     free(store->staged);
     free(store);
+}
+
+uint64_t cdc_store_generation(const cdc_store *store) {
+    return store ? store->generation : 0;
 }
 
 uint64_t cdc_store_sealed_count(const cdc_store *store) {
@@ -624,27 +889,48 @@ cdc_store_status cdc_store_commit(cdc_store *store) {
     if (store->staged_count == 0) {
         return CDC_STORE_ESTATE;
     }
-    /* Compare-and-set: if this writer armed a fence, the on-disk sealed
-     * count must still be what it fenced at. Another writer having moved
-     * it means this writer's view is stale, so the commit is refused
-     * before a single byte is written. */
-    if (store->fence_armed) {
-        scan_result fence_scan;
-        if (scan_log_from(store->log_path, store->base_events,
-                          store->base_sealed, store->base_state,
-                          &fence_scan) != CDC_STORE_OK) {
+    /* Everything from here to the directory fsync happens under the store
+     * lock, so the compare-and-set below is genuinely atomic with respect
+     * to other processes rather than a check the winner can outrun. */
+    if (store_lock(store) != CDC_STORE_OK) {
+        return CDC_STORE_EIO;
+    }
+    {
+        scan_result now;
+        if (scan_log(store->log_path, &now) != CDC_STORE_OK) {
+            store_unlock(store);
             return CDC_STORE_EIO;
         }
-        if (fence_scan.state == SCAN_CORRUPT) {
+        if (now.state == SCAN_CORRUPT || !now.has_head) {
+            store_unlock(store);
             return CDC_STORE_ECORRUPT;
         }
-        if (fence_scan.sealed != store->fence_seal) {
+        /* The writer's own view must still be current even without a
+         * fence: a compaction under it changes the sequence space, so
+         * appending from stale counters would forge a broken chain. */
+        if (now.generation != store->generation) {
+            store_unlock(store);
             store->fence_armed = 0;
+            return CDC_STORE_ESTATE;
+        }
+        if (store->fence_armed &&
+            (now.generation != store->fence_generation ||
+             now.sealed != store->fence_seal ||
+             memcmp(now.replay_state, store->fence_state, CDC_DIGEST_SIZE) !=
+                 0)) {
+            store->fence_armed = 0;
+            store_unlock(store);
             return CDC_STORE_ESTATE; /* stale writer */
         }
+        /* Adopt the on-disk position: another process may legitimately
+         * have appended since this handle last looked. */
+        store->sealed = now.sealed;
+        store->events = now.events;
+        store->valid_bytes = now.valid_bytes;
     }
     fp = fopen(store->log_path, "ab");
     if (!fp) {
+        store_unlock(store);
         return CDC_STORE_EIO;
     }
     cdc_digest_init(&seal_ctx);
@@ -694,15 +980,29 @@ cdc_store_status cdc_store_commit(cdc_store *store) {
     if (status == CDC_STORE_OK) {
         store->events += store->staged_count;
         store->sealed += 1;
+        /* Re-arm the fence at the state this commit just produced, so a
+         * writer that keeps committing stays fenced against everyone else
+         * without having to re-fence by hand. */
         if (store->fence_armed) {
-            store->fence_seal = store->sealed;
+            scan_result now;
+            if (scan_log(store->log_path, &now) == CDC_STORE_OK &&
+                now.state != SCAN_CORRUPT && now.has_head) {
+                store->fence_generation = now.generation;
+                store->fence_seal = now.sealed;
+                memcpy(store->fence_state, now.replay_state,
+                       CDC_DIGEST_SIZE);
+            } else {
+                store->fence_armed = 0;
+            }
         }
         store->valid_bytes = -1; /* recomputed on next open/verify */
         cdc_store_rollback(store);
+        store_unlock(store);
         return CDC_STORE_OK;
     }
     /* crash or error: staged events remain staged; the on-disk tail (if
      * any) is unsealed and will be truncated by recovery. */
+    store_unlock(store);
     return status;
 }
 
@@ -718,9 +1018,7 @@ cdc_store_status cdc_store_replay(cdc_store *store, char *out,
      * on how that history is currently laid out on disk — which is exactly
      * why compaction preserves it while the attest (raw-bytes) digest
      * legitimately changes. */
-    if (scan_log_from(store->log_path, store->base_events,
-                      store->base_sealed, store->base_state,
-                      &scan) != CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
     if (scan.state == SCAN_CORRUPT) {
@@ -742,14 +1040,19 @@ cdc_store_status cdc_store_attest(cdc_store *store, char *out,
     if (!store || !out) {
         return CDC_STORE_EARG;
     }
-    if (scan_log_from(store->log_path, store->base_events,
-                      store->base_sealed, store->base_state,
-                      &scan) != CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
     if (scan.state == SCAN_CORRUPT) {
         return CDC_STORE_ECORRUPT; /* corrupt evidence is never attested */
     }
+    /* The digest runs from byte 0, so it covers the HEAD record — store
+     * uuid, generation, and compaction base included. That is what makes
+     * the attestation meaningful after compaction: two different histories
+     * compacted to the same sealed count still carry different base states
+     * in their HEADs, so they attest differently (2026-07-28 review,
+     * finding 1). Attesting only the post-compaction tail would digest an
+     * effectively empty file and collapse them together. */
     cdc_digest_init(&ctx);
     fp = fopen(store->log_path, "rb");
     remaining = scan.valid_bytes;
@@ -776,9 +1079,7 @@ cdc_store_status cdc_store_verify(cdc_store *store) {
     if (!store) {
         return CDC_STORE_EARG;
     }
-    if (scan_log_from(store->log_path, store->base_events,
-                      store->base_sealed, store->base_state,
-                      &scan) != CDC_STORE_OK) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
     if (scan.state == SCAN_CORRUPT) {
@@ -790,142 +1091,230 @@ cdc_store_status cdc_store_verify(cdc_store *store) {
     return CDC_STORE_OK;
 }
 
-/* ---- snapshot / compact / fence ------------------------------------- */
+/* ---- snapshot / compact / fence -------------------------------------
+ *
+ * Two-phase, one atomic transition (2026-07-28 review, finding 1):
+ *
+ *   snapshot  prepares a base for generation+1 in `base.pending`. open()
+ *             NEVER reads this file, so a crash after snapshot leaves the
+ *             store exactly as it was — the dangling-base window is gone
+ *             because there is no window.
+ *   compact   verifies the prepared base still belongs to THIS store and
+ *             still covers the CURRENT sealed prefix, both under the store
+ *             lock, then rebuilds the log as a single HEAD record and
+ *             activates it with fsync -> rename -> directory fsync.
+ *
+ * The base is bound to the store uuid and to the exact generation it
+ * succeeds. That defeats substituting a valid base from another store and
+ * replaying a stale base over an advanced log. It is BINDING, not keyed
+ * authentication: an attacker who can rewrite the whole log can still
+ * present any self-consistent history, and detecting that requires an
+ * anchor retained outside the store. Ed25519 signing over the HEAD is the
+ * queued repair for that; it is not claimed here. */
 
-/* Reads and authenticates the snapshot, if one exists. Returns
- * CDC_STORE_OK with *found=0 when absent; ECORRUPT when present but
- * tampered — a bad snapshot must never resurrect a wrong base. */
-static cdc_store_status snapshot_load(const char *path, int *found,
-                                      uint64_t *sealed, uint64_t *events,
-                                      uint8_t state[CDC_DIGEST_SIZE]) {
-    FILE *fp = fopen(path, "rb");
-    uint8_t buffer[SNAP_SIZE];
+enum {
+    PEND_BODY = 8 + HEAD_BODY, /* target generation | head body */
+    PEND_SIZE = PEND_BODY + CDC_DIGEST_SIZE
+};
+
+/* Reads the prepared base, if one exists. *found=0 when absent.
+ * ECORRUPT when present but malformed or tag-mismatched. EIO when the path
+ * is not a regular file (directory, FIFO, device) or the read faults —
+ * checked before any blocking open, so a FIFO cannot stall the store. */
+static cdc_store_status pending_load(const char *path, int *found,
+                                     uint64_t *target_generation,
+                                     uint8_t body[HEAD_BODY]) {
+    int fd;
+    struct stat st;
+    uint8_t buffer[PEND_SIZE + 1];
     uint8_t tag[CDC_DIGEST_SIZE];
-    size_t got;
+    ssize_t got;
 
     *found = 0;
-    if (!fp) {
+    fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
         return errno == ENOENT ? CDC_STORE_OK : CDC_STORE_EIO;
     }
-    got = fread(buffer, 1, sizeof(buffer), fp);
-    if (got != sizeof(buffer)) {
-        int faulted = ferror(fp);
-        fclose(fp);
-        return faulted ? CDC_STORE_EIO : CDC_STORE_ECORRUPT;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        return CDC_STORE_EIO;
     }
-    /* reject trailing bytes: a snapshot is exactly one record */
-    if (fgetc(fp) != EOF) {
-        fclose(fp);
+    got = read(fd, buffer, sizeof(buffer));
+    close(fd);
+    if (got < 0) {
+        return CDC_STORE_EIO;
+    }
+    if ((size_t)got != PEND_SIZE) {
+        return CDC_STORE_ECORRUPT; /* short, or trailing bytes */
+    }
+    cdc_digest(buffer, PEND_BODY, tag);
+    if (memcmp(tag, buffer + PEND_BODY, CDC_DIGEST_SIZE) != 0) {
         return CDC_STORE_ECORRUPT;
     }
-    fclose(fp);
-    if (memcmp(buffer, SNAP_MAGIC, sizeof(SNAP_MAGIC)) != 0 ||
-        buffer[4] != 1) {
-        return CDC_STORE_ECORRUPT;
-    }
-    cdc_digest(buffer, SNAP_BODY, tag);
-    if (memcmp(tag, buffer + SNAP_BODY, CDC_DIGEST_SIZE) != 0) {
-        return CDC_STORE_ECORRUPT;
-    }
-    *sealed = get_u64(buffer + 5);
-    *events = get_u64(buffer + 13);
-    memcpy(state, buffer + 21, CDC_DIGEST_SIZE);
+    *target_generation = get_u64(buffer);
+    memcpy(body, buffer + 8, HEAD_BODY);
     *found = 1;
     return CDC_STORE_OK;
 }
 
 cdc_store_status cdc_store_snapshot(cdc_store *store) {
-    uint8_t buffer[SNAP_SIZE];
-    char temp_path[640];
+    uint8_t buffer[PEND_SIZE];
+    char temp_path[660];
     FILE *fp;
     scan_result scan;
     int written;
+    cdc_store_status status;
 
     if (!store) {
         return CDC_STORE_EARG;
     }
-    if (scan_log_from(store->log_path, store->base_events, store->base_sealed,
-                      store->base_state, &scan) != CDC_STORE_OK) {
+    if (store_lock(store) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
-    if (scan.state == SCAN_CORRUPT) {
+    status = scan_log(store->log_path, &scan);
+    if (status != CDC_STORE_OK) {
+        store_unlock(store);
+        return status;
+    }
+    if (scan.state == SCAN_CORRUPT || !scan.has_head) {
+        store_unlock(store);
         return CDC_STORE_ECORRUPT;
     }
-
-    memcpy(buffer, SNAP_MAGIC, sizeof(SNAP_MAGIC));
-    buffer[4] = 1;
-    put_u64(buffer + 5, scan.sealed);
-    put_u64(buffer + 13, scan.events);
-    memcpy(buffer + 21, scan.replay_state, CDC_DIGEST_SIZE);
-    cdc_digest(buffer, SNAP_BODY, buffer + SNAP_BODY);
-
+    /* The prepared base succeeds THIS generation of THIS store, and its
+     * anchor commits to the HEAD it replaces. */
+    {
+        uint8_t body[HEAD_BODY];
+        uint8_t anchor[CDC_DIGEST_SIZE];
+        uint8_t current[HEAD_BODY];
+        build_head_body(current, scan.uuid, scan.base_sealed,
+                        scan.base_events, scan.base_state,
+                        scan.prior_anchor);
+        cdc_digest(current, sizeof(current), anchor);
+        build_head_body(body, scan.uuid, scan.sealed, scan.events,
+                        scan.replay_state, anchor);
+        put_u64(buffer, scan.generation + 1);
+        memcpy(buffer + 8, body, HEAD_BODY);
+        cdc_digest(buffer, PEND_BODY, buffer + PEND_BODY);
+    }
     written = snprintf(temp_path, sizeof(temp_path), "%s.tmp",
-                       store->snapshot_path);
+                       store->pending_path);
     if (written < 0 || (size_t)written >= sizeof(temp_path)) {
+        store_unlock(store);
         return CDC_STORE_EARG;
     }
     fp = fopen(temp_path, "wb");
     if (!fp) {
+        store_unlock(store);
         return CDC_STORE_EIO;
+    }
+    if (injected_crash(store)) {
+        fclose(fp);
+        unlink(temp_path);
+        store_unlock(store);
+        return CDC_STORE_ECRASH; /* before the base is written */
     }
     if (fwrite(buffer, 1, sizeof(buffer), fp) != sizeof(buffer) ||
         fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
         fclose(fp);
+        unlink(temp_path);
+        store_unlock(store);
         return CDC_STORE_EIO;
     }
     fclose(fp);
-    /* activation is atomic, then the directory entry is made durable */
-    if (rename(temp_path, store->snapshot_path) != 0 ||
+    if (injected_crash(store)) {
+        store_unlock(store);
+        return CDC_STORE_ECRASH; /* base durable, not yet published */
+    }
+    if (rename(temp_path, store->pending_path) != 0 ||
         sync_path(store->dir) != 0) {
+        unlink(temp_path);
+        store_unlock(store);
         return CDC_STORE_EIO;
     }
+    store_unlock(store);
     return CDC_STORE_OK;
 }
 
 cdc_store_status cdc_store_compact(cdc_store *store) {
     int found = 0;
-    uint64_t snap_sealed = 0, snap_events = 0;
-    uint8_t snap_state[CDC_DIGEST_SIZE];
+    uint64_t target_generation = 0;
+    uint8_t body[HEAD_BODY];
+    uint8_t record[HEADER_SIZE + HEAD_BODY];
     cdc_store_status status;
     scan_result scan;
 
     if (!store) {
         return CDC_STORE_EARG;
     }
-    status = snapshot_load(store->snapshot_path, &found, &snap_sealed,
-                           &snap_events, snap_state);
+    if (store_lock(store) != CDC_STORE_OK) {
+        return CDC_STORE_EIO;
+    }
+    status = pending_load(store->pending_path, &found, &target_generation,
+                          body);
     if (status != CDC_STORE_OK) {
+        store_unlock(store);
         return status;
     }
     if (!found) {
-        return CDC_STORE_ESTATE; /* nothing to compact against */
+        store_unlock(store);
+        return CDC_STORE_ESTATE; /* nothing prepared to compact against */
     }
-    if (scan_log_from(store->log_path, store->base_events, store->base_sealed,
-                      store->base_state, &scan) != CDC_STORE_OK) {
-        return CDC_STORE_EIO;
+    status = scan_log(store->log_path, &scan);
+    if (status != CDC_STORE_OK) {
+        store_unlock(store);
+        return status;
     }
-    if (scan.state == SCAN_CORRUPT) {
+    if (scan.state == SCAN_CORRUPT || !scan.has_head) {
+        store_unlock(store);
         return CDC_STORE_ECORRUPT;
     }
-    /* Refuse unless the snapshot covers the entire sealed prefix: compaction
-     * may never discard a record the base does not already account for. */
-    if (snap_sealed != scan.sealed || snap_events != scan.events ||
-        memcmp(snap_state, scan.replay_state, CDC_DIGEST_SIZE) != 0) {
+    /* Identity: a base from another store is never activated here. */
+    if (memcmp(body, scan.uuid, STORE_UUID_SIZE) != 0) {
+        store_unlock(store);
+        return CDC_STORE_ECORRUPT;
+    }
+    /* Generation: the base must succeed exactly the generation on disk, so
+     * a stale base cannot be replayed over an advanced log. */
+    if (target_generation != scan.generation + 1) {
+        store_unlock(store);
         return CDC_STORE_ESTATE;
     }
-    if (truncate(store->log_path, 0) != 0 ||
-        sync_path(store->log_path) != 0 || sync_path(store->dir) != 0) {
-        return CDC_STORE_EIO;
+    /* Coverage: the base must account for the ENTIRE sealed prefix as it
+     * stands right now. A transaction committed after the base was
+     * prepared makes this fail, so compaction holds rather than discarding
+     * a committed transaction (2026-07-28 review, finding 2). */
+    if (get_u64(body + STORE_UUID_SIZE) != scan.sealed ||
+        get_u64(body + STORE_UUID_SIZE + 8) != scan.events ||
+        memcmp(body + STORE_UUID_SIZE + 16, scan.replay_state,
+               CDC_DIGEST_SIZE) != 0) {
+        store_unlock(store);
+        return CDC_STORE_ESTATE;
     }
-    store->has_base = 1;
-    store->base_sealed = snap_sealed;
-    store->base_events = snap_events;
-    memcpy(store->base_state, snap_state, CDC_DIGEST_SIZE);
-    store->sealed = snap_sealed;
-    store->events = snap_events;
-    store->valid_bytes = 0;
+    build_head_record(record, target_generation, body);
+    status = publish_log(store, record, sizeof(record));
+    if (status != CDC_STORE_OK) {
+        store_unlock(store);
+        return status;
+    }
+    /* The prepared base has been consumed; removing it is not part of the
+     * atomic step because its presence or absence changes nothing — a
+     * leftover pending base fails the generation check on the next run. */
+    unlink(store->pending_path);
+    sync_path(store->dir);
+    store->generation = target_generation;
+    store->base_sealed = scan.sealed;
+    store->base_events = scan.events;
+    memcpy(store->base_state, scan.replay_state, CDC_DIGEST_SIZE);
+    memcpy(store->prior_anchor, body + STORE_UUID_SIZE + 16 + CDC_DIGEST_SIZE,
+           CDC_DIGEST_SIZE);
+    store->sealed = scan.sealed;
+    store->events = scan.events;
+    store->valid_bytes = (long)(HEADER_SIZE + HEAD_BODY);
+    store->fence_armed = 0; /* the representation changed underneath it */
+    store_unlock(store);
     return CDC_STORE_OK;
 }
+
 
 cdc_store_status cdc_store_fence(cdc_store *store, uint64_t expected_seal) {
     scan_result scan;
@@ -933,18 +1322,30 @@ cdc_store_status cdc_store_fence(cdc_store *store, uint64_t expected_seal) {
     if (!store) {
         return CDC_STORE_EARG;
     }
-    if (scan_log_from(store->log_path, store->base_events, store->base_sealed,
-                      store->base_state, &scan) != CDC_STORE_OK) {
+    if (store_lock(store) != CDC_STORE_OK) {
         return CDC_STORE_EIO;
     }
-    if (scan.state == SCAN_CORRUPT) {
+    if (scan_log(store->log_path, &scan) != CDC_STORE_OK) {
+        store_unlock(store);
+        return CDC_STORE_EIO;
+    }
+    if (scan.state == SCAN_CORRUPT || !scan.has_head) {
+        store_unlock(store);
         return CDC_STORE_ECORRUPT;
     }
     if (scan.sealed != expected_seal) {
         store->fence_armed = 0;
+        store_unlock(store);
         return CDC_STORE_ESTATE; /* the writer's view is already stale */
     }
+    /* The armed token is the whole (generation, sealed, replay state)
+     * triple. Sealed count alone would let a compaction slip past: it can
+     * leave the count identical while replacing the representation the
+     * writer intended to extend. */
     store->fence_armed = 1;
-    store->fence_seal = expected_seal;
+    store->fence_generation = scan.generation;
+    store->fence_seal = scan.sealed;
+    memcpy(store->fence_state, scan.replay_state, CDC_DIGEST_SIZE);
+    store_unlock(store);
     return CDC_STORE_OK;
 }

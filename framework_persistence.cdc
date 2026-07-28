@@ -40,8 +40,11 @@ store journal dir=build/persistence-journal mode=fresh
 
 # A second directory with TWO declared handles onto it: `contended` is the
 # writer that fences, `rival` is the writer that moves the log underneath
-# it. This is a real compare-and-set counterexample written in .cdc, not a
-# simulated one.
+# it. Both handles live in ONE process, so the refusal below comes from the
+# fence token rather than from the interprocess lock -- the token is
+# compared against on-disk state under that same lock, so the outcome is
+# identical. The genuinely concurrent, two-process version of this race is
+# the `store-race` suite in scripts/verify.sh.
 store contended dir=build/persistence-contended mode=fresh
 store rival dir=build/persistence-contended mode=open
 
@@ -81,8 +84,9 @@ persist rival-latch store=rival op=append module=ledger expect-trits=0+- expect-
 # perfectly admissible. It still writes nothing, because its view is stale.
 # The reported sealed=0 IS that stale view -- which is precisely why the
 # compare-and-set refused before a byte was written. A stale handle is
-# spent after this: the single-writer contract in cdc_store.h means it must
-# be reopened, never reused, so no further job writes through it here.
+# SPENT after this: its cached counters no longer describe the log, so
+# cdc_store.h requires it to be reopened rather than reused, and no further
+# job writes through it here.
 persist contended-stale store=contended op=append module=ledger expect-trits=0+- expect-balance=admissible expect-status=held expect-reason=fence-violation expect-sealed=0 expect-events=0 expect-durable=no expect-replay=stable
 
 witness persistence-declare-native capability=H6 framework=persistence role=declare store=journal claim="a durable store is a declared term, not a host service the source reaches around the language to call"

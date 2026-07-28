@@ -168,17 +168,74 @@ print(f"macos app: {len(sources)} swift sources, no dependencies, "
       f"no placeholders, structurally balanced")
 PY
 
+# Subprocess-drain contract (2026-07-28 review, finding 3). A SOURCE-level
+# check, so it runs on every platform including the Linux gate: draining one
+# pipe to EOF before starting the other deadlocks as soon as the child fills
+# the undrained buffer. No compiler and no file count can catch that, so the
+# pattern is gated directly.
+python3 - <<'DRAINCHECK'
+from pathlib import Path
+import re
+
+service = Path("ui/macos/CDCStudio/Sources/CDCStudio/Services/ToolchainService.swift")
+text = service.read_text(encoding="utf-8")
+
+# The deadlock signature: two readDataToEndOfFile calls back to back on one
+# thread, nothing concurrent between them.
+if re.search(
+    r"readDataToEndOfFile\(\)\s*\n\s*let\s+\w+\s*=\s*\w+\.fileHandleForReading\.readDataToEndOfFile",
+    text,
+):
+    raise SystemExit(
+        "ToolchainService drains stdout and stderr sequentially; a child that "
+        "fills the undrained pipe deadlocks both processes"
+    )
+
+for token, why in [
+    ("DispatchGroup", "concurrent drain needs a completion group"),
+    ("readDataToEndOfFile", "the drain must actually read to EOF"),
+    ("group.wait(timeout:", "a wedged child must be bounded by a timeout"),
+    ("process.terminate()", "timeout must escalate to SIGTERM"),
+    ("SIGKILL", "timeout must escalate to SIGKILL if SIGTERM is ignored"),
+]:
+    if token not in text:
+        raise SystemExit(f"ToolchainService missing {token!r}: {why}")
+
+tests = Path("ui/macos/CDCStudio/Tests/CDCStudioTests/ToolchainServiceTests.swift")
+if not tests.is_file():
+    raise SystemExit("the flooding-child counterexample is missing")
+test_text = tests.read_text(encoding="utf-8")
+for token in ("512 * 1024", "stderr was truncated", "timeout did not fire"):
+    if token not in test_text:
+        raise SystemExit(f"counterexample missing {token!r}")
+
+pkg = Path("ui/macos/CDCStudio/Package.swift").read_text(encoding="utf-8")
+if ".testTarget" not in pkg:
+    raise SystemExit("Package.swift does not declare the test target")
+
+ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+if "macos-14" not in ci or "swift test" not in ci:
+    raise SystemExit(
+        "a required macOS lane running swift build AND swift test is missing; "
+        "the Linux structural gate is not sufficient on its own"
+    )
+
+print("subprocess drain contract: concurrent, bounded, counterexample present")
+print("macOS compile lane: required in CI (macos-14)")
+DRAINCHECK
+
 # CDC Studio is a SwiftUI application, and SwiftUI ships only on Apple
 # platforms. A Swift toolchain alone is not sufficient — the Linux CI runner
 # has swift but no SwiftUI — so the build is attempted only on macOS. Off
-# Apple platforms the structural gate above stands and the boundary is
-# stated rather than faked (ui/README.md).
+# Apple platforms the structural and source-level gates above stand, and the
+# compiler of record is the REQUIRED macos-14 CI lane. That lane exists
+# because this gate alone let a non-compiling surface reach a green PR.
 if [ "$(uname -s)" = "Darwin" ] && command -v swift >/dev/null 2>&1; then
-  echo "macOS host with swift toolchain; building CDC Studio"
-  (cd ui/macos/CDCStudio && swift build)
+  echo "macOS host with swift toolchain; building and testing CDC Studio"
+  (cd ui/macos/CDCStudio && swift build && swift test)
 else
   echo "not an Apple platform (SwiftUI unavailable); CDC Studio is"
-  echo "structurally gated here and compiled on a macOS host (see ui/README.md)"
+  echo "gated structurally here and compiled by the required macos-14 CI lane"
 fi
 
 echo
