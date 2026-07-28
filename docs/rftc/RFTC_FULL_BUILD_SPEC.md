@@ -1,7 +1,7 @@
 # Reference-Frame Topological Coherence — Full Build Specification
 
-Status: **execution-ready architecture; rapid crucible active; integrated
-six-form implementation gated on the crucible verdict**
+Status: **C1-C2 runtime core active; parser-level six-form and distributed C3
+implementation gated on the crucible verdict**
 
 ## 1. End state
 
@@ -26,6 +26,9 @@ The target is not a software imitation of a quantum computer. It is a real
 classical topological field computer with an explicit interface through which a
 future physical nonclassical substrate could participate without changing the
 semantic core.
+
+The constitutive flow/record/closure contract is frozen in
+[`RELATIONAL_RECORD_CLOSURE.md`](RELATIONAL_RECORD_CLOSURE.md).
 
 ## 2. Core invariant
 
@@ -141,6 +144,9 @@ transport lab-mesh
 | existing store | append, snapshot, recovery, digest, replay | current fail-closed semantics retained |
 | existing bridge/council | cross-cell routing and guarded collective decision | no direct state mutation |
 | existing universal operator | lifted closure and enacted-coordinate agreement | remains derived, not foundational |
+| `cdc_rftc` | immutable oriented-frame reduction, macrostate, topology sector, microstate and state provenance | malformed or underspecified frames reject |
+| `cdc_shared_record` | fragment publication and quorum recovery through sealed store history | missing quorum, duplicate fragments, conflict, corruption, or compacted payload loss reject |
+| `cdc_barrier` | shared balanced-ternary prefix-admissibility kernel | invalid carrier or negative prefix rejects |
 
 Fixed-size runtime arrays are replaced with bounded dynamic collections carrying
 explicit allocation limits. Every public operation is available through the
@@ -220,8 +226,13 @@ Every artifact and UI surface carries one of these machine-readable levels:
 | Q0 | nonclassical physical witness | loophole-aware physical experiment, independent analysis |
 | Q1 | quantum computational advantage | accepted task and classical-resource comparison |
 
-The current executable crucible targets C1-C2. The full software build targets
-C3. It cannot self-promote to Q0 or Q1.
+The current seven-witness executable crucible targets C1-C2. Its per-event
+admissibility witness uses the same barrier as native and persistent commits,
+then observes durable store and typed-receipt effects. Its distributed-record
+witness closes and reopens independent fragment stores and recovers only
+through their authenticated sealed payloads. Parser-level forms, network
+transport, distributed authority, and recursive cross-host execution remain
+the C3 build. No software stage can self-promote to Q0 or Q1.
 
 ## 8. Full verification matrix
 
@@ -268,7 +279,8 @@ C3. It cannot self-promote to Q0 or Q1.
 
 ## 9. Execution sequence and hard gates
 
-1. **RFTC crucible:** smoke, alternate seed, sanitizers, rapid, stress.
+1. **RFTC crucible:** seven independent witnesses under deterministic replay,
+   alternate seed, sanitizers, rapid, and stress.
 2. **Local semantics:** `frame` / `reduce` / `complex` / `topology` parser,
    AST, reducer, logical cell, topology.
 3. **Durable truth:** versioned state/receipt replay and crash recovery.

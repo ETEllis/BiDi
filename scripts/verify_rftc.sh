@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Rapid falsification gate for Reference-Frame Topological Coherence (RFTC).
 # The gate is intentionally classical: it validates collective reduction,
-# topology, hidden granularity, bidirectional control, and the causal boundary
-# that prevents those results from being mislabeled as quantum computation.
+# topology, hidden granularity, bidirectional control, typed packet thresholds,
+# redundant record recovery, and the causal boundary that prevents those
+# results from being mislabeled as quantum computation.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -10,10 +11,24 @@ cd "$(dirname "$0")/.."
 compiler="${CC:-cc}"
 out_dir="build/rftc"
 source_file="experiments/rftc/rftc_crucible.c"
-runtime_sources=(runtime/cdc_digest.c runtime/cdc_blake3.c)
-common_flags=(-std=c99 -Wall -Wextra -pedantic)
+runtime_sources=(
+  runtime/cdc_store.c
+  runtime/cdc_receipt.c
+  runtime/cdc_rftc.c
+  runtime/cdc_shared_record.c
+  runtime/cdc_digest.c
+  runtime/cdc_blake3.c
+)
+common_flags=(-std=c99 -Wall -Wextra -pedantic -pthread)
 
 mkdir -p "$out_dir"
+
+echo "== RFTC: sealed event-recovery API =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_store_replay_api_test.c \
+  runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_store_replay_api_test"
+"$out_dir/cdc_store_replay_api_test"
 
 echo "== RFTC: release build and deterministic replay =="
 "$compiler" "${common_flags[@]}" -O2 "$source_file" \
@@ -29,10 +44,19 @@ cmp "$out_dir/metrics-a.csv" "$out_dir/metrics-b.csv"
 cmp "$out_dir/verdict-a.json" "demo/rftc-verdict.json"
 
 jq -e '
-  .schema == "rftc-crucible/v1" and
+  .schema == "rftc-crucible/v2" and
   .classification == "CLASSICAL_REFERENCE_FRAME_TOPOLOGICAL_COHERENCE" and
   .verdict == "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM" and
+  (.experiments | length == 7) and
   ([.experiments[].status] | all(. == "PASS")) and
+  (.experiments | map(.id) | index("packet-threshold") != null) and
+  (.experiments | map(.id) | index("record-redundancy") != null) and
+  (.experiments[] | select(.id == "hidden-granularity") |
+    .frameVersionDifferenceRate == 1) and
+  (.experiments[] | select(.id == "packet-threshold") |
+    .buggyAccumulatorWouldCommit == true and .receiptParity == true) and
+  (.experiments[] | select(.id == "record-redundancy") |
+    .centralOnlyRefused == true and .sealedFragmentStores == 5) and
   (.claims.notAllowed | index("quantum superposition") != null) and
   (.claims.notAllowed | index("entanglement") != null) and
   (.claims.notAllowed | index("quantum computational advantage") != null)
@@ -68,7 +92,9 @@ echo "== RFTC: alternate-seed counterexample search =="
   --json "$out_dir/verdict-alternate.json" \
   --csv "$out_dir/metrics-alternate.csv"
 jq -e '
+  .schema == "rftc-crucible/v2" and
   .verdict == "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM" and
+  (.experiments | length == 7) and
   ([.experiments[].status] | all(. == "PASS"))
 ' "$out_dir/verdict-alternate.json" >/dev/null
 
@@ -89,6 +115,13 @@ echo "== RFTC: memory and undefined-behavior sanitizers =="
   --csv "$out_dir/metrics-sanitized.csv"
 jq -e '.verdict == "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM"' \
   "$out_dir/verdict-sanitized.json" >/dev/null
+
+"$compiler" "${common_flags[@]}" -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_store_replay_api_test.c \
+  runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_store_replay_api_test_sanitized"
+"$out_dir/cdc_store_replay_api_test_sanitized"
 
 cp "$out_dir/verdict-a.json" "$out_dir/verdict.json"
 cp "$out_dir/metrics-a.csv" "$out_dir/metrics.csv"

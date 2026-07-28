@@ -13,7 +13,7 @@ classified as **classical distributed field computation**. A passing verdict
 does not establish quantum superposition, entanglement, Bell nonlocality, or
 quantum computational advantage.
 
-## The five independent witnesses
+## The seven independent witnesses
 
 | Witness | Positive condition | Held negative control | Meaning |
 |---|---|---|---|
@@ -22,20 +22,35 @@ quantum computational advantage.
 | Hidden granularity | Distinct BLAKE3 microstate digests share the same `R`, `Psi`, and winding in 100% of runs | Digest equality would fail the witness | Coarse observation is many-to-one without erasing microstate provenance |
 | BiDi recovery | Bottom-up reduction plus top-down constraint improves recovery by more than 30% | Local-neighbor recovery only | Reciprocal macro/micro control is measurably stronger than one-way local flow |
 | Causal cut | Local deterministic CHSH witness remains `S <= 2` | A communicating implementation reaches `S = 4` but is invalidated | Ordinary cluster communication cannot be laundered into a nonclassical claim |
+| Packet threshold | The same balanced-ternary barrier used by live commits accepts or holds each event independently; accepted events cross the real durable store and typed-receipt path; a 4x arrival count produces exactly 4x sealed commits while per-commit excess remains unchanged | 512 individually invalid events whose aggregate exceeds the accepted arm, plus the explicitly computed buggy accumulator outcome | Aggregate drive and per-event admissibility remain independent control axes in the actual barrier/store/receipt path |
+| Record redundancy | Five independently stored fragments are sealed, closed, reopened, and recovered through the authenticated event visitor; an adversarial single fragment is wrong while quorum recovery is correct | Seven scrambled fragment stores recover the wrong value; seven empty fragment channels return typed `ENODATA` despite a producer-local label; corruption yields zero callbacks | A shared fact must exist in independently recoverable sealed records, not only centralized post-processing |
 
-All five witnesses must pass. No average score can hide one failed mechanism.
+All seven witnesses must pass. No average score can hide one failed mechanism.
+
+The packet-threshold witness is a software contract inspired by the separation
+between photon energy and photon count in the photoelectric effect. It shares
+BiDi's production commit-barrier implementation and executes through
+`cdc_store` and `cdc_receipt`; it does not assert that a CDC event is a physical
+quantum. The record-redundancy witness shares the production store scan,
+integrity, recovery, and reopening path. It is a classical distributed-record
+test, not evidence for quantum Darwinism, objective collapse, or an
+observer-independent ontology.
 
 ## Reproducibility contract
 
 `scripts/verify_rftc.sh`:
 
-1. builds the C99 executable against BiDi's vendored BLAKE3 implementation;
-2. requires byte-identical JSON and CSV from identical runs;
-3. repeats the search under an alternate seed and requires at least one
+1. builds the C99 executable against BiDi's commit barrier, store, typed
+   receipts, logical-cell reducer, shared-record recovery, and vendored BLAKE3
+   implementation;
+2. gates the exact sealed-event visitor under clean replay, reopen, unsealed
+   tails, committed corruption, and sanitizers;
+3. requires byte-identical JSON and CSV from identical runs;
+4. repeats the search under an alternate seed and requires at least one
    experiment metric—not merely the seed label—to change;
-4. runs the entire smoke profile under AddressSanitizer and
+5. runs the entire smoke profile under AddressSanitizer and
    UndefinedBehaviorSanitizer;
-5. validates the evidence schema, five PASS results, and explicit claim
+6. validates the evidence schema, seven PASS results, and explicit claim
    exclusions.
 
 Profiles are intentionally nested:

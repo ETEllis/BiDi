@@ -64,7 +64,12 @@
     .verdict span { color: var(--cyan); }
     .scope { color: var(--muted); line-height: 1.55; }
     .scope strong { display: block; color: var(--amber); margin-bottom: 5px; }
-    .grid { margin-top: 18px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
     article {
       min-height: 248px;
       padding: 20px;
@@ -106,14 +111,12 @@
     footer { margin-top: 36px; color: #747c7a; font-size: .78rem; line-height: 1.55; }
     @media (max-width: 950px) {
       .grid { grid-template-columns: repeat(2, 1fr); }
-      article:last-child { grid-column: span 2; }
     }
     @media (max-width: 650px) {
       main { padding-top: 32px; }
       header, .summary { grid-template-columns: 1fr; }
       .stamp { justify-self: start; }
       .grid { grid-template-columns: 1fr; }
-      article:last-child { grid-column: auto; }
       .controls { align-items: flex-start; flex-direction: column; }
     }
     @media (prefers-reduced-motion: no-preference) {
@@ -128,7 +131,7 @@
       <div>
         <div class="eyebrow">BiDi / Reference-Frame Topological Coherence</div>
         <h1>Crucible,<br>not theatre.</h1>
-        <p class="lede">Five independent witnesses test whether a distributed phase field can become a stable logical cell—and stop exactly where the evidence stops.</p>
+        <p class="lede">Seven independent witnesses test whether distributed phase flow can close as a stable, recoverable logical cell—and stop exactly where the evidence stops.</p>
       </div>
       <div class="stamp"><strong id="profile">smoke</strong> · <span id="seeds">24</span> seeds</div>
     </header>
@@ -148,7 +151,7 @@
       <label for="result-file">Load a fresh verdict
         <input id="result-file" type="file" accept=".json,application/json">
       </label>
-      <div class="provenance" id="provenance">schema rftc-crucible/v1 · seed 5928518606219378689</div>
+      <div class="provenance" id="provenance">schema rftc-crucible/v2 · seed 5928518606219378689</div>
     </div>
 
     <footer>
@@ -159,7 +162,7 @@
 
   <script type="application/json" id="rftc-data">
 {
-  "schema": "rftc-crucible/v1",
+  "schema": "rftc-crucible/v2",
   "classification": "CLASSICAL_REFERENCE_FRAME_TOPOLOGICAL_COHERENCE",
   "profile": "smoke",
   "seed": "5928518606219378689",
@@ -168,13 +171,15 @@
   "experiments": [
     {"id":"synchronization-onset","status":"PASS","uncoupledR":0.159426161,"coupledR":0.994210920,"separation":0.834784760,"criticalCoupling":0.900000000,"precriticalR":0.693661783,"criticalR":0.952422954,"maxRegression":0.000000000,"thresholds":{"uncoupledMax":0.35,"coupledMin":0.80,"separationMin":0.50,"criticalR":0.80,"maxRegression":0.03}},
     {"id":"topological-sector","status":"PASS","moderatePreservation":1.000000000,"shuffledPreservation":0.166666667,"meanSlipThreshold":2.964878067,"thresholds":{"moderateMin":0.99,"shuffledMax":0.60,"slipMin":2.5,"slipMax":3.8}},
-    {"id":"hidden-granularity","status":"PASS","macroMatchRate":1.000000000,"digestDifferenceRate":1.000000000,"claim":"distinct microstates share one macro boundary"},
+    {"id":"hidden-granularity","status":"PASS","macroMatchRate":1.000000000,"digestDifferenceRate":1.000000000,"frameVersionDifferenceRate":1.000000000,"claim":"distinct microstates share one macro boundary"},
     {"id":"bidi-recovery","status":"PASS","bidiRecoverySteps":26.708333333,"localRecoverySteps":404.708333333,"improvement":0.934005971,"thresholds":{"improvementMin":0.30}},
-    {"id":"causal-cut","status":"PASS","classicalS":2.000000000,"communicatingS":4.000000000,"classicalValid":true,"communicatingValid":false,"claim":"a communicating digital cluster cannot certify nonclassicality"}
+    {"id":"causal-cut","status":"PASS","classicalS":2.000000000,"communicatingS":4.000000000,"classicalValid":true,"communicatingValid":false,"claim":"a communicating digital cluster cannot certify nonclassicality"},
+    {"id":"packet-threshold","status":"PASS","subthresholdTotalInput":384.000000000,"superthresholdTotalInput":40.000000000,"subthresholdCommitRate":0.000000000,"lowFluxCommitRate":1.000000000,"highFluxCommitRate":1.000000000,"committedCountRatio":4.000000000,"meanExcessDelta":0.000000000,"buggyAccumulatorWouldCommit":true,"receiptParity":true,"claim":"aggregate drive cannot replace per-event admissibility"},
+    {"id":"record-redundancy","status":"PASS","singleFragmentRecovery":0.000000000,"quorumRecovery":1.000000000,"quorumGain":1.000000000,"scrambledRecovery":0.000000000,"centralOnlyRecovery":0.000000000,"centralOnlyRefused":true,"sealedFragmentStores":5,"claim":"shared facts require independently recoverable fragments"}
   ],
   "verdict": "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM",
   "claims": {
-    "allowed": ["classical collective order parameter","classical topological sector","many-to-one reference-frame coarse graining","bidirectional macro-micro control advantage"],
+    "allowed": ["classical collective order parameter","classical topological sector","many-to-one reference-frame coarse graining","bidirectional macro-micro control advantage","typed per-event threshold contract","redundant classical record recovery"],
     "notAllowed": ["quantum superposition","entanglement","Bell nonlocality","quantum computational advantage"]
   }
 }
@@ -185,14 +190,18 @@
       "topological-sector": ["Topological sector", "preserved", e => e.moderatePreservation],
       "hidden-granularity": ["Hidden granularity", "macro match", e => e.macroMatchRate],
       "bidi-recovery": ["BiDi recovery", "improvement", e => e.improvement],
-      "causal-cut": ["Causal cut", "valid classical S", e => e.classicalS]
+      "causal-cut": ["Causal cut", "valid classical S", e => e.classicalS],
+      "packet-threshold": ["Packet threshold", "commit ratio", e => e.committedCountRatio],
+      "record-redundancy": ["Record redundancy", "quorum recovery", e => e.quorumRecovery]
     };
     const fmt = (id, value) => {
-      if (id === "bidi-recovery") return `${(value * 100).toFixed(1)}%`;
+      if (id === "bidi-recovery" || id === "record-redundancy") {
+        return `${(value * 100).toFixed(1)}%`;
+      }
       return Number(value).toFixed(3);
     };
     function render(data) {
-      if (data.schema !== "rftc-crucible/v1" || !Array.isArray(data.experiments)) {
+      if (data.schema !== "rftc-crucible/v2" || !Array.isArray(data.experiments)) {
         throw new Error("Unsupported or malformed RFTC evidence");
       }
       const pass = data.verdict === "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM";
