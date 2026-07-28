@@ -126,8 +126,17 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    (same machine, same compiler — cross-toolchain reproducibility is not
    claimed).
    **CT2/CT3 and CT0 are closed.** Next is step 3.
-3. **Deletion gates (this repo, after 2).** Migrate native/bridge runtime
-   internals to the grammar-1 frontend (byte-identical outputs; greps are
+3. **Deletion gates (this repo, after 2).** IN PROGRESS. Step 1 found and
+   fixed a live defect in the legacy reader (D22: `gain` read
+   `action-gain=9.0` as 9.0 — confidently wrong, never exercised by the
+   corpus) and pinned the migration precondition (D23: no runtime-consumed
+   attribute may be quoted, 101 consumed, 0 quoted, gated). What remains of
+   step 1 is mechanical: swap the `add_*` functions from raw lines to
+   `cdc_stmt` accessors. ORDER MATTERS — once the legacy scanner is gone,
+   `attr-parity` compares the frontend to itself and stops being an oracle,
+   leaving `cdc_boot.py --dump` as the only independent one. Retire the
+   scanner BEFORE the bootloader, not alongside it.
+   Then migrate the remaining internals (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`
    (frontend-differential-dump gate) → after toolchain-verify-parity
    holds a full release cycle, delete `cdc_boot.py` and renegotiate

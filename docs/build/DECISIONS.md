@@ -46,6 +46,41 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D23 — 2026-07-28 — The grammar-1 migration precondition, pinned
+
+Migrating the runtimes onto the grammar-1 frontend is only
+behaviour-preserving under a condition nobody had written down.
+
+The two readers disagree on VALUES, not just on keys. The legacy reader
+takes a value raw up to whitespace; grammar-1 strips quotes and keeps the
+whole value. The frontend differential already measures the gap — 4879
+`quoting` divergences across the corpus — but those are all on attributes
+the runtimes never read, so the disagreement has never mattered.
+
+**The precondition: no attribute the runtimes consume may ever be quoted.**
+That holds today — 101 consumed attributes, none quoted — and it is now
+gated rather than assumed, because "true today" is precisely how the
+shadowing defect in D22 survived. The gate extracts the consumed-attribute
+list from the runtime sources themselves and refuses a quoted value on any
+of them, with a floor on the extracted count so a broken extraction cannot
+make the check vacuous.
+
+Why it matters concretely: if a consumed attribute were quoted, the legacy
+reader would truncate it at the first space —
+`expect-contains="witness memory"` reads as `"witness` — silently wrong
+rather than rejected. Migrating to grammar-1 would then silently CHANGE
+that value, which is the one thing a byte-identical-output migration must
+not do. Both behaviours are pinned in `attr-boundary` so the gate's reason
+is executable rather than a comment.
+
+With this pinned, the remaining migration is mechanical: swap the `add_*`
+functions from raw lines to `cdc_stmt` accessors, with the dump
+differential against the bootloader and the passthrough parity suite as the
+regression net. Note for whoever does it: once the legacy scanner is gone,
+`attr-parity` compares the frontend to itself and stops being an oracle.
+`cdc_boot.py --dump` becomes the only independent one — which is an
+argument for retiring the scanner BEFORE the bootloader, not alongside it.
+
 ## D22 — 2026-07-28 — Deletion gate step 1: the attribute-key shadowing defect
 
 Migrating the runtimes off the legacy line scanner starts by reading it

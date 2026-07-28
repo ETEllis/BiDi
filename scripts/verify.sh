@@ -202,6 +202,34 @@ run_step ./build/cdc_frontend_check oom framework_loop.cdc
 # rather than missing, so nothing downstream could notice. The corpus never
 # tripped it (collision=0), which is exactly why it survived.
 run_step ./build/cdc_frontend_check attr-boundary
+# Migration precondition [deletion-gate step 1]. The legacy reader takes a
+# value raw up to whitespace; the grammar-1 frontend strips quotes and keeps
+# the whole value. They therefore disagree on every quoted value (4879 cases
+# in the corpus). Migrating the runtimes onto grammar-1 is behaviour-
+# preserving only while NO attribute the runtimes consume is ever quoted.
+#
+# That is true today, and "true today" is exactly how the shadowing defect
+# survived — so it is pinned rather than assumed. If it is ever violated,
+# the legacy reader silently truncates the value at the first space (see the
+# attr-boundary cases above) and the migration would silently change it.
+CONSUMED_ATTRS=build/consumed_attrs.txt
+grep -ohE 'cdc_(read_attr|copy_attr|read_int_attr|read_double_attr)\([^,]+, *"[^"]+"' \
+  runtime/cdc_native_runtime.c runtime/cdc_bridge_runtime.c \
+  | sed 's/.*"\(.*\)"/\1/' | LC_ALL=C sort -u > "$CONSUMED_ATTRS"
+CONSUMED_COUNT=$(wc -l < "$CONSUMED_ATTRS")
+# A broken extraction must not make this gate vacuous.
+test "$CONSUMED_COUNT" -ge 90
+QUOTED_CONSUMED=0
+while read -r ATTR; do
+  if grep -qhE "(^|[[:space:]])${ATTR}=\"" ./*.cdc tests/fixtures/*/*.cdc 2>/dev/null; then
+    echo "runtime-consumed attribute carries a quoted value: ${ATTR}" >&2
+    echo "  the legacy reader truncates it at the first space; migrating to" >&2
+    echo "  the grammar-1 frontend would change its value" >&2
+    QUOTED_CONSUMED=$((QUOTED_CONSUMED + 1))
+  fi
+done < "$CONSUMED_ATTRS"
+test "$QUOTED_CONSUMED" = "0"
+echo "grammar-1 migration precondition ok (${CONSUMED_COUNT} consumed attributes, 0 quoted)"
 
 for fixture in tests/fixtures/frontend/*.cdc; do
   if python3 cdc_boot.py "$fixture" >/dev/null 2>&1; then

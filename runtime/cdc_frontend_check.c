@@ -1184,6 +1184,16 @@ static int cmd_attr_boundary(void) {
         {"job j imprecision=7.0", "precision", 0, "",
          "a suffix match with no boundary is not a match"},
         {"a=1 b=2", "a", 1, "1", "a key at the very start of the line reads"},
+        /* The reason scripts/verify.sh forbids a quoted value on any
+         * runtime-consumed attribute: this reader stops at the first space,
+         * so a quoted value arrives TRUNCATED and wrong rather than
+         * rejected. The grammar-1 frontend would strip the quotes and keep
+         * the whole value, which is why the two must not both be live on
+         * the same attribute. */
+        {"evolve e expect-contains=\"witness memory\" output=x", "output", 1,
+         "x", "a later attribute still reads past a quoted value"},
+        {"evolve e expect-contains=\"witness memory\"", "expect-contains", 1,
+         "\"witness", "a quoted value truncates at the first space"},
     };
     size_t i;
     int failures = 0;
@@ -1207,7 +1217,7 @@ static int cmd_attr_boundary(void) {
     if (failures) {
         return 1;
     }
-    printf("attr-boundary ok cases=%zu shadowing=0\n",
+    printf("attr-boundary ok cases=%zu shadowing=0 quoted-truncation=documented\n",
            sizeof(CASES) / sizeof(CASES[0]));
     return 0;
 }
