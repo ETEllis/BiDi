@@ -46,6 +46,50 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D25 — 2026-07-28 — Native runtime migrated; the legacy scanner is now dead code
+
+`runtime/cdc_native_runtime.c` no longer parses source. All 21 declaration
+readers take a `cdc_stmt` instead of a raw line, `parse_source` is
+`cdc_unit_parse_file` plus statement iteration, and `add_channel` takes its
+three arguments from the statement rather than `sscanf`-ing the line.
+
+**Verified by differential across 34 invocations** — every verb (run,
+compile, interpret, prove, surface, council, evolve, universal, persist,
+fused, replay) over every source that supports it, plus error paths, both
+binaries built from the same tree. **32 byte-identical with identical exit
+codes.** The two divergences are the same pair the bridge migration
+produced, and improved the same way: a missing file now names the path and
+the typed reason, and a file containing an unknown directive now fails at
+the CAUSE rather than the downstream symptom (`no steps` → `unknown
+directive 'frobnicate'`).
+
+**One deliberate output change, predicted and checked.** Closure witness
+digests now digest the CANONICAL statement rather than the raw line, so a
+witness digest is stable under incidental whitespace — which is what
+canonicalization is for. I compared receipts field by field: everything
+except `closure=` is byte-identical, and no gate pins a literal closure
+digest.
+
+**The consumed-attribute gate caught its own obsolescence.** Its extraction
+pattern matched `cdc_read_attr(line, ...)` call sites; after the migration
+there were none, the count fell to zero, and the `>= 90` floor failed the
+build — which is exactly why that floor exists. The check is retargeted at
+the shim call sites and re-scoped rather than deleted: the quoting hazard it
+guarded is gone (grammar-1 handles quoting correctly), but it still enforces
+that consumed values are bare tokens matching the expectation strings
+written in sources.
+
+**Consequence for the deletion gate.** `cdc_source.c`'s attribute readers
+are now dead in production — only `cdc_frontend_check` still calls them, in
+`attr-parity` (legacy vs grammar-1) and `attr-boundary`. So `attr-parity` is
+now measuring a reader nothing uses. Per D23 the independent oracle for the
+frontend is `cdc_boot.py --dump`, which is unaffected. The scanner and
+`attr-parity` therefore retire together, and the bootloader outlives both.
+
+Three `fgets` remain in the native runtime and are correct: `file_contains`
+and the two enactment copies read output files byte-for-byte. That is file
+I/O, not source parsing.
+
 ## D24 — 2026-07-28 — Bridge runtime migrated off the legacy scanner
 
 `runtime/cdc_bridge_runtime.c` no longer reads source itself. Its three
