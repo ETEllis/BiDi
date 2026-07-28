@@ -167,6 +167,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_registry.c \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -206,6 +207,7 @@ if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
   runtime/cdc_registry.c \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
   runtime/cdc_parser.c \
   runtime/cdc_ast.c \
   runtime/cdc_lexer.c \
@@ -418,6 +420,19 @@ for MISSING in nest commit flow; do
   fi
 done
 echo "fused run fails typed on incomplete reducer families (3 counterexamples)"
+
+echo
+echo "== Canonical digest: BLAKE3 reference vectors [closes D2] =="
+# The vendored BLAKE3 must reproduce every reference vector one-shot AND
+# through irregular streaming splits: single block, block boundary, chunk
+# boundary (1024), and multi-level trees up to 17 chunks.
+./build/cdc_frontend_check digest-vectors tests/fixtures/digest/blake3_vectors.txt \
+  | tee build/digest_vectors.txt
+grep -q "digest-vectors ok vectors=31 failed=0" build/digest_vectors.txt
+if [ "$SANITIZED" = "1" ]; then
+  run_step ./build/cdc_frontend_check_asan digest-vectors \
+    tests/fixtures/digest/blake3_vectors.txt
+fi
 
 echo
 echo "== Durable store substrate [gates CT4/MM1 seed] =="

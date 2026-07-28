@@ -46,6 +46,39 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D13 — 2026-07-27 — BLAKE3 landed; D2 interim-digest gate CLOSED
+
+`runtime/cdc_blake3.{h,c}` vendors a portable, dependency-free BLAKE3
+(unkeyed hash mode, 32-byte output; keyed/derive/XOF modes are absent
+rather than wrong). `cdc_digest` is now a thin surface over it and labels
+digests `blake3:`. Verification: 31 reference vectors covering single
+block, block boundary, chunk boundary (1024), and multi-level trees up to
+17 chunks — each checked one-shot AND through irregular growing streaming
+splits, under plain and ASan builds, gated in verify.sh against the
+committed fixture `tests/fixtures/digest/blake3_vectors.txt` (generated
+from the official bindings; the length-0/1/3 entries match the published
+spec vectors). Evidence was re-digested by the vendored implementation
+itself (`digest-file`), producing `evidence/gates/CT0/blake3-manifest.txt`
+and `digest-migration.txt`; the interim `sha256-manifest.txt` is retained
+unmodified as the historical record. Ed25519 signing remains queued and
+unclaimed.
+
+## D12 — 2026-07-27 — Post-merge branch reconciliation (ADR)
+
+PR #3 was merged under the baton's Section 1 authorization after verifying
+all three preconditions at the pinned head `82ab066` (remote head exact,
+single required check completed/success, mergeable_state clean, no
+drift); merge commit `3e851ff`, merge method `merge` to preserve the
+commit identities referenced by gate evidence. The baton directs "create
+the next CDC completion branch from the new main"; this environment
+authorizes pushes only to `claude/bun-equivalent-build-plan-lxe772`, and
+the harness rule for a merged PR is to restart that same branch name from
+the default branch and open a NEW pull request. Reconciliation: the
+branch was restarted from the merged `main` (`3e851ff`) and continuation
+work opens a new PR. Substance matches the baton (fresh branch state from
+new main, new PR); only the branch NAME is carried over, and PR #3 is
+never reused.
+
 ## D11 — 2026-07-24 — Read faults are EIO, never torn tails
 
 The f1f68c0 final re-review's surgical blocker is repaired: every scan

@@ -1,0 +1,11 @@
+# CT0 identity migration record
+date: 2026-07-27
+from: sha256 (interim, DECISIONS D2)
+to:   blake3 (canonical, Amendment A3)
+implementation: runtime/cdc_blake3.c (vendored, dependency-free)
+verification: 31 reference vectors, one-shot + irregular streaming, plain + ASan
+vectors: tests/fixtures/digest/blake3_vectors.txt
+
+## interface contract digest under both algorithms
+sha256:d1a353481728eb67d3d6b2bfa8befe9df16affc263bf80966472e3a2958399df  CDC_MEMORY_MANIFOLD_INTERFACE.md
+blake3:a71b907d0c8ed93501ecfd26f43454d199eaf7603d6aefb1a5cb0ce7e62f6f60  CDC_MEMORY_MANIFOLD_INTERFACE.md

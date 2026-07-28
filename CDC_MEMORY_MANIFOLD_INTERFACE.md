@@ -1,6 +1,6 @@
 # CDC / Memory Manifold Interface Contract
 
-**interface-version:** 1.0.1
+**interface-version:** 1.1.0
 **status:** binding cross-repository contract (digest-pinned per release)
 **change protocol:** single-writer — the BiDi/CDC lane publishes new versions;
 the Memory Manifold and Superposition lanes consume by committed digest.
@@ -16,7 +16,7 @@ before its Phase E work begins.
 
 | surface | current | next planned | owner |
 |---|---|---|---|
-| interface-version | 1.0.1 | — | BiDi/CDC repo |
+| interface-version | 1.1.0 | — | BiDi/CDC repo |
 | grammar-version | 1 (canonical lexer/parser/AST frontend, `runtime/cdc_lexer.c` + `cdc_parser.c`; acceptance byte-compatible with grammar 0, proven by the CT1 differential; grammar 0 remains the oracle until its recorded removal gate) | extensions only by version bump | BiDi/CDC repo |
 | abi-version | 1.2 (`runtime/cdc_abi.h`: parse, diagnostics, canonical bytes, result serialization, registry load, contract verify at bootloader parity, statement introspection; execute declared, fails closed with CDC_ERR_STATE) | 1.3 (fused execution surface, Phase C completion) | BiDi/CDC repo |
 | evidence-format-version | 1 (this document §6) | — | BiDi/CDC repo |
@@ -127,9 +127,13 @@ provenance, perspective, evidence, or semantic closure records.
   artifacts, evidence records, and provenance manifests. **Ed25519** signs
   release/package/replica/authority statements over those digests. Any
   mismatch fails closed.
-- Interim (until BLAKE3 is vendored in Phase B/D): provenance records carry
-  git object ids plus SHA-256, explicitly labeled interim; see
-  `docs/build/DECISIONS.md` D2.
+- **BLAKE3 is landed and canonical** (`runtime/cdc_blake3.c`, vendored and
+  dependency-free; verified against 31 reference vectors one-shot and
+  streaming under plain and sanitizer builds). Digests are labeled
+  `blake3:`. The interim-SHA-256 gate (D2) is CLOSED; the historical
+  interim manifest is retained unmodified beside the canonical one in
+  `evidence/gates/CT0/`. Ed25519 signing remains queued and is not
+  claimed.
 - The 12-bit bridge coordinate remains a semantic coordinate and regression
   witness. It is not integrity.
 - Evidence bundles live under `evidence/gates/<gate-id>/` and are referenced

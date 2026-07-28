@@ -729,21 +729,114 @@ static int cmd_oom_abi(const char *path) {
 static int digest_self_test(void) {
     uint8_t digest[CDC_DIGEST_SIZE];
     char hex[80];
+    /* Published BLAKE3 vectors (canonical algorithm per Amendment A3). */
     cdc_digest("", 0, digest);
     cdc_digest_hex(digest, hex, sizeof(hex));
-    if (strcmp(hex, "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e464"
-                    "9b934ca495991b7852b855") != 0) {
+    if (strcmp(hex, "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9ad"
+                    "c112b7cc9a93cae41f3262") != 0) {
         fprintf(stderr, "digest FAIL: empty vector -> %s\n", hex);
         return 0;
     }
     cdc_digest("abc", 3, digest);
     cdc_digest_hex(digest, hex, sizeof(hex));
-    if (strcmp(hex, "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396"
-                    "177a9cb410ff61f20015ad") != 0) {
+    if (strcmp(hex, "blake3:6437b3ac38465133ffb63b75273a8db548c558465d"
+                    "79db03fd359c6cd5bd9d85") != 0) {
         fprintf(stderr, "digest FAIL: abc vector -> %s\n", hex);
         return 0;
     }
     return 1;
+}
+
+/* Full reference-vector sweep against the committed fixture: single-block,
+ * block-boundary, chunk-boundary, and multi-level tree inputs, each hashed
+ * both one-shot and through irregular streaming splits so update-path
+ * boundary handling is covered too. */
+static int cmd_digest_vectors(const char *path) {
+    FILE *fp = fopen(path, "r");
+    char line[256];
+    long pass = 0, fail = 0;
+
+    if (!fp) {
+        fprintf(stderr, "digest-vectors: cannot open %s\n", path);
+        return 1;
+    }
+    if (!digest_self_test()) {
+        fclose(fp);
+        return 1;
+    }
+    while (fgets(line, sizeof(line), fp)) {
+        long n;
+        char want[80];
+        unsigned char *buf;
+        long i, offset, step;
+        cdc_digest_ctx ctx;
+        uint8_t out[CDC_DIGEST_SIZE];
+        char got[80];
+
+        if (line[0] == '#' || line[0] == '\n') {
+            continue;
+        }
+        if (sscanf(line, "%ld %79s", &n, want) != 2) {
+            continue;
+        }
+        buf = malloc((size_t)(n ? n : 1));
+        if (!buf) {
+            fclose(fp);
+            return 1;
+        }
+        for (i = 0; i < n; i++) {
+            buf[i] = (unsigned char)(i % 251);
+        }
+        /* one-shot */
+        cdc_digest(buf, (size_t)n, out);
+        cdc_digest_hex(out, got, sizeof(got));
+        if (strcmp(got + 7, want) != 0) {
+            fprintf(stderr, "digest-vectors FAIL len=%ld one-shot\n", n);
+            fail++;
+            free(buf);
+            continue;
+        }
+        /* streaming in growing irregular increments */
+        cdc_digest_init(&ctx);
+        offset = 0;
+        step = 1;
+        while (offset < n) {
+            long take = (n - offset < step) ? n - offset : step;
+            cdc_digest_update(&ctx, buf + offset, (size_t)take);
+            offset += take;
+            step = step * 7 + 13;
+        }
+        cdc_digest_final(&ctx, out);
+        cdc_digest_hex(out, got, sizeof(got));
+        if (strcmp(got + 7, want) != 0) {
+            fprintf(stderr, "digest-vectors FAIL len=%ld streaming\n", n);
+            fail++;
+            free(buf);
+            continue;
+        }
+        free(buf);
+        pass++;
+    }
+    fclose(fp);
+    printf("digest-vectors ok vectors=%ld failed=%ld\n", pass, fail);
+    return fail == 0 ? 0 : 1;
+}
+
+/* Native file digest so evidence records are produced by the same
+ * implementation the runtime uses (no external digest tool). */
+static int cmd_digest_file(int argc, char **argv) {
+    int i;
+    for (i = 0; i < argc; i++) {
+        uint8_t digest[CDC_DIGEST_SIZE];
+        char hex[80];
+        if (!cdc_digest_file(argv[i], digest)) {
+            fprintf(stderr, "digest-file: cannot read %s\n", argv[i]);
+            return 1;
+        }
+        cdc_digest_hex(digest, hex, sizeof(hex));
+        printf("%s  %s\n", hex, argv[i]);
+    }
+    return 0;
 }
 
 static int store_commit_txn(cdc_store *store, int which) {
@@ -1307,6 +1400,12 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-io") == 0 && argc >= 3) {
         return cmd_store_io(argv[2]);
+    }
+    if (strcmp(argv[1], "digest-vectors") == 0 && argc >= 3) {
+        return cmd_digest_vectors(argv[2]);
+    }
+    if (strcmp(argv[1], "digest-file") == 0 && argc >= 3) {
+        return cmd_digest_file(argc - 2, argv + 2);
     }
     fprintf(stderr, "cdc_frontend_check: unknown mode '%s'\n", argv[1]);
     return 2;
