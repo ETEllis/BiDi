@@ -37,9 +37,15 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 2. **Unified `cdc` driver**: verify/run/test/build/install/x + legacy verb
    passthrough, byte-identical to the standalone binaries.
 3. **Durable store**: sealed transactions, typed recovery, generations
-   with atomic activation, fcntl serialization, triple fence token,
-   attest-from-byte-0; in-process + SIGKILL crash matrices; 8-boundary
-   transition matrix; fresh-after-crash (D10–D16, D27).
+   with atomic activation, triple fence token, attest-from-byte-0;
+   in-process + SIGKILL crash matrices; 8-boundary transition matrix;
+   fresh-after-crash (D10–D16, D27); same-application coordination — a
+   process-local refcounted coordination object (one mutex + one fcntl
+   descriptor per store per process) serializing open recovery, commit,
+   snapshot, compact, and reset across handles AND processes, gated by
+   the five-check `store-samep` suite with a permanent per-handle probe
+   build required to fail 5/5, plus ASan/UBSan and a guarded TSan lane
+   (D29).
 4. **Persistence as a language form**: `store`/`persist` directives gated
    by the same commit barrier; durable/replay observed, never declared
    (D15).

@@ -13,6 +13,8 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -2023,6 +2025,573 @@ static int cmd_store_race(const char *base) {
     return failures ? 1 : 0;
 }
 
+/* ---- store-samep: simultaneous handles in ONE application -------------
+ *
+ * The 2026-07-28 same-application review (after ca26608): fcntl locks
+ * serialize processes only, and closing ANY descriptor a process holds on
+ * the lock file drops EVERY lock the process holds on it. Five checks,
+ * each deterministic (a blocked operation is proven blocked by polling
+ * its completion pipe while the section is held, never by sleeping and
+ * hoping), covering open recovery/creation, commit, snapshot, compact,
+ * reset, and the close hazard. All five FAIL against the per-handle
+ * probe build (CDC_STORE_TEST_PER_HANDLE_LOCK), which reproduces the
+ * pre-repair locking. */
+
+typedef struct {
+    cdc_store *store;
+    const char *dir;
+    int signal_fd;
+    int commits;
+} samep_args;
+
+static int samep_readable(int fd, int timeout_ms) {
+    struct pollfd probe;
+    int rc;
+    probe.fd = fd;
+    probe.events = POLLIN;
+    probe.revents = 0;
+    do {
+        rc = poll(&probe, 1, timeout_ms);
+    } while (rc < 0 && errno == EINTR);
+    return rc > 0 && (probe.revents & POLLIN) != 0;
+}
+
+static void samep_signal(int fd, char code) {
+    ssize_t n;
+    do {
+        n = write(fd, &code, 1);
+    } while (n < 0 && errno == EINTR);
+}
+
+static int samep_wait_code(int fd, char *code) {
+    ssize_t n;
+    do {
+        n = read(fd, code, 1);
+    } while (n < 0 && errno == EINTR);
+    return n == 1;
+}
+
+static void *samep_open_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store *store = NULL;
+    cdc_store_status rc = cdc_store_open(args->dir, &store, NULL);
+    samep_signal(args->signal_fd, rc == CDC_STORE_OK ? 'o' : 'f');
+    if (store) {
+        cdc_store_close(store);
+    }
+    return NULL;
+}
+
+static void *samep_lock_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store_status rc = cdc_store_lock_test(args->store);
+    samep_signal(args->signal_fd, rc == CDC_STORE_OK ? 'l' : 'f');
+    if (rc == CDC_STORE_OK) {
+        cdc_store_unlock_test(args->store);
+    }
+    return NULL;
+}
+
+static void *samep_commit_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    char payload[48];
+    int ok = 0;
+    int i;
+    for (i = 0; i < args->commits; i++) {
+        snprintf(payload, sizeof(payload), "samep-%p-%d", (void *)args, i);
+        if (cdc_store_stage(args->store, payload, strlen(payload)) !=
+            CDC_STORE_OK) {
+            break;
+        }
+        if (cdc_store_commit(args->store) != CDC_STORE_OK) {
+            cdc_store_rollback(args->store);
+            break;
+        }
+        ok++;
+    }
+    samep_signal(args->signal_fd, (char)ok);
+    return NULL;
+}
+
+static void *samep_snapshot_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_snapshot(args->store));
+    return NULL;
+}
+
+static void *samep_compact_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_compact(args->store));
+    return NULL;
+}
+
+static void *samep_reset_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_reset(args->dir));
+    return NULL;
+}
+
+/* Spawns `body` on a thread, proves it does NOT complete while the
+ * section is held, releases the section on `held`, then proves it DOES
+ * complete and returns its status byte. The premature/timeout verdicts
+ * are written to *premature so the caller can name the failure. */
+static int samep_blocked_run(cdc_store *held, void *(*body)(void *),
+                             samep_args *args, char *code, int *premature) {
+    pthread_t thread;
+    int fds[2];
+    int done_ok;
+    *premature = 0;
+    if (pipe(fds) != 0) {
+        return 0;
+    }
+    args->signal_fd = fds[1];
+    if (pthread_create(&thread, NULL, body, args) != 0) {
+        close(fds[0]);
+        close(fds[1]);
+        return 0;
+    }
+    if (samep_readable(fds[0], 300)) {
+        *premature = 1;
+    }
+    cdc_store_unlock_test(held);
+    done_ok = samep_readable(fds[0], 8000) && samep_wait_code(fds[0], code);
+    pthread_join(thread, NULL);
+    close(fds[0]);
+    close(fds[1]);
+    return done_ok;
+}
+
+/* Check 1: open (creation + recovery is a check-then-act sequence) is
+ * excluded by a held section, from another process AND from another
+ * handle in this process. */
+static int samep_check_open(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+    int fds[2];
+    pid_t pid;
+    int status;
+
+    snprintf(dir, sizeof(dir), "%s/open", base);
+    if (!store_seed_dir(dir, 2) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL open: seed\n");
+        return 1;
+    }
+    if (cdc_store_lock_test(a) != CDC_STORE_OK || pipe(fds) != 0) {
+        fprintf(stderr, "store-samep FAIL open: hold\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "store-samep FAIL open: fork\n");
+        cdc_store_unlock_test(a);
+        cdc_store_close(a);
+        return 1;
+    }
+    if (pid == 0) {
+        cdc_store *child = NULL;
+        cdc_store_status rc;
+        close(fds[0]);
+        rc = cdc_store_open(dir, &child, NULL);
+        samep_signal(fds[1], rc == CDC_STORE_OK ? 'o' : 'f');
+        if (child) {
+            cdc_store_close(child);
+        }
+        _exit(rc == CDC_STORE_OK ? 0 : 1);
+    }
+    close(fds[1]);
+    if (samep_readable(fds[0], 300)) {
+        fprintf(stderr, "store-samep FAIL open: another PROCESS finished "
+                        "opening while the section was held\n");
+        cdc_store_unlock_test(a);
+        close(fds[0]);
+        waitpid(pid, &status, 0);
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_unlock_test(a);
+    if (!samep_readable(fds[0], 8000) || !samep_wait_code(fds[0], &code) ||
+        code != 'o') {
+        fprintf(stderr, "store-samep FAIL open: child open never "
+                        "completed after release\n");
+        close(fds[0]);
+        kill(pid, SIGKILL); /* never trade a FAIL for a hang */
+        waitpid(pid, &status, 0);
+        cdc_store_close(a);
+        return 1;
+    }
+    close(fds[0]);
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "store-samep FAIL open: child exit\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    /* same-process second handle */
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL open: re-hold\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    args.dir = dir;
+    args.store = NULL;
+    args.commits = 0;
+    if (!samep_blocked_run(a, samep_open_body, &args, &code, &premature) ||
+        code != 'o') {
+        fprintf(stderr, "store-samep FAIL open: same-process open never "
+                        "completed after release\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL open: a second handle in THIS "
+                        "process finished opening while the section was "
+                        "held\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_close(a);
+    printf("samep-open cross-process-blocked=1 same-process-blocked=1\n");
+    return 0;
+}
+
+/* Check 2: two handles in one process are mutually excluded, and their
+ * interleaved commits serialize to a clean log with nothing lost. */
+static int samep_check_commit(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *b = NULL, *check = NULL;
+    samep_args lock_args, commit_a, commit_b;
+    pthread_t t1, t2;
+    int p1[2], p2[2];
+    char code = 0, ok_a = 0, ok_b = 0;
+    int premature = 0;
+    uint64_t sealed_before;
+    int recovered = -1;
+
+    snprintf(dir, sizeof(dir), "%s/commit", base);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL commit: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    sealed_before = cdc_store_sealed_count(a);
+    /* exclusion, proven directly */
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL commit: hold\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    lock_args.store = b;
+    lock_args.dir = dir;
+    lock_args.commits = 0;
+    if (!samep_blocked_run(a, samep_lock_body, &lock_args, &code,
+                           &premature) ||
+        code != 'l') {
+        fprintf(stderr, "store-samep FAIL commit: probe thread\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL commit: the second handle "
+                        "entered the critical section while the first "
+                        "held it\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    /* integrity under interleaving */
+    if (pipe(p1) != 0 || pipe(p2) != 0) {
+        fprintf(stderr, "store-samep FAIL commit: pipes\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    commit_a.store = a;
+    commit_a.dir = dir;
+    commit_a.commits = 40;
+    commit_a.signal_fd = p1[1];
+    commit_b.store = b;
+    commit_b.dir = dir;
+    commit_b.commits = 40;
+    commit_b.signal_fd = p2[1];
+    if (pthread_create(&t1, NULL, samep_commit_body, &commit_a) != 0 ||
+        pthread_create(&t2, NULL, samep_commit_body, &commit_b) != 0) {
+        fprintf(stderr, "store-samep FAIL commit: threads\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    if (!samep_wait_code(p1[0], &ok_a) || !samep_wait_code(p2[0], &ok_b)) {
+        fprintf(stderr, "store-samep FAIL commit: counts\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    close(p1[0]);
+    close(p1[1]);
+    close(p2[0]);
+    close(p2[1]);
+    cdc_store_close(a);
+    cdc_store_close(b);
+    if (ok_a != 40 || ok_b != 40) {
+        fprintf(stderr, "store-samep FAIL commit: ok_a=%d ok_b=%d "
+                        "(interleaved commits must all serialize)\n",
+                ok_a, ok_b);
+        return 1;
+    }
+    if (cdc_store_open(dir, &check, &recovered) != CDC_STORE_OK ||
+        recovered != 0 || cdc_store_verify(check) != CDC_STORE_OK ||
+        cdc_store_sealed_count(check) != sealed_before + 80) {
+        fprintf(stderr,
+                "store-samep FAIL commit: recovered=%d sealed=%llu "
+                "expected=%llu\n",
+                recovered,
+                check ? (unsigned long long)cdc_store_sealed_count(check)
+                      : 0ULL,
+                (unsigned long long)(sealed_before + 80));
+        cdc_store_close(check);
+        return 1;
+    }
+    cdc_store_close(check);
+    printf("samep-commit exclusion=blocked commits=80 lost=0 "
+           "verify=ok recovered=0\n");
+    return 0;
+}
+
+/* Check 3: snapshot and compact are excluded by a held section, the
+ * generation transition leaves the OTHER handle with a typed ESTATE
+ * refusal (never a corrupt append), and a reopen resumes cleanly. */
+static int samep_check_transition(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *b = NULL, *check = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+
+    snprintf(dir, sizeof(dir), "%s/transition", base);
+    if (!store_seed_dir(dir, 3) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    args.store = a;
+    args.dir = dir;
+    args.commits = 0;
+    if (cdc_store_lock_test(b) != CDC_STORE_OK ||
+        !samep_blocked_run(b, samep_snapshot_body, &args, &code,
+                           &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: snapshot run\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL transition: snapshot ran while "
+                        "the section was held\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (cdc_store_lock_test(b) != CDC_STORE_OK ||
+        !samep_blocked_run(b, samep_compact_body, &args, &code,
+                           &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: compact run\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL transition: compact ran while "
+                        "the section was held\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    /* the un-compacted handle: typed refusal, then a clean reopen */
+    if (cdc_store_stage(b, "stale", 5) != CDC_STORE_OK ||
+        cdc_store_commit(b) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-samep FAIL transition: stale handle was "
+                        "not refused with ESTATE\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_rollback(b);
+    cdc_store_close(b);
+    b = NULL;
+    if (cdc_store_open(dir, &b, NULL) != CDC_STORE_OK ||
+        cdc_store_generation(b) != 1 || !store_commit_txn(b, 99)) {
+        fprintf(stderr, "store-samep FAIL transition: reopen commit\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_close(a);
+    cdc_store_close(b);
+    if (cdc_store_open(dir, &check, NULL) != CDC_STORE_OK ||
+        cdc_store_verify(check) != CDC_STORE_OK ||
+        cdc_store_generation(check) != 1 ||
+        cdc_store_sealed_count(check) != 4) {
+        fprintf(stderr, "store-samep FAIL transition: final state\n");
+        cdc_store_close(check);
+        return 1;
+    }
+    cdc_store_close(check);
+    printf("samep-transition snapshot-blocked=1 compact-blocked=1 "
+           "stale-commit=state reopen-commit=ok generation=1\n");
+    return 0;
+}
+
+/* Check 4: reset is excluded by a held section; a handle whose store was
+ * reset under it is refused typed (ECORRUPT), and a fresh open starts a
+ * fresh generation-0 store. */
+static int samep_check_reset(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *fresh = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+
+    snprintf(dir, sizeof(dir), "%s/reset", base);
+    if (!store_seed_dir(dir, 2) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: seed\n");
+        return 1;
+    }
+    args.store = NULL;
+    args.dir = dir;
+    args.commits = 0;
+    if (cdc_store_lock_test(a) != CDC_STORE_OK ||
+        !samep_blocked_run(a, samep_reset_body, &args, &code, &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: reset run\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL reset: reset deleted the log "
+                        "while the section was held\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (cdc_store_stage(a, "gone", 4) != CDC_STORE_OK ||
+        cdc_store_commit(a) != CDC_STORE_ECORRUPT) {
+        fprintf(stderr, "store-samep FAIL reset: stale handle was not "
+                        "refused with ECORRUPT\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_rollback(a);
+    cdc_store_close(a);
+    if (cdc_store_open(dir, &fresh, NULL) != CDC_STORE_OK ||
+        cdc_store_generation(fresh) != 0 ||
+        cdc_store_sealed_count(fresh) != 0 ||
+        cdc_store_verify(fresh) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: fresh open\n");
+        cdc_store_close(fresh);
+        return 1;
+    }
+    cdc_store_close(fresh);
+    printf("samep-reset blocked=1 stale-commit=corrupt-tail "
+           "fresh generation=0 sealed=0\n");
+    return 0;
+}
+
+/* Check 5: the POSIX close hazard. Closing one handle must NOT release
+ * the lock another handle in the same process is holding — a foreign
+ * process must still be refused. */
+static int samep_check_close(const char *base) {
+    char dir[560];
+    char lock_path[620];
+    cdc_store *a = NULL, *b = NULL;
+    pid_t pid;
+    int status;
+
+    snprintf(dir, sizeof(dir), "%s/close", base);
+    snprintf(lock_path, sizeof(lock_path), "%s/lock.cdcstore", dir);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL close: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL close: hold\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_close(b); /* the hazard: this used to drop A's lock */
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "store-samep FAIL close: fork\n");
+        cdc_store_unlock_test(a);
+        cdc_store_close(a);
+        return 1;
+    }
+    if (pid == 0) {
+        struct flock probe;
+        int fd = open(lock_path, O_RDWR);
+        if (fd < 0) {
+            _exit(90);
+        }
+        memset(&probe, 0, sizeof(probe));
+        probe.l_type = F_WRLCK;
+        probe.l_whence = SEEK_SET;
+        if (fcntl(fd, F_SETLK, &probe) == 0) {
+            _exit(1); /* acquired: the close dropped the lock */
+        }
+        if (errno != EAGAIN && errno != EACCES) {
+            _exit(92);
+        }
+        _exit(0); /* refused: the lock survived the close */
+    }
+    waitpid(pid, &status, 0);
+    cdc_store_unlock_test(a);
+    cdc_store_close(a);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "store-samep FAIL close: closing one handle "
+                        "released the other handle's lock (child=%d)\n",
+                WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+        return 1;
+    }
+    printf("samep-close closed-one-handle=1 lock-preserved=1 "
+           "foreign-acquire=refused\n");
+    return 0;
+}
+
+static int cmd_store_samep(const char *base) {
+    int failed = 0;
+    failed += samep_check_open(base);
+    failed += samep_check_commit(base);
+    failed += samep_check_transition(base);
+    failed += samep_check_reset(base);
+    failed += samep_check_close(base);
+    if (failed) {
+        fprintf(stderr, "store-samep FAIL failed=%d/5\n", failed);
+        return 1;
+    }
+    printf("store-samep ok checks=5/5 shared-coordination=1\n");
+    return 0;
+}
+
 static int cmd_store_protocol(const char *base) {
     char dir[512], log_path[600], snap_path[620];
     cdc_store *store = NULL, *other = NULL;
@@ -2615,6 +3184,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-generation") == 0 && argc >= 3) {
         return cmd_store_generation(argv[2]);
+    }
+    if (strcmp(argv[1], "store-samep") == 0 && argc >= 3) {
+        return cmd_store_samep(argv[2]);
     }
     if (strcmp(argv[1], "store-race") == 0 && argc >= 3) {
         return cmd_store_race(argv[2]);

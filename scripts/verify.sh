@@ -164,7 +164,7 @@ command -v cc >/dev/null 2>&1 || {
   exit 1
 }
 rm -f build/cdc_frontend_check
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_frontend_check.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
@@ -242,7 +242,7 @@ for fixture in tests/fixtures/frontend/*.cdc; do
 done
 echo "frontend rejection parity ok fixtures=$(ls tests/fixtures/frontend/*.cdc | wc -l)"
 SANITIZED=0
-if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
+if cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread -fsanitize=address,undefined \
   runtime/cdc_frontend_check.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
@@ -308,7 +308,7 @@ echo "provenance gate rejects a modified tracked file (probe restored)"
 echo
 echo "== Stable ABI and unified driver skeleton [gate CT2 seed] =="
 rm -f build/cdc
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/toolchain/main.c \
   runtime/toolchain/cmd_verify.c \
   runtime/toolchain/cmd_test.c \
@@ -433,9 +433,9 @@ echo "toolchain-verify-parity failure-mode ok (identical FAIL reports, exit 1)"
 # A11 linkability: both legacy runtimes must compile with their entry
 # points excluded, proving the unified binary can link them (the standalone
 # CLIs keep byte-identical behavior; conversion lands with full CT2).
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -DCDC_NATIVE_NO_MAIN \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread -DCDC_NATIVE_NO_MAIN \
   -c runtime/cdc_native_runtime.c -o build/cdc_native_nomain.o
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -DCDC_BRIDGE_NO_MAIN \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread -DCDC_BRIDGE_NO_MAIN \
   -c runtime/cdc_bridge_runtime.c -o build/cdc_bridge_nomain.o
 echo "runtime linkability ok (CDC_NATIVE_NO_MAIN + CDC_BRIDGE_NO_MAIN)"
 
@@ -446,14 +446,14 @@ echo "== Unified driver passthrough parity [gate CT2] =="
 # AFTER the standalone binaries are built later in this script would be too
 # late — they are compiled here if absent).
 rm -f build/cdc_native_runtime build/cdc_bridge_runtime
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_native_runtime.c runtime/cdc_source.c \
   runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
   runtime/cdc_receipt.c \
   runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
   runtime/cdc_diagnostic.c -lm \
   -o build/cdc_native_runtime
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
   runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
   runtime/cdc_diagnostic.c \
@@ -736,12 +736,99 @@ grep -q "store-generation ok atomic-transition=1 identity-bound=1 attest-covers-
 grep -q "store-race ok rounds=3 winners=1/round refused=1/round corrupt=0" \
   build/store_race.txt
 grep -q "commit-vs-compact commit-preserved=1" build/store_race.txt
+
+# Same-application coordination (second 2026-07-28 review, after ca26608).
+# fcntl record locks serialize PROCESSES only, and closing ANY descriptor a
+# process holds on the lock file drops EVERY lock the process holds on it —
+# so per-handle descriptors left two handles in one application unserialized
+# and let a plain close disarm the survivor's exclusion mid-operation. All
+# handles in one process now share a reference-counted coordination object
+# (one mutex + ONE fcntl descriptor, alive until the last close), and open
+# recovery and reset joined commit/snapshot/compact inside the critical
+# section. Five simultaneous-handle checks, each blocked-then-released
+# deterministically (polled completion pipes, no sleeps):
+#   open (creation/recovery), commit, snapshot+compact, reset, close-hazard.
+rm -rf build/store_samep
+mkdir -p build/store_samep
+./build/cdc_frontend_check store-samep build/store_samep \
+  | tee build/store_samep.txt
+grep -q "samep-open cross-process-blocked=1 same-process-blocked=1" \
+  build/store_samep.txt
+grep -q "samep-commit exclusion=blocked commits=80 lost=0 verify=ok recovered=0" \
+  build/store_samep.txt
+grep -q "samep-transition snapshot-blocked=1 compact-blocked=1 stale-commit=state reopen-commit=ok generation=1" \
+  build/store_samep.txt
+grep -q "samep-reset blocked=1 stale-commit=corrupt-tail fresh generation=0 sealed=0" \
+  build/store_samep.txt
+grep -q "samep-close closed-one-handle=1 lock-preserved=1 foreign-acquire=refused" \
+  build/store_samep.txt
+grep -q "store-samep ok checks=5/5 shared-coordination=1" build/store_samep.txt
+# Permanent counterexample: the probe build reproduces the pre-repair
+# per-handle locking (CDC_STORE_TEST_PER_HANDLE_LOCK) and every one of the
+# five checks must catch it — a suite that cannot see the defect it was
+# built for does not gate anything.
+rm -f build/cdc_frontend_check_samep_probe
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
+  -DCDC_STORE_TEST_PER_HANDLE_LOCK \
+  runtime/cdc_frontend_check.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  runtime/cdc_source.c \
+  -o build/cdc_frontend_check_samep_probe
+rm -rf build/store_samep_probe
+mkdir -p build/store_samep_probe
+if ./build/cdc_frontend_check_samep_probe store-samep build/store_samep_probe \
+  > build/store_samep_probe.txt 2>&1; then
+  echo "store-samep passed against the per-handle probe build" >&2
+  exit 1
+fi
+grep -q "store-samep FAIL failed=5/5" build/store_samep_probe.txt
+echo "store-samep ok (probe build refused 5/5)"
+
 if [ "$SANITIZED" = "1" ]; then
-  rm -rf build/store_generation_asan build/store_race_asan
-  mkdir -p build/store_generation_asan build/store_race_asan
+  rm -rf build/store_generation_asan build/store_race_asan \
+    build/store_samep_asan
+  mkdir -p build/store_generation_asan build/store_race_asan \
+    build/store_samep_asan
   run_step ./build/cdc_frontend_check_asan store-generation \
     build/store_generation_asan
   run_step ./build/cdc_frontend_check_asan store-race build/store_race_asan
+  run_step ./build/cdc_frontend_check_asan store-samep \
+    build/store_samep_asan
+fi
+# ThreadSanitizer is the instrument built for exactly this suite (two
+# handles, two threads, one mutex): a data race in the coordination object
+# would be reported even on an interleaving the assertions cannot
+# distinguish. Guarded like the ASan lane — the gate runs wherever the
+# toolchain can build it.
+if cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread -fsanitize=thread \
+  runtime/cdc_frontend_check.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  runtime/cdc_source.c \
+  -o build/cdc_frontend_check_tsan 2>/dev/null; then
+  rm -rf build/store_samep_tsan
+  mkdir -p build/store_samep_tsan
+  run_step ./build/cdc_frontend_check_tsan store-samep build/store_samep_tsan
+  echo "store-samep ok under ThreadSanitizer"
+else
+  echo "cc cannot build -fsanitize=thread here; TSan lane skipped (recorded)"
 fi
 
 echo
@@ -889,7 +976,7 @@ echo "corpus identity tracks source content (probe restored)"
 # Reproducible native binaries: the same sources, built twice, byte-identical.
 rm -f build/repro_a build/repro_b
 for ROUND in a b; do
-  cc -std=c99 -Wall -Wextra -pedantic -O2 \
+  cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \
@@ -1005,7 +1092,7 @@ echo "  store instance identity excluded by design — see DECISIONS D19)"
 # (three handles, two of them onto one directory), so it gets its own
 # instrumented pass rather than riding on the frontend's.
 if [ "$SANITIZED" = "1" ]; then
-  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 \
+  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread \
     -fsanitize=address,undefined \
     runtime/cdc_native_runtime.c \
     runtime/cdc_source.c \
@@ -1086,7 +1173,7 @@ command -v cc >/dev/null 2>&1 || {
   exit 1
 }
 rm -f build/cdc_bridge_runtime
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_bridge_runtime.c \
   runtime/cdc_source.c \
   runtime/cdc_parser.c \
@@ -1150,7 +1237,7 @@ echo "== Whole-binary sanitizer sweep [gate CT2/CT3] =="
 # driver with every runtime linked in — was not. This builds that exact
 # composition under ASan/UBSan and runs the real command surface through it.
 if [ "$SANITIZED" = "1" ]; then
-  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 \
+  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread \
     -fsanitize=address,undefined \
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
@@ -1433,7 +1520,7 @@ echo "  tamper-by-name, traversal, unmanifested, divergent-reinstall)"
 echo
 echo "== Native reducer runtime =="
 rm -f build/cdc_native_runtime
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_native_runtime.c \
   runtime/cdc_source.c \
   runtime/cdc_store.c \
@@ -1448,10 +1535,10 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   -lm
 echo
 echo "== Native WASM replay export surface =="
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -Wno-unused-function \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread -Wno-unused-function \
   -c runtime/cdc_wasm_exports.c \
   -o build/cdc_wasm_exports.o
-run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   -c runtime/cdc_source.c \
   -o build/cdc_source.o
 if command -v emcc >/dev/null 2>&1; then

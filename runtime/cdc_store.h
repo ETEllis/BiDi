@@ -126,10 +126,14 @@ uint64_t cdc_store_generation(const cdc_store *store);
 /* Removes exactly this store's own artifacts — the log, any prepared base
  * (base.pending), and the crash-window temp files — from `dir`, leaving
  * every other path untouched, so a declared store can be opened from a
- * known-empty state. The lock file is deliberately kept: unlinking a file
- * another process holds a lock on would break serialization. Artifacts
- * that are absent are not an error; the directory itself is never removed.
- * This is the only deletion path in the store and it never widens. */
+ * known-empty state. Runs inside the store's critical section, so it
+ * cannot interleave with a commit, compaction, or open in any handle or
+ * process; a handle whose store was reset under it gets a typed
+ * ECORRUPT refusal on its next operation, never a partial view. The lock
+ * file is deliberately kept: unlinking a file another process holds a
+ * lock on would break serialization. Artifacts that are absent are not an
+ * error; the directory itself is never removed. This is the only deletion
+ * path in the store and it never widens. */
 cdc_store_status cdc_store_reset(const char *dir);
 
 /* Transaction: stage any number of event payloads, then commit (all
@@ -195,5 +199,18 @@ void cdc_store_set_kill_after(cdc_store *store, int operations);
 /* Number of write/flush/sync boundary operations a commit of the current
  * staged transaction would perform (for exhaustive injection sweeps). */
 int cdc_store_commit_operations(const cdc_store *store);
+
+/* Test-only (simultaneous-handle checks): enter/exit the store's critical
+ * section without performing an operation, so a check can HOLD the
+ * section deterministically while proving that other handles, opens,
+ * resets, and processes are genuinely excluded. All handles in one
+ * process that name the same store share one coordination object (mutex +
+ * a single fcntl descriptor kept alive until the last close), so this
+ * excludes same-process handles as well as other processes. A thread may
+ * hold at most one section, must release it from the same thread, and
+ * must not call any other store function on that store while holding it.
+ * Not part of the store contract; no production caller may use these. */
+cdc_store_status cdc_store_lock_test(cdc_store *store);
+void cdc_store_unlock_test(cdc_store *store);
 
 #endif

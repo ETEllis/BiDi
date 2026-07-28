@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,10 +83,13 @@ struct cdc_store {
     uint64_t fence_generation;
     uint64_t fence_seal;
     uint8_t fence_state[CDC_DIGEST_SIZE];
-    /* Interprocess serialization: an fcntl write lock held across
-     * re-scan + append + fsync(file) + fsync(dir), and across the whole
-     * compaction transition, so check-then-act is not a race. */
-    int lock_fd;
+    /* Serialization: the process-local coordination object shared by
+     * every handle in this process that names the same lock file (see the
+     * store_coord block below). The critical section is mutex + fcntl,
+     * held across re-scan + append + fsync(file) + fsync(dir), across the
+     * whole compaction transition, across open recovery, and across
+     * reset. */
+    struct store_coord *coord;
     staged_event *staged;
     size_t staged_count;
     size_t staged_cap;
@@ -447,39 +451,208 @@ static int sync_path(const char *path) {
     return 0;
 }
 
-/* ---- interprocess serialization (2026-07-28 review, finding 2) --------
+/* ---- serialization (2026-07-28 review finding 2; same-application
+ *      repair after ca26608) -------------------------------------------
  *
- * commit and compact are check-then-act sequences. Without mutual
- * exclusion two writers can both pass the check before either writes,
- * which is exactly the race the old sequential test could not see. An
- * fcntl write lock on a dedicated file is held across the whole sequence:
- * re-scan, append, fflush, fsync(log), fsync(dir).
+ * commit, compact, open recovery, and reset are check-then-act sequences.
+ * Without mutual exclusion two writers can both pass the check before
+ * either writes, which is exactly the race the old sequential test could
+ * not see.
  *
- * Scope, stated precisely: fcntl locks serialize PROCESSES. Two handles
- * onto one directory inside a single process do not block each other —
- * there the fence token is the mechanism, and it is checked against the
- * on-disk state under the same lock, so the outcome is identical. */
-static cdc_store_status store_lock(cdc_store *store) {
-    struct flock lock;
-    if (store->lock_fd < 0) {
+ * Two levels, because POSIX fcntl record locks have two sharp edges:
+ *
+ *   1. They serialize PROCESSES only. Two handles inside one process are
+ *      invisible to each other — both "acquire" the exclusive lock and
+ *      the kernel merges them.
+ *   2. They are owned by (process, file), not by descriptor: closing ANY
+ *      descriptor the process holds on the lock file releases EVERY lock
+ *      the process holds on it. Per-handle descriptors therefore let a
+ *      plain cdc_store_close of one handle silently disarm another
+ *      handle's exclusion mid-operation.
+ *
+ * The repair is the standard one: all handles in this process that name
+ * the same lock file (by device+inode, resolved under a registry mutex)
+ * share ONE reference-counted coordination object carrying ONE fcntl
+ * descriptor and one process-local mutex. The mutex serializes handles
+ * within the process; the fcntl lock — taken only while the mutex is held
+ * — serializes processes; and the shared descriptor is closed only when
+ * the LAST handle releases the object, so no close can drop a lock
+ * another handle is relying on.
+ *
+ * Fork: entries are additionally keyed by pid. A forked child never
+ * matches an inherited entry (whose mutex may have been copied in the
+ * locked state), so it builds a fresh coordination object and contends
+ * through fcntl like any other process. Forking while another thread is
+ * inside a store call is outside the contract, as it is for POSIX
+ * generally. The critical section never spans a public store call, so a
+ * thread may hold at most one section at a time and recursion cannot
+ * arise.
+ *
+ * CDC_STORE_TEST_PER_HANDLE_LOCK reproduces the pre-repair behavior —
+ * one unregistered coordination object per handle — so the store-samep
+ * suite can prove its checks catch the defect. verify.sh compiles that
+ * define ONLY for the counterexample probe binary; it is never linked
+ * into a shipped tool. */
+typedef struct store_coord {
+    dev_t dev;
+    ino_t ino;
+    pid_t pid;
+    int lock_fd;
+    unsigned refcount;
+    pthread_mutex_t mutex;
+    struct store_coord *next;
+} store_coord;
+
+static pthread_mutex_t coord_registry_lock = PTHREAD_MUTEX_INITIALIZER;
+static store_coord *coord_registry = NULL;
+
+#ifndef CDC_STORE_TEST_PER_HANDLE_LOCK
+static store_coord *coord_find(dev_t dev, ino_t ino) {
+    store_coord *coord;
+    for (coord = coord_registry; coord; coord = coord->next) {
+        if (coord->dev == dev && coord->ino == ino &&
+            coord->pid == getpid()) {
+            return coord;
+        }
+    }
+    return NULL;
+}
+#endif
+
+static cdc_store_status coord_new(int fd, const struct stat *st,
+                                  store_coord **out) {
+    store_coord *coord = calloc(1, sizeof(*coord));
+    if (!coord) {
+        return CDC_STORE_EMEM;
+    }
+    coord->dev = st->st_dev;
+    coord->ino = st->st_ino;
+    coord->pid = getpid();
+    coord->lock_fd = fd;
+    coord->refcount = 1;
+    if (pthread_mutex_init(&coord->mutex, NULL) != 0) {
+        free(coord);
         return CDC_STORE_EIO;
     }
+#ifndef CDC_STORE_TEST_PER_HANDLE_LOCK
+    coord->next = coord_registry;
+    coord_registry = coord;
+#endif
+    *out = coord;
+    return CDC_STORE_OK;
+}
+
+/* Resolves the process-shared coordination object for `lock_path`,
+ * creating both the lock file and the object as needed. Returns EIO with
+ * errno preserved so open-vs-reset can distinguish a missing directory. */
+static cdc_store_status coord_acquire(const char *lock_path,
+                                      store_coord **out) {
+    struct stat st;
+#ifndef CDC_STORE_TEST_PER_HANDLE_LOCK
+    store_coord *coord;
+#endif
+    cdc_store_status status;
+    int fd;
+
+    *out = NULL;
+    pthread_mutex_lock(&coord_registry_lock);
+#ifndef CDC_STORE_TEST_PER_HANDLE_LOCK
+    /* Common path: the file exists and this process already coordinates
+     * on it. Resolved WITHOUT opening a descriptor, because a redundant
+     * descriptor is exactly the close-drops-locks hazard. */
+    if (stat(lock_path, &st) == 0) {
+        coord = coord_find(st.st_dev, st.st_ino);
+        if (coord) {
+            coord->refcount++;
+            pthread_mutex_unlock(&coord_registry_lock);
+            *out = coord;
+            return CDC_STORE_OK;
+        }
+    }
+#endif
+    fd = open(lock_path, O_RDWR | O_CREAT, 0666);
+    if (fd < 0) {
+        pthread_mutex_unlock(&coord_registry_lock);
+        return CDC_STORE_EIO;
+    }
+    if (fstat(fd, &st) != 0) {
+        pthread_mutex_unlock(&coord_registry_lock);
+        close(fd);
+        return CDC_STORE_EIO;
+    }
+#ifndef CDC_STORE_TEST_PER_HANDLE_LOCK
+    coord = coord_find(st.st_dev, st.st_ino);
+    if (coord) {
+        /* Rare: the file was recreated between the stat and the open (an
+         * external actor; resets never remove it). The fresh descriptor
+         * is redundant, and closing it is only safe while no lock is held
+         * on the file — take the section mutex first: fcntl locks are
+         * held ONLY inside it, so inside it this process holds none. */
+        coord->refcount++;
+        pthread_mutex_unlock(&coord_registry_lock);
+        pthread_mutex_lock(&coord->mutex);
+        close(fd);
+        pthread_mutex_unlock(&coord->mutex);
+        *out = coord;
+        return CDC_STORE_OK;
+    }
+#endif
+    status = coord_new(fd, &st, out);
+    pthread_mutex_unlock(&coord_registry_lock);
+    if (status != CDC_STORE_OK) {
+        close(fd);
+    }
+    return status;
+}
+
+static void coord_release(store_coord *coord) {
+    store_coord **link;
+    if (!coord) {
+        return;
+    }
+    pthread_mutex_lock(&coord_registry_lock);
+    if (--coord->refcount > 0) {
+        pthread_mutex_unlock(&coord_registry_lock);
+        return;
+    }
+    for (link = &coord_registry; *link; link = &(*link)->next) {
+        if (*link == coord) {
+            *link = coord->next;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&coord_registry_lock);
+    /* Last handle in this process: closing inside the critical section is
+     * outside the contract, so no lock is held through this descriptor
+     * and closing it releases nothing another handle relies on. */
+    pthread_mutex_destroy(&coord->mutex);
+    close(coord->lock_fd);
+    free(coord);
+}
+
+static cdc_store_status coord_enter(store_coord *coord) {
+    struct flock lock;
+    if (!coord || coord->lock_fd < 0) {
+        return CDC_STORE_EIO;
+    }
+    pthread_mutex_lock(&coord->mutex);
     memset(&lock, 0, sizeof(lock));
     lock.l_type = F_WRLCK;
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
     lock.l_len = 0;
-    while (fcntl(store->lock_fd, F_SETLKW, &lock) != 0) {
+    while (fcntl(coord->lock_fd, F_SETLKW, &lock) != 0) {
         if (errno != EINTR) {
+            pthread_mutex_unlock(&coord->mutex);
             return CDC_STORE_EIO;
         }
     }
     return CDC_STORE_OK;
 }
 
-static void store_unlock(cdc_store *store) {
+static void coord_exit(store_coord *coord) {
     struct flock lock;
-    if (store->lock_fd < 0) {
+    if (!coord || coord->lock_fd < 0) {
         return;
     }
     memset(&lock, 0, sizeof(lock));
@@ -487,8 +660,30 @@ static void store_unlock(cdc_store *store) {
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
     lock.l_len = 0;
-    while (fcntl(store->lock_fd, F_SETLK, &lock) != 0 && errno == EINTR) {
+    while (fcntl(coord->lock_fd, F_SETLK, &lock) != 0 && errno == EINTR) {
         /* retry */
+    }
+    pthread_mutex_unlock(&coord->mutex);
+}
+
+static cdc_store_status store_lock(cdc_store *store) {
+    return coord_enter(store->coord);
+}
+
+static void store_unlock(cdc_store *store) {
+    coord_exit(store->coord);
+}
+
+cdc_store_status cdc_store_lock_test(cdc_store *store) {
+    if (!store) {
+        return CDC_STORE_EARG;
+    }
+    return store_lock(store);
+}
+
+void cdc_store_unlock_test(cdc_store *store) {
+    if (store) {
+        store_unlock(store);
     }
 }
 
@@ -629,21 +824,33 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
         free(store);
         return CDC_STORE_EARG;
     }
-    store->lock_fd = open(store->lock_path, O_RDWR | O_CREAT, 0666);
-    if (store->lock_fd < 0) {
+    status = coord_acquire(store->lock_path, &store->coord);
+    if (status != CDC_STORE_OK) {
+        free(store);
+        return status;
+    }
+    /* The whole open — scan, first-generation creation, tail recovery,
+     * position adoption — is ONE critical section. Two simultaneous
+     * openers (same process or not) otherwise both scan the same torn
+     * tail and both truncate from stale offsets (same-application repair
+     * after ca26608: open recovery is a check-then-act sequence too). */
+    if (store_lock(store) != CDC_STORE_OK) {
+        coord_release(store->coord);
         free(store);
         return CDC_STORE_EIO;
     }
     status = scan_log(store->log_path, &scan);
     if (status != CDC_STORE_OK) {
-        close(store->lock_fd);
+        store_unlock(store);
+        coord_release(store->coord);
         free(store);
         return status;
     }
     if (scan.state == SCAN_CORRUPT) {
         /* Committed-prefix integrity violation: fail closed, preserve the
          * evidence bytes exactly as found (review B1). */
-        close(store->lock_fd);
+        store_unlock(store);
+        coord_release(store->coord);
         free(store);
         return CDC_STORE_ECORRUPT;
     }
@@ -657,27 +864,24 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
         memset(zero, 0, sizeof(zero));
         created = fill_uuid(store->uuid);
         if (created != CDC_STORE_OK) {
-            close(store->lock_fd);
+            store_unlock(store);
+            coord_release(store->coord);
             free(store);
             return created;
         }
         build_head_body(body, store->uuid, 0, 0, zero, zero);
         build_head_record(record, 0, body);
-        if (store_lock(store) != CDC_STORE_OK) {
-            close(store->lock_fd);
-            free(store);
-            return CDC_STORE_EIO;
-        }
         created = publish_log(store, record, sizeof(record));
-        store_unlock(store);
         if (created != CDC_STORE_OK) {
-            close(store->lock_fd);
+            store_unlock(store);
+            coord_release(store->coord);
             free(store);
             return created;
         }
         status = scan_log(store->log_path, &scan);
         if (status != CDC_STORE_OK || !scan.has_head) {
-            close(store->lock_fd);
+            store_unlock(store);
+            coord_release(store->coord);
             free(store);
             return status == CDC_STORE_OK ? CDC_STORE_EIO : status;
         }
@@ -690,7 +894,8 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
         if (truncate(store->log_path, scan.valid_bytes) != 0 ||
             sync_path(store->log_path) != 0 ||
             sync_path(store->dir) != 0) {
-            close(store->lock_fd);
+            store_unlock(store);
+            coord_release(store->coord);
             free(store);
             return CDC_STORE_EIO;
         }
@@ -707,6 +912,7 @@ cdc_store_status cdc_store_open(const char *dir, cdc_store **out,
     store->sealed = scan.sealed;
     store->events = scan.events;
     store->valid_bytes = scan.valid_bytes;
+    store_unlock(store);
     *out = store;
     return CDC_STORE_OK;
 }
@@ -719,9 +925,12 @@ void cdc_store_close(cdc_store *store) {
     for (i = 0; i < store->staged_count; i++) {
         free(store->staged[i].payload);
     }
-    if (store->lock_fd >= 0) {
-        close(store->lock_fd);
-    }
+    /* Never close a descriptor here: the coordination object owns the one
+     * fcntl descriptor for this store in this process, and it survives
+     * until the LAST handle releases it — otherwise this close would drop
+     * every lock the process holds on the lock file (POSIX owns record
+     * locks by process+file, not by descriptor). */
+    coord_release(store->coord);
     free(store->staged);
     free(store);
 }
@@ -755,21 +964,48 @@ cdc_store_status cdc_store_reset(const char *dir) {
                                             "log.cdcstore.next",
                                             "base.pending",
                                             "base.pending.tmp"};
+    char lock_path[640];
+    store_coord *coord = NULL;
+    cdc_store_status status = CDC_STORE_OK;
+    int written;
 
     if (!dir) {
         return CDC_STORE_EARG;
     }
+    written = snprintf(lock_path, sizeof(lock_path), "%s/lock.cdcstore",
+                       dir);
+    if (written < 0 || (size_t)written >= sizeof(lock_path)) {
+        return CDC_STORE_EARG;
+    }
+    /* Reset is a deletion racing every other operation, so it runs inside
+     * the same critical section they do (same-application repair after
+     * ca26608). A directory that does not exist cannot hold artifacts or
+     * writers: nothing to delete, nothing to serialize against. */
+    if (coord_acquire(lock_path, &coord) != CDC_STORE_OK) {
+        struct stat st;
+        if (stat(dir, &st) != 0 && errno == ENOENT) {
+            return CDC_STORE_OK;
+        }
+        return CDC_STORE_EIO;
+    }
+    if (coord_enter(coord) != CDC_STORE_OK) {
+        coord_release(coord);
+        return CDC_STORE_EIO;
+    }
     for (i = 0; i < sizeof(ARTIFACTS) / sizeof(ARTIFACTS[0]); i++) {
-        int written = snprintf(path, sizeof(path), "%s/%s", dir,
-                               ARTIFACTS[i]);
+        written = snprintf(path, sizeof(path), "%s/%s", dir, ARTIFACTS[i]);
         if (written < 0 || (size_t)written >= sizeof(path)) {
-            return CDC_STORE_EARG;
+            status = CDC_STORE_EARG;
+            break;
         }
         if (unlink(path) != 0 && errno != ENOENT) {
-            return CDC_STORE_EIO;
+            status = CDC_STORE_EIO;
+            break;
         }
     }
-    return CDC_STORE_OK;
+    coord_exit(coord);
+    coord_release(coord);
+    return status;
 }
 
 cdc_store_status cdc_store_stage(cdc_store *store, const void *payload,

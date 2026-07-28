@@ -19,6 +19,25 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Same-application store coordination repaired (2026-07-28, D29).**
+  The repair requested after `ca26608` was confirmed absent (five checks,
+  5/5 failing at `fe3d61d`) and landed: all handles in one process that
+  name the same store share a reference-counted coordination object — one
+  pthread mutex plus ONE fcntl descriptor, keyed by lock-file
+  device+inode and pid, alive until the last close — so same-process
+  handles are mutually excluded, closing one handle can no longer drop
+  the lock another is holding (the POSIX close-drops-locks hazard), and
+  a forked child never adopts an inherited object. Open recovery and
+  reset joined commit/snapshot/compact inside the critical section. The
+  `store-samep` suite proves blocking deterministically (polled
+  completion pipes while the section is held; premature completion IS
+  the failure) across open, commit, snapshot+compact, reset, and the
+  close hazard; verify.sh requires it to fail exactly 5/5 against the
+  permanent per-handle probe build, and it runs under ASan/UBSan plus a
+  guarded ThreadSanitizer lane (clean on first contact). A handle whose
+  store was compacted or reset under it is refused typed
+  (ESTATE/ECORRUPT), never allowed a corrupt append.
+
 - **Phase I COMPLETE — `cdc build` / `cdc install` / `cdc x`
   (2026-07-28, D28).** The last three toolchain commands are live and
   hard-gated:

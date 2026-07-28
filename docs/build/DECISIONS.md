@@ -46,6 +46,79 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D29 — 2026-07-28 — Same-application store coordination (after ca26608)
+
+The second same-day review asked whether the same-application coordination
+repair requested after ca26608 had landed. It had not: the D16 repair gave
+every handle its own descriptor onto `lock.cdcstore` and took per-handle
+fcntl locks. POSIX record locks have two sharp edges that make that wrong
+inside one application:
+
+1. **They serialize processes only.** Two handles in one process both
+   "acquire" the exclusive lock and the kernel merges them — no mutual
+   exclusion at all. The D16 comment stated this scope and pointed at the
+   fence, but the fence only refuses stale writers; it does not stop two
+   unfenced same-process commits from interleaving their appends.
+2. **They are owned by (process, file), not by descriptor.** Closing ANY
+   descriptor the process holds on the lock file drops EVERY lock the
+   process holds on it — so a plain `cdc_store_close` of one handle
+   silently disarmed another handle's cross-process exclusion
+   mid-operation.
+
+Written as five checks over creation/open-recovery, commit,
+snapshot+compact, reset, and the close hazard, the current head failed
+5/5.
+
+**The repair** is the standard one (the shape SQLite's unix VFS uses): a
+process-local registry of reference-counted coordination objects keyed by
+the lock file's (device, inode). Each object carries ONE fcntl descriptor
+and one pthread mutex. The mutex serializes handles within the process;
+the fcntl lock — taken only while the mutex is held — serializes
+processes; the descriptor closes only when the LAST handle releases the
+object, so no close can drop a lock another handle relies on. Entries are
+additionally keyed by pid so a forked child never adopts an inherited
+object (whose mutex may have been copied mid-hold); it coordinates
+through fcntl like any other process. Two operations that ran UNLOCKED
+joined the critical section: open (scan → create/recover → adopt is a
+check-then-act sequence; two simultaneous openers could both truncate a
+torn tail from stale offsets) and reset (a deletion racing every other
+operation). A handle whose store is compacted or reset under it gets a
+typed ESTATE/ECORRUPT refusal on its next commit — never a corrupt
+append.
+
+**The five permanent checks** (`store-samep`) prove blocking
+deterministically: the blocked operation signals a completion pipe, the
+holder polls that pipe WHILE holding the section (a premature signal is
+the failure), releases, and then requires completion. No sleeps, no
+timing-dependent passes. `samep-open` (a second process AND a second
+same-process handle both block until release), `samep-commit` (direct
+exclusion probe, then 80 interleaved commits from two handles on two
+threads: all serialize, none lost, clean reopen), `samep-transition`
+(snapshot and compact both block; the un-compacted handle is refused
+ESTATE and resumes after reopen), `samep-reset` (reset blocks; the stale
+handle is refused ECORRUPT; a fresh open starts generation 0),
+`samep-close` (closing one handle: a foreign process still cannot take
+the lock the surviving handle holds).
+
+**The counterexample is permanent**: verify.sh builds the probe binary
+with `CDC_STORE_TEST_PER_HANDLE_LOCK`, which reproduces the pre-repair
+per-handle locking through the same coordination API, and requires the
+suite to fail exactly 5/5 against it. The suite runs under ASan/UBSan
+(leak-checked: the registry drains to empty), and a guarded
+ThreadSanitizer lane builds wherever the toolchain supports
+`-fsanitize=thread` — the instrument made for exactly this suite — and
+passed clean on first contact here.
+
+Scope stated: the registry serializes handles that name the same lock
+file by (device, inode). Handles reaching one store through different
+files (e.g. a copied directory) are different stores. Forking while
+another thread is inside a store call remains outside the contract, as it
+is for POSIX generally. No new receipts or parity vectors: this is
+internal store machinery under existing language surfaces, and the
+observable contract (typed refusals, durable/replay observations) is
+unchanged — the persistence gates that consume it are already green on
+top of it.
+
 ## D28 — 2026-07-28 — Phase I: cdc build / cdc install / cdc x
 
 The last three toolchain commands are live. Design decisions worth pinning,
