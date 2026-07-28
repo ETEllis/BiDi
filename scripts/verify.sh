@@ -196,6 +196,13 @@ grep -q " duplicate=0 " build/frontend_attr_parity.txt
 grep -q " failed=0" build/frontend_attr_parity.txt
 run_step ./build/cdc_frontend_check bounds
 run_step ./build/cdc_frontend_check oom framework_loop.cdc
+# Attribute-key boundaries [deletion-gate step 1]. The legacy reader matched
+# `key=` as a bare substring, so an attribute whose NAME ends with the key
+# was read instead: `gain` read `action-gain=9.0` as 9.0. Confidently wrong
+# rather than missing, so nothing downstream could notice. The corpus never
+# tripped it (collision=0), which is exactly why it survived.
+run_step ./build/cdc_frontend_check attr-boundary
+
 for fixture in tests/fixtures/frontend/*.cdc; do
   if python3 cdc_boot.py "$fixture" >/dev/null 2>&1; then
     echo "legacy loader accepted invalid fixture ${fixture}" >&2
@@ -223,6 +230,7 @@ if cc -std=c99 -Wall -Wextra -pedantic -O1 -fsanitize=address,undefined \
   # shellcheck disable=SC2086
   run_step ./build/cdc_frontend_check_asan roundtrip $CDC_ROOT_SOURCES
   run_step ./build/cdc_frontend_check_asan bounds
+  run_step ./build/cdc_frontend_check_asan attr-boundary
 else
   echo "sanitizers unavailable; skipping instrumented frontend pass"
 fi
@@ -1174,6 +1182,14 @@ if command -v emcc >/dev/null 2>&1; then
 else
   echo "emcc not found; skipping live WASM link"
 fi
+# End-to-end attribute-shadowing counterexample [deletion-gate step 1]:
+# `action-gain` shadows `gain` on a field, and the nest integration that
+# consumes gain is expectation-pinned to the correct value. Under the old
+# substring reader this fails with a belief nine times too large, while the
+# real corpus stays green either way — which is why the fixture must exist.
+run_step ./build/cdc_native_runtime run \
+  tests/fixtures/frontend_boundary/shadowed_gain.cdc
+
 native_reducer="$(build/cdc_native_runtime run native_reducer.cdc)"
 echo "$native_reducer"
 grep -q "flow=reducer-flow .*theta council.b=0.250000" <<<"$native_reducer" || {

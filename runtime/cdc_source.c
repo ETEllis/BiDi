@@ -59,16 +59,42 @@ void cdc_first_token_after(const char *line, const char *prefix, char *out, size
     out[i] = '\0';
 }
 
+/* Reads the first `key=` attribute on the line.
+ *
+ * The key must begin a TOKEN: at the start of the line, or immediately
+ * after whitespace. Without that boundary this matched any substring, so
+ * reading `gain` from
+ *
+ *     field f1 action-gain=9.0 gain=1.0 dt=0.125
+ *
+ * returned 9.0 — the tail of a DIFFERENT attribute whose name happens to
+ * end in the key. The value was confidently wrong rather than missing, so
+ * nothing downstream could notice. The current corpus does not trip it
+ * (the frontend differential reports collision=0), but any source that
+ * declares an attribute whose name ends with another attribute's name
+ * would silently mis-read it.
+ *
+ * Value extraction is unchanged — raw, up to whitespace, quotes included —
+ * because the runtime's consumers depend on that exact behavior and the
+ * grammar-1 frontend deliberately differs there (see the `quoting`
+ * divergence class in attr-parity). This repairs the key match only. */
 int cdc_read_attr(const char *line, const char *key, char *out, size_t out_size) {
-    char needle[64];
-    const char *p;
+    size_t key_len = strlen(key);
+    const char *p = line;
     size_t i = 0;
-    snprintf(needle, sizeof(needle), "%s=", key);
-    p = strstr(line, needle);
-    if (!p) {
-        return 0;
+
+    for (;;) {
+        p = strstr(p, key);
+        if (!p) {
+            return 0;
+        }
+        if ((p == line || isspace((unsigned char)p[-1])) &&
+            p[key_len] == '=') {
+            break; /* a whole token, not the tail of a longer name */
+        }
+        p += key_len;
     }
-    p += strlen(needle);
+    p += key_len + 1;
     while (*p && !isspace((unsigned char)*p)) {
         if (i + 1 >= out_size) {
             cdc_source_fail("attribute too long");

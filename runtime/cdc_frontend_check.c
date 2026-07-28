@@ -1155,6 +1155,63 @@ static int cmd_store_kill(const char *base) {
 
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
 
+/* Attribute-key boundary counterexamples.
+ *
+ * The legacy reader matched `key=` as a bare substring, so an attribute
+ * whose NAME ends with the key was read instead of the key itself:
+ * `gain` read `action-gain=9.0` as 9.0. Confidently wrong rather than
+ * missing, so nothing downstream could notice. These cases pin the
+ * boundary rule permanently. */
+static int cmd_attr_boundary(void) {
+    static const struct {
+        const char *line;
+        const char *key;
+        int present;
+        const char *value;
+        const char *why;
+    } CASES[] = {
+        {"field f1 action-gain=9.0 gain=1.0 dt=0.125", "gain", 1, "1.0",
+         "a longer attribute ending in the key must not shadow it"},
+        {"field f1 action-gain=9.0 dt=0.125", "gain", 0, "",
+         "the key is absent even though a longer name contains it"},
+        {"module m action-gain=2.0", "action-gain", 1, "2.0",
+         "the longer name itself still reads"},
+        {"cell c theta=1.5 subtheta=9.9", "theta", 1, "1.5",
+         "first occurrence wins and is the whole token"},
+        {"cell c subtheta=9.9 theta=1.5", "theta", 1, "1.5",
+         "order does not let a suffix name win"},
+        {"job j precision=1.0", "precision", 1, "1.0", "exact key reads"},
+        {"job j imprecision=7.0", "precision", 0, "",
+         "a suffix match with no boundary is not a match"},
+        {"a=1 b=2", "a", 1, "1", "a key at the very start of the line reads"},
+    };
+    size_t i;
+    int failures = 0;
+
+    for (i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++) {
+        char value[64];
+        int got = cdc_read_attr(CASES[i].line, CASES[i].key, value,
+                                sizeof(value));
+        if (got != CASES[i].present) {
+            fprintf(stderr, "attr-boundary FAIL: %s (presence %d, want %d)\n",
+                    CASES[i].why, got, CASES[i].present);
+            failures++;
+            continue;
+        }
+        if (got && strcmp(value, CASES[i].value) != 0) {
+            fprintf(stderr, "attr-boundary FAIL: %s (got %s, want %s)\n",
+                    CASES[i].why, value, CASES[i].value);
+            failures++;
+        }
+    }
+    if (failures) {
+        return 1;
+    }
+    printf("attr-boundary ok cases=%zu shadowing=0\n",
+           sizeof(CASES) / sizeof(CASES[0]));
+    return 0;
+}
+
 /* Computes the corpus identity for a file set, from a DIFFERENT binary
  * than the one that stamps verdicts. That makes the check independent:
  * the gate can confirm a verdict names the corpus it actually ran on
@@ -2637,6 +2694,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
         return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "attr-boundary") == 0) {
+        return cmd_attr_boundary();
     }
     if (strcmp(argv[1], "corpus-digest") == 0 && argc >= 3) {
         return cmd_corpus_digest(argc - 2, argv + 2);

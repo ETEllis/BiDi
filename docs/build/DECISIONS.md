@@ -46,6 +46,45 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D22 — 2026-07-28 — Deletion gate step 1: the attribute-key shadowing defect
+
+Migrating the runtimes off the legacy line scanner starts by reading it
+closely, and reading it closely found a live defect.
+
+`cdc_read_attr` located an attribute with `strstr(line, "key=")` — a bare
+substring match with no token boundary. So an attribute whose NAME ENDS
+WITH the key was read instead of the key:
+
+    field f1 action-gain=9.0 gain=1.0 dt=0.125
+
+reading `gain` returned **9.0**. Not missing — wrong, and confidently so,
+which is why nothing downstream could notice. Field gain feeds nest
+integration, so a source shaped that way would have produced beliefs nine
+times too large with every expectation still "passing" against whatever the
+wrong arithmetic produced.
+
+The corpus never tripped it. The frontend differential has always reported
+`collision=0`, and it still does — which is precisely why the defect
+survived: the oracle agreed with the buggy reader because no input
+distinguished them.
+
+**The repair is the key match only.** The key must now begin a token: at
+line start, or immediately after whitespace. Value extraction is unchanged
+— raw, up to whitespace, quotes included — because the runtime's consumers
+depend on that exact behavior and the grammar-1 frontend deliberately
+differs there (the `quoting` divergence class, 4879 cases). Fixing the
+value semantics at the same time would have been a silent behavior change
+wearing a bug fix's clothes.
+
+**Two counterexamples, because one was not enough.** `attr-boundary` pins
+eight cases at the unit level, including the reverse direction (the longer
+name must still read) and a suffix that is not an attribute at all. And
+`tests/fixtures/frontend_boundary/shadowed_gain.cdc` executes it: the nest
+job is expectation-pinned to the value the CORRECT gain produces, so the
+fixture fails on the old reader and passes on the new one. Verified by
+rebuilding the old reader and running both — the fixture fails, and the
+real corpus stays green either way.
+
 ## D21 — 2026-07-28 — CT0: verdicts name their corpus; builds reproduce
 
 A verdict that does not say what it ran on is a claim about nothing in
