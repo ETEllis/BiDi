@@ -141,10 +141,14 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    `stmt_attr_copy` shim from the bridge migration so loop bodies stay
    unchanged, and differential the result against a stashed-source build
    rather than trusting inspection.
-   ORDER MATTERS — once the legacy scanner is gone, `attr-parity` compares
-   the frontend to itself and stops being an oracle, leaving
-   `cdc_boot.py --dump` as the only independent one. Retire the scanner
-   BEFORE the bootloader, not alongside it.
+   DONE (D26): the scanner is deleted, `attr-parity` retired with it,
+   `attr-boundary` was repointed at the surviving reader, and
+   `cdc_boot.py --dump` deliberately STAYS as the last independent oracle.
+   The frontend-differential-dump gate is split accordingly.
+   Deleting `cdc_boot.py` itself is written up in
+   `docs/build/BOOTLOADER_DELETION_PROPOSAL.md` and is BLOCKED on Edward's
+   choice between freeze / replace-then-delete / delete-now. Do not touch
+   the kernel floor until he answers.
    Then migrate the remaining internals (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`
    (frontend-differential-dump gate) → after toolchain-verify-parity
