@@ -94,11 +94,12 @@ pip install -e .
 ### Reference-frame topological coherence crucible
 
 The repository includes a deliberately classical rapid crucible for the
-logical-cell layer between phase flow and guarded commit. It tests five
+logical-cell layer between phase flow and guarded commit. It tests seven
 independent mechanisms: synchronization onset, preservation of an oriented
 winding sector, distinct microstates behind one macroscopic boundary,
-bidirectional macro/micro recovery, and a causal cut that rejects ordinary
-cluster communication as evidence of nonclassicality.
+bidirectional macro/micro recovery, typed packet-threshold admissibility,
+redundant record closure, and a causal cut that rejects ordinary cluster
+communication as evidence of nonclassicality.
 
 ```bash
 ./scripts/verify_rftc.sh
@@ -116,6 +117,9 @@ ladder, stress matrix, and gated execution sequence are in
 field-computation, physics, neuroscience, systems, and polymath convergence is
 captured in
 [`docs/rftc/SPECIALIST_SYNTHESIS.md`](docs/rftc/SPECIALIST_SYNTHESIS.md).
+The six C3 language forms and their non-colliding R1-R6 capabilities live in
+[`rftc.cdc`](rftc.cdc); accepting those declarations is the language boundary,
+not a claim that authenticated distributed C3 execution is already complete.
 
 ## Core Architecture
 

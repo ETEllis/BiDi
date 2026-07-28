@@ -46,6 +46,18 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D35 — 2026-07-28 — R1-R6 are the RFTC language/runtime capability range
+
+The six C3 forms receive an explicit, non-colliding capability range:
+`R1=frame`, `R2=reduce`, `R3=complex`, `R4=topology`, `R5=authority`, and
+`R6=transport`. D3's H12-H17 Memory Manifold reservation remains untouched.
+
+The forms join grammar 1 in the native parser, registry, canonical
+serialization, and the frozen independent oracle in one change. Each requires
+an explicit identifier; unknown quantum-shaped aliases and identifier-free
+forms reject with the existing typed grammar diagnostics. The declarations in
+`rftc.cdc` name the C3 execution boundary but confer no Q0/Q1 claim.
+
 ## D34 — 2026-07-28 — RFTC is a classical logical-cell lane with a hard causal cut
 
 The reference-frame topological-coherence proposal enters this repository as
@@ -55,12 +67,13 @@ the existing guarded commit: a logical cell reduces an immutable microstate
 snapshot to `R`, `Psi`, dispersion, an oriented boundary/winding sector, and a
 hidden-class digest, then permits an authorized constraint to flow downward.
 
-The initial crucible carries five independently failing witnesses:
+The initial crucible carries seven independently failing witnesses:
 synchronization onset against zero coupling, winding preservation against
 destroyed adjacency and forced phase slip, distinct microstate digests behind
 one macro boundary, BiDi recovery against local-only recovery, and a causal
 cut in which a communicating CHSH implementation can reach `S=4` but is
-explicitly invalid. All five must pass; there is no composite score.
+explicitly invalid, plus typed packet-threshold admissibility and redundant
+record closure. All seven must pass; there is no composite score.
 
 The result is never labeled quantum superposition, entanglement, Bell
 nonlocality, or quantum advantage. A digital cluster has communication and a

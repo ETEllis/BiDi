@@ -189,6 +189,12 @@ def parse_file(state: BootState, path: Path) -> None:
             "universal",
             "store",
             "persist",
+            "frame",
+            "reduce",
+            "complex",
+            "topology",
+            "authority",
+            "transport",
         }:
             if not args:
                 raise SyntaxError(f"{source}: {cmd} requires an id")

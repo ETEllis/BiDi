@@ -23,6 +23,14 @@ common_flags=(-std=c99 -Wall -Wextra -pedantic -pthread)
 
 mkdir -p "$out_dir"
 
+echo "== RFTC: six-form grammar and fail-closed counterexamples =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_rftc_language_test.c \
+  runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  -o "$out_dir/cdc_rftc_language_test"
+"$out_dir/cdc_rftc_language_test"
+
 echo "== RFTC: sealed event-recovery API =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_store_replay_api_test.c \
