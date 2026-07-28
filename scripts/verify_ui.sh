@@ -134,7 +134,16 @@ if missing:
     print("missing app sources:", missing, file=sys.stderr)
     raise SystemExit(1)
 
-sources = list(root.rglob("*.swift"))
+# Inspect authored inputs only. `swift build` creates `.build/**/DerivedSources`
+# beneath this tree; including those generated files made this gate
+# history-dependent (a clean checkout passed once, then its own build output
+# could fail the next run on compiler-generated text). Package.swift is an
+# authored Swift source too, so keep it in the checked set explicitly.
+sources = [
+    root / "Package.swift",
+    *sorted((root / "Sources").rglob("*.swift")),
+    *sorted((root / "Tests").rglob("*.swift")),
+]
 blob = "\n".join(p.read_text() for p in sources)
 
 # The app is a surface over the shipped toolchain, never a reimplementation:

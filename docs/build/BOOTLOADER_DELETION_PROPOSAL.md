@@ -11,11 +11,11 @@
 > `NATIVE_SELF_HOSTING_MANDATE.md`. The analysis below is preserved as
 > the decision's record.
 
-**Status: PROPOSED — NOT EXECUTED. Requires Edward's approval.**
+**Status: DECIDED AND EXECUTED — Option A (freeze), recorded as D33.**
 
-This touches `kernel.cdc`, which is the language contract, so it is written
-up rather than done. Everything below is reversible until the kernel floor
-changes; that flip is the point of no return.
+This touched `kernel.cdc`, which is the language contract, so the analysis
+below was written before execution. It is preserved as the decision record;
+the opening decision banner and D33 describe the resulting state.
 
 ## What the bootloader still does
 
