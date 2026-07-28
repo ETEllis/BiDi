@@ -19,6 +19,21 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **PR #4 MERGED; bootloader Option A executed (2026-07-28, D33).** The
+  operator approved pinned head `6784ab5` after independent macOS
+  verification (both weakened coordination builds caught, 20 clean
+  concurrent-install trials, header forgeries failing closed) and both
+  lanes green; merge commit `2947673`. The bootloader decision landed as
+  Option A: `cdc_boot.py` frozen as a CI-only differential oracle,
+  kernel floor renegotiated to `python-files == 0` with a by-name
+  exemption rendered in every report, `bootloader minimal` still
+  pinning the raw enumeration, Gate 5 recorded closed on the runtime
+  dependency. Housekeeping from the approval note: the stale
+  same-process wording in `runtime/cdc_store.h` now describes the D29
+  shared-coordination design, and CDC Studio's generated `.build/` is
+  ignored. Next: Memory Manifold (E–H) and GIST/Superposition (K)
+  integration lanes, opened by the operator. PC6 stays hard-paused.
+
 - **Second review round repaired (2026-07-28, D30).** Four findings at
   `810f1f6`, each confirmed against the reviewer's own probes and gated:
   (1) BSD `wc` padding failed the suite on a real Mac while both CI lanes

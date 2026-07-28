@@ -10,6 +10,9 @@ __pycache__/
 /dist/
 /build/
 /cdc_modules/
+
+# CDC Studio's generated SwiftPM build directory
+ui/macos/CDCStudio/.build/
 *.egg-info/
 
 # LaTeX/arXiv build outputs

@@ -1,10 +1,21 @@
 # Proposal: delete `cdc_boot.py` and close Mandate Gate 5
 
-**Status: PROPOSED — NOT EXECUTED. Requires Edward's approval.**
+> **DECIDED — 2026-07-28: Option A (freeze).** The operator chose to
+> freeze `cdc_boot.py` as a CI-only differential oracle rather than
+> delete it: "Do not delete a valuable independent reference until
+> native coverage renders it genuinely redundant." Executed as D33: the
+> kernel floor is `python-files == 0` with the oracle exempt BY NAME
+> (exemption rendered in every report), `bootloader minimal` still
+> enumerates the raw file set, the freeze banner is in the file itself,
+> and Gate 5 is recorded closed on the RUNTIME dependency in
+> `NATIVE_SELF_HOSTING_MANDATE.md`. The analysis below is preserved as
+> the decision's record.
 
-This touches `kernel.cdc`, which is the language contract, so it is written
-up rather than done. Everything below is reversible until the kernel floor
-changes; that flip is the point of no return.
+**Status: DECIDED AND EXECUTED — Option A (freeze), recorded as D33.**
+
+This touched `kernel.cdc`, which is the language contract, so the analysis
+below was written before execution. It is preserved as the decision record;
+the opening decision banner and D33 describe the resulting state.
 
 ## What the bootloader still does
 

@@ -27,7 +27,7 @@ kernel bidi stage=2 target=cdc
 
   expect native substrate == cdc
   expect host-debt <= 1
-  expect python-files == 1
+  expect python-files == 0
   expect bootloader minimal == true
   expect terms >= 14
   expect rules >= 17
