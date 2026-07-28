@@ -269,9 +269,14 @@ Framework claims live in the `witnessed` and `runtime-checked` tiers of
 `VERIFICATION_OBLIGATION_MATRIX.md`, never in `proved`. Explicitly queued, not
 claimed:
 
-- **No persistent episode store.** Episodes persist within a run and through
-  `evolve`-written source copies; there is no cross-run store or retrieval
-  index beyond the finite codebooks.
+- **Persistence is declared, but the episodic framework does not use it yet.**
+  `H6` (`framework_persistence.cdc`) makes a cross-run durable store a
+  first-class source form, and its append path is gated by the same
+  balanced-ternary barrier as any commit. `H3` still keeps episodes within a
+  run and through `evolve`-written source copies; wiring episodic record and
+  recall onto a declared store is queued, not claimed. There is still no
+  similarity index or reconstructive retrieval — recall remains exact,
+  finite codebook lookup.
 - **No learned parameters.** Consolidation updates belief/prior state through
   declared dynamics; nothing is fitted.
 - **Recall is codebook lookup**, exact and finite — not similarity-based or
@@ -281,6 +286,14 @@ claimed:
   patch.
 - **Council/evolve generalization** into the main reducer and trace/window
   policy layer remains queued in the matrix, unchanged by this layer.
+- **Persistence claims are per-run and single-writer.** The durable
+  guarantees `H6` exercises are runtime-checked on each execution, not
+  proved: the barrier gate, the byte-identity of a held append, and the
+  replay/attest divergence under compaction are observed outcomes with
+  permanent counterexamples, not theorems. `cdc_store` takes no locks — the
+  fence makes a stale writer fail closed exactly once, after which its
+  handle is spent and must be reopened. Multi-process contention beyond that
+  single refusal, and any distributed or networked store, are queued.
 - **The loop composition spans four runtime invocations** over one declared
   source: the reducer chain (both cycles), the surface pass, the council pass,
   and the enactment pass. A single-process executor that fuses all modes over
@@ -303,11 +316,13 @@ claimed:
 | `H3` | episodic | 9 | `framework_episodic.cdc` |
 | `H4` | deliberative | 2 | `framework_deliberative.cdc` |
 | `H5` | loop (+ `U1` universal closure) | 17 | `framework_loop.cdc` |
+| `H6` | persistence | 11 | `framework_persistence.cdc` |
 
-The kernel contract requires all five through `provides`/`expect provides`
+The kernel contract requires all six through `provides`/`expect provides`
 (`transition-framework procedural-framework episodic-framework
-deliberative-framework framework-contract task-loop-composition`), the
-framework registry floor and closure (`expect frameworks >= 5`,
+deliberative-framework persistence-framework framework-contract
+task-loop-composition bidi-gated-durable-mutation`), the
+framework registry floor and closure (`expect frameworks >= 6`,
 `expect frameworks closed`), and the raised capability and witness floors in
 `kernel.cdc`. Every framework's role contract is individually enforced by its
 `expect framework <key> complete` line.

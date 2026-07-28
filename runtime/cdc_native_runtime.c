@@ -1,9 +1,13 @@
 #include "cdc_source.h"
+#include "cdc_store.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 
 #define MAX_FIELDS 16
 #define MAX_MODULES 64
@@ -22,6 +26,8 @@
 #define MAX_BRIDGES 32
 #define MAX_COUNTERS 32
 #define MAX_UNIVERSALS 8
+#define MAX_STORES 8
+#define MAX_PERSIST_JOBS 32
 #define LINE_MAX_BYTES 1024
 #define PI 3.14159265358979323846
 
@@ -267,6 +273,42 @@ typedef struct {
     char reason[40];
 } UniversalResult;
 
+/* Persistence (gate CT4, capability H6). `store` declares a durable log the
+ * way `field` declares a continuum; `persist` is a job over it the way
+ * `commit` is a job over a module. Durable mutation is NOT a host service
+ * call: an `op=append` runs the identical balanced-ternary barrier
+ * `execute_commit` runs, and only an accepted decision is allowed to reach
+ * the log. A violated prefix balance HOLDS — nothing is staged, nothing is
+ * committed, and the sealed bytes are provably unchanged (`durable=no`).
+ * That is the language-level statement of latch-or-hold: equilibrium is not
+ * a failed write, it is the absence of one. */
+typedef struct {
+    char id[64];
+    char dir[192];
+    int fresh;
+    int recovered;
+    cdc_store *handle;
+} StoreDecl;
+
+typedef struct {
+    char id[64];
+    char store[64];
+    char op[16];
+    char module[64];
+    int seal;
+    int has_seal;
+    char expect_trits[64];
+    char expect_balance[32];
+    char expect_status[32];
+    char expect_reason[40];
+    char expect_durable[8];
+    char expect_replay[16];
+    int expect_sealed;
+    int has_expect_sealed;
+    int expect_events;
+    int has_expect_events;
+} PersistJob;
+
 typedef struct {
     Field fields[MAX_FIELDS];
     Module modules[MAX_MODULES];
@@ -285,6 +327,8 @@ typedef struct {
     SurfaceBridgeJob bridges[MAX_BRIDGES];
     CounterJob counters[MAX_COUNTERS];
     UniversalJob universals[MAX_UNIVERSALS];
+    StoreDecl stores[MAX_STORES];
+    PersistJob persists[MAX_PERSIST_JOBS];
     int field_count;
     int module_count;
     int cell_count;
@@ -302,6 +346,8 @@ typedef struct {
     int bridge_count;
     int counter_count;
     int universal_count;
+    int store_count;
+    int persist_count;
 } Runtime;
 
 static void fail(const char *message) {
@@ -403,7 +449,12 @@ static int is_hold_reason(const char *reason) {
     return strcmp(reason, "none") == 0 ||
            strcmp(reason, "energy-increase") == 0 ||
            strcmp(reason, "balance-violation") == 0 ||
-           strcmp(reason, "deadband-jitter") == 0;
+           strcmp(reason, "deadband-jitter") == 0 ||
+           /* persistence holds (capability H6): a stale compare-and-set
+            * view, and a compaction whose snapshot does not cover the
+            * sealed prefix it would discard. Both hold rather than write. */
+           strcmp(reason, "fence-violation") == 0 ||
+           strcmp(reason, "compact-uncovered") == 0;
 }
 
 static void add_field(Runtime *rt, const char *line) {
@@ -714,6 +765,58 @@ static void add_counter(Runtime *rt, const char *line) {
     counter->expect_value = cdc_read_int_attr(line, "expect-value", counter->value);
 }
 
+static void add_store(Runtime *rt, const char *line) {
+    StoreDecl *store;
+    char mode[16];
+    if (rt->store_count >= MAX_STORES) {
+        fail("too many stores");
+    }
+    store = &rt->stores[rt->store_count++];
+    memset(store, 0, sizeof(*store));
+    cdc_first_token_after(line, "store ", store->id, sizeof(store->id));
+    cdc_copy_attr(line, "dir", store->dir, sizeof(store->dir), "");
+    if (store->dir[0] == '\0') {
+        fail("store requires dir=");
+    }
+    cdc_copy_attr(line, "mode", mode, sizeof(mode), "open");
+    if (strcmp(mode, "fresh") == 0) {
+        store->fresh = 1;
+    } else if (strcmp(mode, "open") != 0) {
+        fail("store mode must be fresh or open");
+    }
+}
+
+static void add_persist(Runtime *rt, const char *line) {
+    PersistJob *job;
+    if (rt->persist_count >= MAX_PERSIST_JOBS) {
+        fail("too many persistence jobs");
+    }
+    job = &rt->persists[rt->persist_count++];
+    memset(job, 0, sizeof(*job));
+    cdc_first_token_after(line, "persist ", job->id, sizeof(job->id));
+    cdc_copy_attr(line, "store", job->store, sizeof(job->store), "");
+    cdc_copy_attr(line, "op", job->op, sizeof(job->op), "");
+    cdc_copy_attr(line, "module", job->module, sizeof(job->module), "");
+    cdc_copy_attr(line, "expect-trits", job->expect_trits,
+                  sizeof(job->expect_trits), "");
+    cdc_copy_attr(line, "expect-balance", job->expect_balance,
+                  sizeof(job->expect_balance), "");
+    cdc_copy_attr(line, "expect-status", job->expect_status,
+                  sizeof(job->expect_status), "");
+    cdc_copy_attr(line, "expect-reason", job->expect_reason,
+                  sizeof(job->expect_reason), "");
+    cdc_copy_attr(line, "expect-durable", job->expect_durable,
+                  sizeof(job->expect_durable), "");
+    cdc_copy_attr(line, "expect-replay", job->expect_replay,
+                  sizeof(job->expect_replay), "");
+    job->seal = cdc_read_int_attr(line, "seal", -1);
+    job->has_seal = job->seal >= 0;
+    job->expect_sealed = cdc_read_int_attr(line, "expect-sealed", -1);
+    job->has_expect_sealed = job->expect_sealed >= 0;
+    job->expect_events = cdc_read_int_attr(line, "expect-events", -1);
+    job->has_expect_events = job->expect_events >= 0;
+}
+
 static void parse_source(Runtime *rt, const char *path) {
     FILE *fp = fopen(path, "r");
     char line[LINE_MAX_BYTES];
@@ -764,6 +867,10 @@ static void parse_source(Runtime *rt, const char *path) {
             add_evolution(rt, line);
         } else if (cdc_starts_with(line, "universal ")) {
             add_universal(rt, line);
+        } else if (cdc_starts_with(line, "store ")) {
+            add_store(rt, line);
+        } else if (cdc_starts_with(line, "persist ")) {
+            add_persist(rt, line);
         }
     }
     fclose(fp);
@@ -1554,6 +1661,270 @@ static void run_evolution(Runtime *rt, const char *path) {
     printf("native evolution ok jobs=%d source=%s\n", rt->evolution_count, path);
 }
 
+/* ---- persistence (capability H6) ------------------------------------- */
+
+static StoreDecl *find_store_decl(Runtime *rt, const char *id) {
+    for (int i = 0; i < rt->store_count; i++) {
+        if (strcmp(rt->stores[i].id, id) == 0) {
+            return &rt->stores[i];
+        }
+    }
+    return NULL;
+}
+
+/* Creates each component of a declared store directory. Only directories
+ * are created; nothing is ever removed here. */
+static void ensure_dir_path(const char *path) {
+    char work[192];
+    size_t i;
+    int written = snprintf(work, sizeof(work), "%s", path);
+    if (written < 0 || (size_t)written >= sizeof(work)) {
+        fail("store dir path too long");
+    }
+    for (i = 1; work[i]; i++) {
+        if (work[i] != '/') {
+            continue;
+        }
+        work[i] = '\0';
+        if (mkdir(work, 0777) != 0 && errno != EEXIST) {
+            fail("store dir could not be created");
+        }
+        work[i] = '/';
+    }
+    if (mkdir(work, 0777) != 0 && errno != EEXIST) {
+        fail("store dir could not be created");
+    }
+}
+
+static void store_or_fail(cdc_store_status status, const char *what) {
+    if (status != CDC_STORE_OK) {
+        fprintf(stderr, "cdc-native-runtime: %s (%s)\n", what,
+                cdc_store_status_name(status));
+        exit(1);
+    }
+}
+
+static void persist_state(StoreDecl *decl, char *replay_out,
+                          size_t replay_size, char *attest_out,
+                          size_t attest_size) {
+    store_or_fail(cdc_store_replay(decl->handle, replay_out, replay_size),
+                  "persistence replay failed");
+    store_or_fail(cdc_store_attest(decl->handle, attest_out, attest_size),
+                  "persistence attest failed");
+}
+
+/* Executes one persistence job and returns its ternary outcome. The only
+ * durable-mutating ops are append (gated by the commit barrier), snapshot,
+ * and compact; every other op is a read of the sealed prefix. */
+static void execute_persist(Runtime *rt, PersistJob *job, StoreDecl *decl,
+                            const char **status_out,
+                            const char **reason_out,
+                            CommitResult *decision, int *is_append) {
+    const char *status = "accepted";
+    const char *reason = "none";
+    cdc_store_status st;
+
+    *is_append = 0;
+    if (strcmp(job->op, "append") == 0) {
+        Step gate;
+        char payload[256];
+        int size;
+        *is_append = 1;
+        if (job->module[0] == '\0') {
+            fail("persist op=append requires module=");
+        }
+        /* The gate is the calculus, not a policy check: the identical
+         * balanced-ternary commit that governs in-memory latching decides
+         * whether these trits may become durable. Only expectations that
+         * are facts ABOUT the barrier are delegated to it; the job's own
+         * status/reason are asserted against the persistence outcome,
+         * which can hold for reasons the barrier never produces. */
+        memset(&gate, 0, sizeof(gate));
+        gate.kind = STEP_COMMIT;
+        snprintf(gate.id, sizeof(gate.id), "%s", job->id);
+        snprintf(gate.module, sizeof(gate.module), "%s", job->module);
+        snprintf(gate.expect_trits, sizeof(gate.expect_trits), "%s",
+                 job->expect_trits);
+        snprintf(gate.expect_balance, sizeof(gate.expect_balance), "%s",
+                 job->expect_balance);
+        execute_commit(rt, &gate, decision);
+        if (strcmp(decision->status, "accepted") != 0) {
+            /* Held: nothing is staged, so nothing can be written. The
+             * absence of a durable effect is the equilibrium outcome. */
+            *status_out = "held";
+            *reason_out = decision->reason;
+            return;
+        }
+        size = snprintf(payload, sizeof(payload), "%s %s", decision->module,
+                        decision->trits);
+        if (size < 0 || (size_t)size >= sizeof(payload)) {
+            fail("persist payload too long");
+        }
+        store_or_fail(cdc_store_stage(decl->handle, payload, (size_t)size),
+                      "persistence stage failed");
+        st = cdc_store_commit(decl->handle);
+        if (st == CDC_STORE_ESTATE) {
+            /* An armed fence saw the log move underneath this writer. */
+            store_or_fail(cdc_store_rollback(decl->handle),
+                          "persistence rollback failed");
+            status = "held";
+            reason = "fence-violation";
+        } else {
+            store_or_fail(st, "persistence commit failed");
+        }
+    } else if (strcmp(job->op, "replay") == 0 ||
+               strcmp(job->op, "attest") == 0) {
+        /* Both digests are recomputed around every job; naming the op
+         * makes which identity the job is about explicit in the record. */
+    } else if (strcmp(job->op, "verify") == 0) {
+        store_or_fail(cdc_store_verify(decl->handle),
+                      "persistence verify failed");
+    } else if (strcmp(job->op, "snapshot") == 0) {
+        store_or_fail(cdc_store_snapshot(decl->handle),
+                      "persistence snapshot failed");
+    } else if (strcmp(job->op, "compact") == 0) {
+        st = cdc_store_compact(decl->handle);
+        if (st == CDC_STORE_ESTATE) {
+            status = "held";
+            reason = "compact-uncovered";
+        } else {
+            store_or_fail(st, "persistence compact failed");
+        }
+    } else if (strcmp(job->op, "fence") == 0) {
+        uint64_t want = job->has_seal
+                            ? (uint64_t)job->seal
+                            : cdc_store_sealed_count(decl->handle);
+        st = cdc_store_fence(decl->handle, want);
+        if (st == CDC_STORE_ESTATE) {
+            status = "held";
+            reason = "fence-violation";
+        } else {
+            store_or_fail(st, "persistence fence failed");
+        }
+    } else {
+        fail("unknown persist op");
+    }
+    *status_out = status;
+    *reason_out = reason;
+}
+
+static void run_persistence(Runtime *rt, const char *path) {
+    int accepted = 0;
+    int held = 0;
+
+    if (rt->store_count == 0) {
+        fail("source declares no store");
+    }
+    if (rt->persist_count == 0) {
+        fail("source has no persistence job");
+    }
+    for (int i = 0; i < rt->store_count; i++) {
+        StoreDecl *decl = &rt->stores[i];
+        ensure_dir_path(decl->dir);
+        if (decl->fresh) {
+            store_or_fail(cdc_store_reset(decl->dir),
+                          "store reset failed");
+        }
+        store_or_fail(cdc_store_open(decl->dir, &decl->handle,
+                                     &decl->recovered),
+                      "store could not be opened");
+        printf("store=%s dir=%s mode=%s recovered=%d sealed=%llu\n",
+               decl->id, decl->dir, decl->fresh ? "fresh" : "open",
+               decl->recovered,
+               (unsigned long long)cdc_store_sealed_count(decl->handle));
+    }
+    for (int i = 0; i < rt->persist_count; i++) {
+        PersistJob *job = &rt->persists[i];
+        StoreDecl *decl = find_store_decl(rt, job->store);
+        CommitResult decision;
+        char before_replay[96], after_replay[96];
+        char before_attest[96], after_attest[96];
+        const char *status = "accepted";
+        const char *reason = "none";
+        const char *durable;
+        const char *replay_id;
+        int is_append = 0;
+        unsigned long long sealed, events;
+
+        if (!decl) {
+            fail("persist references unknown store");
+        }
+        memset(&decision, 0, sizeof(decision));
+        persist_state(decl, before_replay, sizeof(before_replay),
+                      before_attest, sizeof(before_attest));
+        execute_persist(rt, job, decl, &status, &reason, &decision,
+                        &is_append);
+        persist_state(decl, after_replay, sizeof(after_replay),
+                      after_attest, sizeof(after_attest));
+
+        /* Durability is OBSERVED, never asserted: the sealed log bytes
+         * either changed or they did not. Replay identity is the semantic
+         * state; the two diverge exactly once, under compaction. */
+        durable = strcmp(before_attest, after_attest) == 0 ? "no" : "yes";
+        replay_id =
+            strcmp(before_replay, after_replay) == 0 ? "stable" : "changed";
+        sealed = (unsigned long long)cdc_store_sealed_count(decl->handle);
+        events = (unsigned long long)cdc_store_event_count(decl->handle);
+
+        if (job->expect_status[0]) {
+            if (!is_commit_status(job->expect_status)) {
+                fail("unknown persist status expectation");
+            }
+            cdc_expect_string(status, job->expect_status,
+                              "persist status expectation mismatch");
+        }
+        if (job->expect_reason[0]) {
+            if (!is_hold_reason(job->expect_reason)) {
+                fail("unknown persist reason expectation");
+            }
+            cdc_expect_string(reason, job->expect_reason,
+                              "persist reason expectation mismatch");
+        }
+        if (job->expect_durable[0]) {
+            cdc_expect_string(durable, job->expect_durable,
+                              "persist durability expectation mismatch");
+        }
+        if (job->expect_replay[0]) {
+            cdc_expect_string(replay_id, job->expect_replay,
+                              "persist replay expectation mismatch");
+        }
+        if (job->has_expect_sealed) {
+            cdc_expect_int((int)sealed, job->expect_sealed,
+                           "persist sealed expectation mismatch");
+        }
+        if (job->has_expect_events) {
+            cdc_expect_int((int)events, job->expect_events,
+                           "persist events expectation mismatch");
+        }
+
+        if (is_append) {
+            printf("persist=%s store=%s op=append module=%s trits=%s "
+                   "balance=%s status=%s reason=%s sealed=%llu events=%llu "
+                   "durable=%s replay=%s\n",
+                   job->id, decl->id, decision.module, decision.trits,
+                   decision.balance, status, reason, sealed, events, durable,
+                   replay_id);
+        } else {
+            printf("persist=%s store=%s op=%s status=%s reason=%s "
+                   "sealed=%llu events=%llu durable=%s replay=%s\n",
+                   job->id, decl->id, job->op, status, reason, sealed, events,
+                   durable, replay_id);
+        }
+        if (strcmp(status, "accepted") == 0) {
+            accepted++;
+        } else {
+            held++;
+        }
+    }
+    for (int i = 0; i < rt->store_count; i++) {
+        cdc_store_close(rt->stores[i].handle);
+        rt->stores[i].handle = NULL;
+    }
+    printf("native persistence ok stores=%d jobs=%d accepted=%d held=%d "
+           "source=%s\n",
+           rt->store_count, rt->persist_count, accepted, held, path);
+}
+
 static Channel *find_channel_by_id(Runtime *rt, const char *id) {
     for (int i = 0; i < rt->channel_count; i++) {
         if (strcmp(rt->channels[i].id, id) == 0) {
@@ -2125,6 +2496,7 @@ static void usage(void) {
     fprintf(stderr, "  cdc_native_runtime council council_bridge.cdc\n");
     fprintf(stderr, "  cdc_native_runtime evolve council_bridge.cdc\n");
     fprintf(stderr, "  cdc_native_runtime universal framework_loop.cdc\n");
+    fprintf(stderr, "  cdc_native_runtime persist framework_persistence.cdc\n");
     fprintf(stderr, "  cdc_native_runtime replay native_reducer.cdc native_surface.cdc [framework_loop.cdc]\n");
     exit(2);
 }
@@ -2174,6 +2546,12 @@ static void run_fused(Runtime *rt, const char *path) {
         run_evolution(rt, path);
         stages++;
     }
+    if (rt->persist_count > 0) {
+        /* Persistence runs last: it records the state the earlier stages
+         * left behind, through the same barrier that produced it. */
+        run_persistence(rt, path);
+        stages++;
+    }
     if (stages == 0) {
         fail("fused run: source declares no executable stage");
     }
@@ -2215,6 +2593,8 @@ int CDC_NATIVE_ENTRY(int argc, char **argv) {
         run_evolution(&runtime, argv[2]);
     } else if (strcmp(argv[1], "universal") == 0) {
         run_universal(&runtime, argv[2]);
+    } else if (strcmp(argv[1], "persist") == 0) {
+        run_persistence(&runtime, argv[2]);
     } else if (strcmp(argv[1], "fused") == 0) {
         run_fused(&runtime, argv[2]);
     } else {

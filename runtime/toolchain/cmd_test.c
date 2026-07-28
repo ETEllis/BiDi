@@ -59,6 +59,7 @@ static const mode_rule MODE_RULES[] = {
     {"council", {"deliberate", NULL}},
     {"evolve", {"evolve", NULL}},
     {"universal", {"universal", NULL}},
+    {"persist", {"persist", NULL}},
 };
 enum { MODE_RULE_COUNT = sizeof(MODE_RULES) / sizeof(MODE_RULES[0]) };
 

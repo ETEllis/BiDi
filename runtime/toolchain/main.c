@@ -19,8 +19,9 @@ int cdc_bridge_main(int argc, char **argv);
 
 static int is_native_verb(const char *verb) {
     static const char *const VERBS[] = {
-        "run",     "compile", "interpret", "prove",  "surface",
-        "council", "evolve",  "universal", "replay", "fused",
+        "run",     "compile", "interpret", "prove",   "surface",
+        "council", "evolve",  "universal", "persist", "replay",
+        "fused",
     };
     size_t i;
     for (i = 0; i < sizeof(VERBS) / sizeof(VERBS[0]); i++) {

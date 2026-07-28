@@ -47,7 +47,18 @@
  *   fsync(directory fd). The injectable failure hook aborts at each
  *   boundary to prove recovery (cdc_store_set_fail_after).
  * - Single writer per store directory; no locks are taken (the caller is
- *   the concurrency boundary at this stage).
+ *   the concurrency boundary at this stage). A writer that armed a fence
+ *   and lost the compare-and-set has a SPENT handle: its cached sealed and
+ *   event counters are stale, so it must be reopened rather than reused.
+ *
+ * Language surface (capability H6, framework_persistence.cdc). This library
+ * is not reachable from `.cdc` source as a service call. The `store` and
+ * `persist` forms bind to it through cdc_native_runtime.c, and `op=append`
+ * runs the IDENTICAL balanced-ternary barrier that governs in-memory
+ * latching: only an accepted decision reaches cdc_store_stage/commit. A
+ * violated prefix balance stages nothing, so the sealed bytes cannot move —
+ * latch-or-hold stated at the language level rather than enforced by
+ * convention at the call site.
  */
 
 typedef struct cdc_store cdc_store;
@@ -77,6 +88,17 @@ void cdc_store_close(cdc_store *store);
 
 /* Number of sealed transactions visible. */
 uint64_t cdc_store_sealed_count(const cdc_store *store);
+
+/* Number of sealed events (payload records) visible. */
+uint64_t cdc_store_event_count(const cdc_store *store);
+
+/* Removes exactly this store's own artifacts (the log and the snapshot)
+ * from `dir`, leaving every other path in that directory untouched, so a
+ * declared store can be opened from a known-empty state. Artifacts that
+ * are absent are not an error; the directory itself is never removed.
+ * This is the only deletion path in the store and it never widens: the two
+ * filenames are the ones cdc_store_open constructs. */
+cdc_store_status cdc_store_reset(const char *dir);
 
 /* Transaction: stage any number of event payloads, then commit (all
  * sealed atomically) or rollback (nothing written). Staging is in-memory;

@@ -174,6 +174,18 @@ expectation checks used by the bridge, reducer, replay, and WASM export paths.
 links a live WASM module when Emscripten is available. Live browser WASM
 execution and full `cdc_boot.py` parity remain separate deletion gates.
 
+Durable state joined the language on the same terms. `store` and `persist`
+are source forms (`framework_persistence.cdc`, capability `H6`), not a host
+service the source reaches around the language to call: `op=append` runs the
+identical balanced-ternary barrier that governs in-memory latching, and only
+an accepted decision may reach `runtime/cdc_store.c`. The `cdc_boot.py`
+additions this required are collect-only — the two directives in the form
+set, their two step sets, two witness link forms, and two expectation heads.
+They carry no persistence semantics and are covered by the existing
+**toolchain-verify-parity** deletion gate: `cdc verify --contract` must
+produce a byte-identical report to the bootloader on every run, so these
+entries retire with `cdc_boot.py` itself under this gate.
+
 ## Immediate Rule
 
 From this point forward, new behavior must be added first as `.cdc` source or

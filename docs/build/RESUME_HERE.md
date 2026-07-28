@@ -15,7 +15,7 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
   authorization (all three preconditions verified at the pinned head
   `82ab066`; merge commit preserves commit identities). Do not reuse PR #3.
 - Work branch `claude/bun-equivalent-build-plan-lxe772`, restarted from the
-  merged `main` (ADR D12), now at `41286c5`, open as **draft PR #4**:
+  merged `main` (ADR D12), open as **draft PR #4**:
   - `e4ba69b` — canonical BLAKE3 landed; **D2 interim-digest gate CLOSED**
     (31 reference vectors one-shot + streaming, plain + ASan; evidence
     re-digested by the vendored implementation; interim manifest retained).
@@ -23,7 +23,18 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
     (single source of truth), `ui/macos/CDCStudio` (SwiftUI, zero deps),
     `ui/web/console` (self-contained, replay-bound), and
     `scripts/verify_ui.sh` wired into the main gate.
-- Full `./scripts/verify.sh` green locally at `41286c5`; CI running.
+  - `0ea36ae` — CI repair: the CDC Studio build is gated on **Darwin**, not
+    merely on a `swift` binary (the Ubuntu runner has swift, not SwiftUI).
+  - `1722d96` — **store protocol complete**: snapshot, compact, and the
+    compare-and-set fence, on a resumable replay chain (D14).
+  - `1ea1ddd` — out-of-process **kill-based** crash matrix (SIGKILL in a
+    forked child; recovery asserted by the surviving parent).
+  - `98e4077` — **G10: persistence is a language form** (D15).
+    `store`/`persist` source directives, capability `H6`,
+    `framework_persistence.cdc`; `op=append` routes through the same
+    `execute_commit` barrier, so durable mutation is unreachable except
+    through an accepted commit decision.
+- Full `./scripts/verify.sh` green locally; CI green at `1ea1ddd`.
 - **UI is now a gate requirement**: no product gate closes without its
   surface locked to the canonical tokens and its data bound to real runtime
   output.
@@ -55,28 +66,38 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
   deterministic-mode contract; per-check vectors; cycles=N (blocked on
   per-cycle expectation families — inline expect-* pins first-cycle
   state; this is a language-design item, not a runtime bug).
-- **CT4/MM1 SEEDED** — `cdc_store` reference backend: append-only sealed
-  transactions, torn-tail recovery, fsync(file+dir) boundaries, interim
-  sha256 identities (D2), replay determinism, attest; **crash matrix
-  green: injection at all 7 commit boundaries recovers to exactly old or
-  new state** (plain + ASan). Open: snapshot/compact/fence (declared,
-  fail closed), BLAKE3 vendoring + re-digest, kill-based (out-of-process)
-  crash injection, .cdc-declared persistence jobs, BiDi-decision wiring.
+- **CT4/MM1 SUBSTANTIALLY LIVE** — `cdc_store`: append-only sealed
+  transactions, authenticated record framing (v2), typed three-way
+  recovery (torn tail / corrupt prefix / I/O fault), fsync(file+dir)
+  boundaries, canonical BLAKE3 identities, replay determinism, attest,
+  **snapshot / compact / compare-and-set fence** on a resumable replay
+  chain (D14); crash matrix green at all 7 commit boundaries in-process
+  **and** out-of-process via SIGKILL (plain + ASan). **Persistence is now
+  a language form** (D15): `store`/`persist` directives, capability `H6`,
+  `op=append` gated by the same balanced-ternary barrier as `commit`;
+  `durable`/`replay` observed rather than declared; four permanent
+  counterexamples plus an external byte-identity check on held appends.
+  Open: typed effect receipts / closure witnesses through the ABI;
+  multi-process contention beyond a single fence refusal; binding the
+  episodic framework (`H3`) onto a declared store.
 - **PC6 HARD-PAUSED** (unchanged, untouchable from this lane).
-- PR #3: draft, all commits green through the combined identity+toolchain
-  gate. **Do not merge without operator sign-off.**
+- PR #3: **merged** at `3e851ff`. PR #4: draft, open, CI green at
+  `1ea1ddd`, `mergeable_state: clean`. **Do not merge without operator
+  sign-off.**
 
 ## Baton: remaining work in dependency order
 
-1. **Phase D completion (this repo).** Vendor BLAKE3 (reference C), swap
-   `cdc_digest` to it, re-digest evidence (D2 closes). Implement
-   snapshot/compact/fence with the same crash-matrix discipline. Add
-   kill-based crash injection (spawn self, SIGKILL at boundaries) to
-   verify.sh. Declare persistence ops as `.cdc` jobs (append/replay/
-   attest exercised through `cdc run/test/verify`, per amendment D.6) —
-   this is also where store mutations route through a BiDi commit
-   decision (A10) rather than direct calls.
-2. **CT2/CT3 closure (this repo).** Per-check ordered vector export
+1. **Phase D — COMPLETE.** BLAKE3 vendored and evidence re-digested (D2
+   closed); snapshot/compact/fence landed on a resumable replay chain
+   (D14); kill-based out-of-process crash injection landed; persistence
+   declared as `.cdc` jobs with durable mutation routed through a BiDi
+   commit decision (D15, amendment D.6 + A10). Remaining Phase-D-adjacent
+   work has moved into step 2: typed effect receipts and closure witnesses
+   through the ABI.
+2. **CT2/CT3 closure (this repo).** Typed effect receipts / closure
+   witnesses through the ABI (a persist job's outcome should be
+   retrievable as a structured receipt, not only as a report line);
+   per-check ordered vector export
    (interface §7 format) from cdc test and cdc verify; lifecycle/
    cancellation/budget contract for cdc run; full-binary sanitizer sweep;
    then CT0 completion: reproducible-build check + manifest digest

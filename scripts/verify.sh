@@ -242,6 +242,9 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_native_runtime.c \
   runtime/cdc_bridge_runtime.c \
   runtime/cdc_source.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
   -lm \
   -o build/cdc
 run_step ./build/cdc version
@@ -306,7 +309,8 @@ echo "== Unified driver passthrough parity [gate CT2] =="
 # late — they are compiled here if absent).
 rm -f build/cdc_native_runtime build/cdc_bridge_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
-  runtime/cdc_native_runtime.c runtime/cdc_source.c -lm \
+  runtime/cdc_native_runtime.c runtime/cdc_source.c \
+  runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c -lm \
   -o build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
@@ -335,6 +339,8 @@ universal framework_loop.cdc
 fused framework_loop.cdc
 fused native_reducer.cdc
 fused council_bridge.cdc
+persist framework_persistence.cdc
+fused framework_persistence.cdc
 MODES
 ./build/cdc_bridge_runtime verify bridge64.cdc > build/passthrough_a.txt
 ./build/cdc bridge verify bridge64.cdc > build/passthrough_b.txt
@@ -372,8 +378,12 @@ echo "== Typed test runner [gate CT3 seed] =="
   native_reducer.cdc native_surface.cdc council_bridge.cdc \
   framework_transition.cdc framework_procedural.cdc \
   framework_episodic.cdc framework_deliberative.cdc framework_loop.cdc \
+  framework_persistence.cdc \
   | tee build/cdc_test_gate.txt
-grep -q "cdc test ok runs=23 commit=11 hold=5 (expected=5 unexpected=0) nest=10 fail=0" \
+# The persistence framework contributes 8 accepted and 3 held durable
+# records; all three holds are declared on their own persist statements, so
+# the A7 policy applies to durable mutation with no policy exception.
+grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0" \
   build/cdc_test_gate.txt
 # Negative: a source the legacy runtime fully accepts (exit 0) but whose
 # hold is undeclared must fail the typed gate with unexpected=1 fail=0.
@@ -496,6 +506,94 @@ if [ "$SANITIZED" = "1" ]; then
 fi
 
 echo
+echo "== BiDi-gated durable persistence [gate CT4, capability H6] =="
+# The store is a language citizen, not a C library with CDC branding:
+# `store` and `persist` are source directives, so persistence is exercised
+# through cdc run / cdc test, and durable mutation is gated by the SAME
+# balanced-ternary barrier that governs in-memory latching.
+rm -rf build/persistence-journal build/persistence-contended
+./build/cdc run framework_persistence.cdc | tee build/persistence.txt
+# The gate: an admissible barrier makes bytes durable and moves the replay
+# identity; a violated barrier writes nothing at all.
+grep -q "persist=journal-latch .* balance=admissible status=accepted reason=none sealed=1 events=1 durable=yes replay=changed" \
+  build/persistence.txt
+grep -q "persist=journal-hold .* balance=violated status=held reason=balance-violation sealed=1 events=1 durable=no replay=stable" \
+  build/persistence.txt
+# Compaction is the one place the two identities legitimately diverge.
+grep -q "persist=journal-compact .* status=accepted .* durable=yes replay=stable" \
+  build/persistence.txt
+grep -q "persist=journal-compact-early .* status=held reason=compact-uncovered .* durable=no" \
+  build/persistence.txt
+# A real compare-and-set counterexample expressed in .cdc: two handles on
+# one directory, the rival moves the log, the fenced writer's admissible
+# append is refused before a byte is written.
+grep -q "persist=rival-latch .* status=accepted .* durable=yes" build/persistence.txt
+grep -q "persist=contended-stale .* balance=admissible status=held reason=fence-violation .* durable=no replay=stable" \
+  build/persistence.txt
+grep -q "native persistence ok stores=3 jobs=11 accepted=8 held=3" build/persistence.txt
+echo "persistence gate ok (barrier-gated durable mutation)"
+
+# Counterexample 1 — "a hold writes nothing", checked OUTSIDE the runtime
+# that claims it: seed one accepted append, copy the sealed log, replay
+# three violating appends over the same store, byte-compare.
+rm -rf build/persistence-bytes
+run_step ./build/cdc run tests/fixtures/persistence/latch_seed.cdc
+cp build/persistence-bytes/log.cdcstore build/persistence_before.bin
+test -s build/persistence_before.bin
+run_step ./build/cdc run tests/fixtures/persistence/hold_writes_nothing.cdc
+cmp build/persistence_before.bin build/persistence-bytes/log.cdcstore
+echo "held appends leave the sealed log byte-identical ($(wc -c < build/persistence_before.bin) bytes, 3 holds)"
+
+# Counterexamples 2 and 3 — durability and replay identity are OBSERVED,
+# never taken from the declaration. Over-claiming either must fail closed.
+for FIXTURE in overclaimed_durability overclaimed_replay; do
+  if ./build/cdc run "tests/fixtures/persistence/${FIXTURE}.cdc" \
+    > "build/persistence_${FIXTURE}.txt" 2>&1; then
+    echo "persistence accepted an overclaimed ${FIXTURE} declaration" >&2
+    exit 1
+  fi
+done
+grep -q "persist durability expectation mismatch" \
+  build/persistence_overclaimed_durability.txt
+grep -q "persist replay expectation mismatch" \
+  build/persistence_overclaimed_replay.txt
+echo "persistence rejects overclaimed durability and replay identity"
+
+# Counterexample 4 — A7 applies to durable holds: a persistence hold that
+# is not declared on its own persist statement fails the typed gate even
+# though the runtime exits 0.
+run_step ./build/cdc run tests/fixtures/persistence/silent_persist_hold.cdc
+if ./build/cdc test --gate tests/fixtures/persistence/silent_persist_hold.cdc \
+  > build/persistence_silent.txt 2>/dev/null; then
+  echo "typed gate accepted an undeclared durable hold" >&2
+  exit 1
+fi
+grep -q "runs=1 commit=0 hold=1 (expected=0 unexpected=1)" build/persistence_silent.txt
+echo "typed gate rejects undeclared durable holds"
+
+# The persistence path owns store handles across a whole source file
+# (three handles, two of them onto one directory), so it gets its own
+# instrumented pass rather than riding on the frontend's.
+if [ "$SANITIZED" = "1" ]; then
+  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 \
+    -fsanitize=address,undefined \
+    runtime/cdc_native_runtime.c \
+    runtime/cdc_source.c \
+    runtime/cdc_store.c \
+    runtime/cdc_digest.c \
+    runtime/cdc_blake3.c \
+    -lm \
+    -o build/cdc_persist_asan
+  rm -rf build/persistence-journal build/persistence-contended \
+    build/persistence-bytes
+  run_step ./build/cdc_persist_asan persist framework_persistence.cdc
+  run_step ./build/cdc_persist_asan persist \
+    tests/fixtures/persistence/latch_seed.cdc
+  run_step ./build/cdc_persist_asan persist \
+    tests/fixtures/persistence/hold_writes_nothing.cdc
+fi
+
+echo
 echo "== ABI boundary counterexamples [2026-07-23 adversarial review] =="
 # Defect 1: rejected source under a >512-byte path must serialize complete
 # JSON (two-pass render; no fixed-slot overflow).
@@ -612,6 +710,9 @@ rm -f build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_native_runtime.c \
   runtime/cdc_source.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
   -o build/cdc_native_runtime \
   -lm
 echo
@@ -624,6 +725,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   -o build/cdc_source.o
 if command -v emcc >/dev/null 2>&1; then
   run_step emcc -O2 runtime/cdc_wasm_exports.c runtime/cdc_source.c \
+    runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
     -sEXPORTED_FUNCTIONS='["_cdc_wasm_replay_json"]' \
     -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
     -o build/cdc_wasm_replay.js

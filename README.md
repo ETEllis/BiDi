@@ -148,6 +148,8 @@ This calculus supplies one shared, executable vocabulary and verified reference 
 - **Native compile/interpreter/proof path** — the same runtime emits reducer IR, executes that IR through an interpreter path, and exhaustively checks the finite n=6 balanced-ternary walk spectrum.
 - **Council + self-evolution scenario** — `council_bridge.cdc` deliberates across modules into a bridge coordinate and writes a bridge-coordinate witness into an evolved `.cdc` source copy.
 - **Native task frameworks** — `framework_transition.cdc`, `framework_procedural.cdc`, `framework_episodic.cdc`, and `framework_deliberative.cdc` bind state-change, procedural-memory, episodic-memory, and decision patterns onto executed kernel jobs, registered as capabilities `H1`–`H4` (see `FRAMEWORKS.md`).
+
+- **BiDi-gated durable persistence** — `framework_persistence.cdc` (`H6`) makes a crash-durable, replayable store a first-class source form whose append path is governed by the commit barrier itself, so a held decision has no code path on which it could write.
 - **Typed framework contracts** — each framework declares `requires=` roles and `permits=` primitives; `expect framework <key> complete` enforces role completeness, uniqueness, orphan closure, and role-primitive compatibility in the bootloader.
 - **Executed task-loop composition** — `framework_loop.cdc` (`H5`) runs the sense → act → integrate loop twice over one shared state object, with second-cycle expectations reachable only through carried state, then records, recalls, decides, and enacts from the same source.
 - **Universal Operator `𝒰_`** — the guarded, scale-relative closure of `bidiγΔ`; `𝒰` is its reduced mathematical body when the live horizon is omitted from inline notation. Where `bidiγΔ` is open bidirectional transport between reference frames, `universal` is its closed lifted return — reciprocal receptive/radiant angularly biased causal cones active in one flow evaluation, internal flow/commit/nest reductions, a double-cover lifted frame (projected phase mod 2π, winding, Z2 sheet, holonomy) that closes only after 720°, and enactment of the runtime-computed record. Derived over `flow`/`commit`/`nest` — not a fourth foundational reduction. The finite sheet-parity claims (one turn inverts, two turns restore) are mechanized in Lean and Coq; the Möbius/double-cover picture is a topological realization, not a claim that carrier states are physical spinors.
@@ -285,10 +287,10 @@ it does not execute the reducer.
 
 ## Task Frameworks
 
-Four generalizable task frameworks bind practical task vocabulary onto the
-kernel primitives without any new grammar or host code — each is a `.cdc`
-file with a capability registry entry, binding witnesses linked to executed
-jobs, and a deterministic exemplar checked by the verification gate:
+Six generalizable task frameworks bind practical task vocabulary onto the
+kernel primitives — each is a `.cdc` file with a capability registry entry,
+binding witnesses linked to executed jobs, and a deterministic exemplar
+checked by the verification gate:
 
 ```bash
 build/cdc_native_runtime run framework_transition.cdc        # state change: guard, act, fire, block, lift
@@ -303,7 +305,27 @@ build/cdc_native_runtime run framework_loop.cdc              # the whole loop: t
 build/cdc_native_runtime interpret framework_loop.cdc        # the whole loop re-executed as compiled IR
 build/cdc_native_runtime universal framework_loop.cdc        # U720 closure: one live state through reduce,
                                                              # record, decide, closure checks, and enactment
+build/cdc_native_runtime persist framework_persistence.cdc   # durable state, gated by the commit barrier
 ```
+
+Persistence is a language form, not a host service the source reaches
+around the language to call. `store` declares a durable log the way `field`
+declares a continuum; `persist ... op=append` runs the **identical**
+balanced-ternary barrier that `commit` runs, and only an accepted decision
+may reach the log. A violated prefix balance holds — nothing is staged,
+nothing is committed, and the sealed bytes do not move:
+
+```text
+persist=journal-latch  op=append trits=0+- balance=admissible status=accepted durable=yes replay=changed
+persist=journal-hold   op=append trits=-+0 balance=violated  status=held     durable=no  replay=stable
+persist=journal-compact op=compact                           status=accepted durable=yes replay=stable
+```
+
+Both observations are read back from the store rather than taken from the
+declaration, and the gate proves the middle line externally: it copies the
+sealed log, replays three violating appends over the same store, and
+byte-compares. The third line is the point of separating the two
+identities — compaction rewrites layout without rewriting history.
 
 Each framework also declares a typed contract (`framework <key> requires=...
 permits=...`) that the bootloader enforces through `expect framework <key>

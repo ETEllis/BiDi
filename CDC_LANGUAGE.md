@@ -39,7 +39,7 @@ directive    = kernel | term | rule | provides | bootloader
              | field | module | cell | channel | guard | counter
              | flow | commit | nest | trace | measure | policy | bridge
              | compile | interpret | proof | council | deliberate | evolve
-             | universal
+             | universal | store | persist
              | expect | "end" ;
 
 kernel       = "kernel" name { kwarg } ;
@@ -74,6 +74,8 @@ council      = "council" key { kwarg } ;
 deliberate   = "deliberate" key { kwarg } ;
 evolve       = "evolve" key { kwarg } ;
 universal    = "universal" key { kwarg } ;
+store        = "store" key { kwarg } ;
+persist      = "persist" key { kwarg } ;
 
 expect       = "expect" predicate ;
 kwarg        = key "=" value ;
@@ -139,16 +141,46 @@ the whole tree whose `framework=` label has no `framework` declaration.
 step through `witness ... reducer=<flow-or-commit-or-nest-id>`.
 `expect guard W`, `expect trace W`, `expect measure W`, `expect policy W`,
 `expect bridge W`, `expect counter W`, `expect compile W`, `expect interpret W`,
-`expect proof W`, `expect council W`, and `expect evolution W` use the same
-linkage pattern for source-declared full-surface, compile, IR interpretation,
-finite-proof, council, and source-evolution jobs.
+`expect proof W`, `expect council W`, `expect evolution W`, `expect store W`,
+and `expect persistence W` use the same linkage pattern for source-declared
+full-surface, compile, IR interpretation, finite-proof, council,
+source-evolution, and durable-persistence jobs.
+
+### Persistence forms
+
+`store <id> dir=<path> [mode=fresh|open]` declares a durable log the way
+`field` declares a continuum. `mode=fresh` removes exactly that store's own
+two artifacts before opening — nothing else in the directory is touched —
+so a source file's declared expectations are absolute rather than relative
+to whatever a previous run left behind.
+
+`persist <id> store=<id> op=<verb> [module=<id>] [seal=<n>]` is a job over a
+declared store. `op` is one of `append`, `replay`, `attest`, `verify`,
+`snapshot`, `compact`, `fence`.
+
+`op=append` is the load-bearing one: it runs the **identical**
+balanced-ternary barrier that `commit` runs over `module`, and only an
+accepted decision may reach the log. A violated prefix balance holds —
+nothing is staged, nothing is committed, and the sealed bytes are
+unchanged. Durable mutation is therefore not reachable from source except
+through an accepted commit decision.
+
+Every job records two independent identities, both **observed** rather than
+declared: `durable=yes|no` (did the sealed log bytes change) and
+`replay=stable|changed` (did the semantic state folded from sealed history
+change). They agree everywhere except under `op=compact`, which rewrites
+layout without rewriting history — `durable=yes replay=stable`. Inline
+`expect-status`, `expect-reason`, `expect-durable`, `expect-replay`,
+`expect-sealed`, `expect-events`, `expect-trits`, and `expect-balance`
+attributes check those observations; over-claiming any of them fails
+closed.
 
 ## Native Files
 
 | file | content |
 |---|---|
 | `kernel.cdc` | language terms, reducer rules, provided capabilities, bootloader boundary, and global expectations |
-| `laws.cdc` | invariant registry and 22 law/metatheorem witness declarations |
+| `laws.cdc` | invariant registry and 25 law/metatheorem witness declarations |
 | `bridge64.cdc` | explicit 64-row `2^6 = 4^3` dyadic/triadic bootstrap codebook |
 | `bridge_codebooks.cdc` | higher-arity bridge declarations for `n=9` and `n=12` |
 | `bridge512.cdc` | full generated `n=9`, `2^9 = 8^3 = 512` bridge codebook rows |
@@ -161,6 +193,7 @@ finite-proof, council, and source-evolution jobs.
 | `framework_procedural.cdc` | procedural framework (`H2`): cue, executed and retried steps, nest consolidation, self-referential compile/interpret proceduralization |
 | `framework_episodic.cdc` | episodic framework (`H3`): lived flow, committed record, archive consolidation, trace content, measured recall, bridge memory key, ordinal counter |
 | `framework_deliberative.cdc` | deliberative framework (`H4`): option modules, council quorum decision, bridge-coordinate enactment into source memory |
+| `framework_persistence.cdc` | persistence framework (`H6`): declared durable stores, barrier-gated append, held append that writes nothing, replay/attest/verify reads, snapshot/compaction, and a two-handle compare-and-set counterexample |
 | `framework_loop.cdc` | task-loop composition (`H5`) and Universal Operator instance (`U1`): two executed sense/act/integrate cycles plus lifted-cover turns over one shared state object, gate/record/recall/refine/key/decide/enact jobs, self-referential compile/interpret, and the `universal` 720° closure job |
 | `system.cdc` | 32 capability declarations and native witness handles |
 | `relations.cdc` | angular, projected, cross-scale, detuning, and overlap relation witness handles |
@@ -168,7 +201,9 @@ finite-proof, council, and source-evolution jobs.
 | `cdc_boot.py` | minimal loader/checker; not the reducer or language semantics |
 | `runtime/cdc_source.c` / `runtime/cdc_source.h` | shared native `.cdc` line parser, attribute reader, typed attribute accessors, and primitive expectation checks for C consumers |
 | `runtime/cdc_bridge_runtime.c` | non-Python bridge consumer for lookup, trace projection, generated codebook verification, interactive grid/SVG output, and finite validation |
-| `runtime/cdc_native_runtime.c` | non-Python reducer, full-surface, compile-IR, IR interpreter, finite-proof, council, source-evolution, and replay consumer for source-declared jobs |
+| `runtime/cdc_native_runtime.c` | non-Python reducer, full-surface, compile-IR, IR interpreter, finite-proof, council, source-evolution, persistence, and replay consumer for source-declared jobs |
+| `runtime/cdc_store.c` / `runtime/cdc_store.h` | durable, replayable event-log substrate behind the `store`/`persist` forms: authenticated record framing, typed recovery, snapshot/compaction, and the compare-and-set fence |
+| `runtime/cdc_blake3.c` / `runtime/cdc_digest.c` | vendored BLAKE3 and the canonical content/event digest surface |
 | `runtime/cdc_wasm_exports.c` | compile-checked C ABI wrapper for the native replay JSON path |
 | `formal/lean/CDCFinite.lean` | Lean mirror of the finite n=6 balanced-ternary carrier and algebraic law proofs |
 | `formal/coq/CDCFinite.v` | Coq mirror of the finite n=6 balanced-ternary carrier and algebraic law proofs |

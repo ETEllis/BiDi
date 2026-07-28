@@ -7,7 +7,7 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #3)
+- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #4; PR #3 merged at `3e851ff`)
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -19,6 +19,39 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Phase D COMPLETE — persistence became a language form (2026-07-28).**
+  `store` and `persist` are source directives (capability `H6`,
+  `framework_persistence.cdc`), so durable state is exercised through
+  `cdc run` / `cdc test` rather than as a C library called out of band.
+  The gate is the calculus itself: `op=append` invokes the identical
+  `execute_commit` barrier that governs in-memory latching, and only an
+  accepted decision reaches `cdc_store_stage`/`cdc_store_commit` — a
+  violated prefix balance stages nothing, so no code path exists on which
+  a held decision could write.
+
+  What the gate checks (all in `scripts/verify.sh`):
+  - the barrier gate itself — admissible → `durable=yes replay=changed`;
+    violated → `held reason=balance-violation durable=no replay=stable`;
+  - **byte-identity measured outside the runtime that claims it**: seed one
+    accepted append, copy the 176-byte sealed log, replay three violating
+    appends over the same store, `cmp` — identical;
+  - the compaction divergence `durable=yes replay=stable` (D14's resumable
+    chain restated at the language level), and `compact-uncovered` holding
+    when no base covers the sealed prefix;
+  - a real compare-and-set counterexample written in `.cdc` — two declared
+    handles onto one directory, the rival moves the log, the fenced writer's
+    perfectly admissible append is refused before a byte is written;
+  - four permanent counterexamples: overclaimed durability, overclaimed
+    replay identity, undeclared durable hold (A7 applies to persistence
+    with no exception — `cdc test --gate` fails at runtime exit 0), and
+    uncovered compaction;
+  - an ASan/UBSan pass over the whole persistence path (three store handles,
+    two onto one directory).
+
+  `durable` and `replay` are **observed** from the store on every job, never
+  taken from the declaration; the two overclaim fixtures exist to keep that
+  true. Recorded as D15.
+
 - **Phase D substrate work (2026-07-28).** Store protocol completed
   (snapshot / compact / compare-and-set fence) on a resumable replay chain:
   compaction preserves the replay identity byte-for-byte while the attest
@@ -29,8 +62,9 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   the old or new sealed state — a distinct loss mode from the in-process
   torn-write matrix (unflushed stdio buffers are lost), which is why the
   old/new split differs and only the invariants are gated.
-  Still open in Phase D: the `.cdc`-declared persistence surface with
-  BiDi-gated durable mutation, and typed effect receipts through the ABI.
+  The `.cdc`-declared persistence surface that this substrate was built for
+  landed in the same session (entry above). Typed effect receipts through
+  the ABI moved to CT2/CT3 closure.
 
 - **Foundation merged (2026-07-28).** PR #3 merged at pinned head `82ab066`
   → merge commit `3e851ff` on `main`, after verifying remote head exactness,
@@ -99,9 +133,10 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   snapshot/compact/fence); and the **crash matrix — injected failure at
   every one of the 7 commit write/flush/sync boundaries recovers to
   exactly the old (3) or new (4) sealed state, never partial** (plain +
-  ASan). Open items and their order live in RESUME_HERE (BLAKE3 swap,
-  snapshot/compact/fence, kill-based injection, .cdc-declared
-  persistence jobs, BiDi-decision wiring).
+  ASan). Every open item listed here at the time — BLAKE3 swap,
+  snapshot/compact/fence, kill-based injection, `.cdc`-declared persistence
+  jobs, BiDi-decision wiring — has since landed; see the Phase D COMPLETE
+  entry above.
 
 - **Fused executor — cdc run (gate CT3): LIVE (previous commit).** One
   parse, one live Runtime, every declared stage family; universal
@@ -121,8 +156,10 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   job, unexpected holds fail the gate even when the runtime exits 0
   (proven by the tracked silent_hold.cdc fixture: runtime green, gate
   red with expected=0 unexpected=1 fail=0). Executable-corpus gate:
-  runs=23 commit=11 hold=5 (all expected) nest=10 fail=0, exact-gated in
-  verify.sh. CT3 remaining: cancellation/budgets/deterministic-mode
+  runs=24 commit=19 hold=8 (all expected) nest=10 fail=0, exact-gated in
+  verify.sh — the persistence framework was absorbed by adding one mode
+  rule and no policy change, because the ternary vocabulary already
+  covered durable holds. CT3 remaining: cancellation/budgets/deterministic-mode
   contract, per-check ordered vector export, fused `cdc run`.
 
 - **Unified-driver passthrough parity: LIVE (previous commit).** The guarded
@@ -278,16 +315,26 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 ## Next executable action
 
-Phase B steps 3 (second half) through 7: (a) add `CDC_BRIDGE_NO_MAIN` to
-`runtime/cdc_bridge_runtime.c` (A11) and link both legacy runtimes into
-`build/cdc` as passthrough verbs with byte-identical output (the existing
-verify.sh greps are the parity gate); (b) implement grammar-1 registry +
-expect evaluation inside `cdc verify` (C mirror of `cdc_boot.py` semantics)
-and gate its pass/total plus per-check parity vector against the bootloader
-(gate toolchain-verify-parity, per-check format per interface §7); (c) then
-Phase C `cdc run`/`cdc test` on the ABI execution surface (ABI 1.1);
-(d) legacy scanner + `--dump` deletion through the recorded gates. Fuzzing
-beyond the deterministic corpus remains queued for CT1 PASS.
+Phase D is complete. Next is **CT2/CT3 closure**, in this order:
+
+1. **Typed effect receipts through the ABI.** A persist job's outcome is
+   currently only a report line that `cdc test` greps. It should be
+   retrievable as a structured record (job id, op, ternary status, typed
+   reason, sealed/event counts, durable and replay observations) so a
+   consumer does not parse prose. This is also the natural carrier for
+   closure witnesses.
+2. **Ordered per-check vector export** (interface §7 format) from
+   `cdc test` and `cdc verify`, gated against the bootloader per-check
+   ordering, not just the aggregate report.
+3. **Lifecycle contract for `cdc run`** — cancellation, budgets, and a
+   deterministic mode; then the full-binary sanitizer sweep (today only the
+   frontend and the persistence path are instrumented).
+4. **CT0 completion** — reproducible native binaries plus the manifest
+   digest embedded in every verdict line.
+
+Then the deletion gates (legacy scanner, `--dump`, eventually
+`cdc_boot.py`), then Phase I. Fuzzing beyond the deterministic corpus
+remains queued for CT1 PASS.
 
 ## External blockers
 

@@ -469,6 +469,32 @@ uint64_t cdc_store_sealed_count(const cdc_store *store) {
     return store ? store->sealed : 0;
 }
 
+uint64_t cdc_store_event_count(const cdc_store *store) {
+    return store ? store->events : 0;
+}
+
+cdc_store_status cdc_store_reset(const char *dir) {
+    char path[640];
+    size_t i;
+    static const char *const ARTIFACTS[] = {"log.cdcstore",
+                                            "snapshot.cdcstore"};
+
+    if (!dir) {
+        return CDC_STORE_EARG;
+    }
+    for (i = 0; i < sizeof(ARTIFACTS) / sizeof(ARTIFACTS[0]); i++) {
+        int written = snprintf(path, sizeof(path), "%s/%s", dir,
+                               ARTIFACTS[i]);
+        if (written < 0 || (size_t)written >= sizeof(path)) {
+            return CDC_STORE_EARG;
+        }
+        if (unlink(path) != 0 && errno != ENOENT) {
+            return CDC_STORE_EIO;
+        }
+    }
+    return CDC_STORE_OK;
+}
+
 cdc_store_status cdc_store_stage(cdc_store *store, const void *payload,
                                  size_t size) {
     staged_event event;

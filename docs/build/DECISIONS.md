@@ -46,6 +46,54 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D15 — 2026-07-28 — Persistence is a language form, not a host service (G10/H6)
+
+`store` and `persist` are source directives (capability `H6`,
+`framework_persistence.cdc`), so durable state is exercised through
+`cdc run`/`cdc test` rather than as a C library with CDC branding.
+
+The load-bearing decision is HOW the gate is wired: `op=append` does not
+"check a policy and then call the store" — it invokes the identical
+`execute_commit` that governs in-memory latching, and only an accepted
+decision reaches `cdc_store_stage`/`cdc_store_commit`. A violated prefix
+balance stages nothing, so there is no code path on which a held decision
+could write. Latch-or-hold is therefore a property of the wiring, not a
+convention observed at the call site.
+
+Two consequences worth pinning:
+
+- **Durability and replay identity are OBSERVED, never declared.** Every
+  persist job recomputes the replay digest and the sealed-bytes attest
+  before and after, and reports `durable=yes|no` / `replay=stable|changed`
+  from that comparison. `expect-durable` and `expect-replay` check the
+  observation; two permanent counterexamples (`overclaimed_durability.cdc`,
+  `overclaimed_replay.cdc`) fail closed. Compaction is the one place the
+  two identities legitimately diverge (`durable=yes replay=stable`), which
+  is the D14 chain restated at the language level.
+- **The A7 typed policy extends to durable mutation with no exception.**
+  A persistence hold is an ordinary hold: it must be declared
+  `expect-status=held` on its own `persist` statement or `cdc test --gate`
+  fails, exactly as for a commit hold, even though the runtime exits 0
+  (`silent_persist_hold.cdc`). The test runner needed one mode rule, no
+  policy change — the ternary vocabulary already covered it.
+
+Two hold reasons are added to the runtime vocabulary: `fence-violation`
+(a stale compare-and-set view) and `compact-uncovered` (compaction with no
+covering snapshot base). Both hold rather than write.
+
+Honest boundary recorded in FRAMEWORKS.md and the matrix: these are
+runtime-checked per-run properties with counterexamples, not theorems, and
+`cdc_store` remains single-writer — the fence makes a stale writer fail
+closed exactly once, after which its handle is spent and must be reopened.
+The `.cdc` compare-and-set counterexample (`framework_persistence.cdc`,
+two declared handles on one directory) respects that and does not write
+again through the spent handle.
+
+The `cdc_boot.py` additions this required are collect-only (two directives,
+two step sets, two witness link forms, two expectation heads) and carry no
+persistence semantics; they retire with the file under the existing
+**toolchain-verify-parity** gate, recorded in the mandate.
+
 ## D14 — 2026-07-28 — Store protocol completion: resumable replay chain
 
 snapshot, compact, and compare-and-set fence are implemented, completing the

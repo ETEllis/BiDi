@@ -126,6 +126,7 @@ static const char *const FORM_NAMES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
+    "store",   "persist",
 };
 enum { FORM_NAME_COUNT = sizeof(FORM_NAMES) / sizeof(FORM_NAMES[0]) };
 
@@ -414,6 +415,8 @@ static const link_form LINK_FORMS[] = {
     {"council", {"deliberate", NULL, NULL}},
     {"evolution", {"evolve", NULL, NULL}},
     {"universal", {"universal", NULL, NULL}},
+    {"store", {"store", NULL, NULL}},
+    {"persistence", {"persist", NULL, NULL}},
 };
 enum { LINK_FORM_COUNT = sizeof(LINK_FORMS) / sizeof(LINK_FORMS[0]) };
 
@@ -922,6 +925,19 @@ static int eval_expect(cdc_registry *registry, const cdc_stmt *stmt,
         const char *forms[1];
         forms[0] = "evolve";
         return eval_job_link(registry, stmt, "evolution", forms, 1, "job",
+                             mem);
+    }
+
+    if (strcmp(head, "store") == 0 && argc >= 2) {
+        const char *forms[1];
+        forms[0] = "store";
+        return eval_job_link(registry, stmt, "store", forms, 1, "job", mem);
+    }
+
+    if (strcmp(head, "persistence") == 0 && argc >= 2) {
+        const char *forms[1];
+        forms[0] = "persist";
+        return eval_job_link(registry, stmt, "persistence", forms, 1, "job",
                              mem);
     }
 
