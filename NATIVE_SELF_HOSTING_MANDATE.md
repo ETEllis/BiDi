@@ -2,31 +2,44 @@
 
 This repository is not finished while the executable center is a host language.
 
+> **Current boundary (2026-07-28):** the canonical Grammar-1 frontend, ABI,
+> reducer, durable store, and toolchain are native C. `cdc_boot.py` is no longer
+> an execution dependency; Edward's Option A freezes it as a CI-only
+> differential oracle. The stronger self-hosting debt is now the C
+> frontend/reducer/proof host itself, not Python removal.
+
 The intended end state is:
 
 ```text
 .cdc source
   -> .cdc parser/reducer expressed in .cdc
   -> .cdc witnesses expressed in .cdc
-  -> minimal host loader only until the native reducer can run directly
+  -> minimal native host until the reducer/proof path can run directly
 ```
 
-Python remains only as the bootstrap loader because it is portable and easy to
-inspect. It is not the language, not the calculus, and not the semantic
-substrate.
+Python remains only as a frozen independent oracle because it is portable,
+inspectable, and useful for differential failure detection. It is not the
+language, calculus, semantic substrate, canonical parser, or runtime.
 
 ## Current Host Boundary
 
-As of v0.2.4, host code is restricted to one Python file:
+As of package 0.2.4 / ABI 1.4, the Python boundary is one frozen file:
 
-- `cdc_boot.py`: minimal loader/checker for native `.cdc` declarations.
+- `cdc_boot.py`: CI-only differential oracle for native `.cdc` declarations.
 
-The bridge also has a non-Python operational consumer:
+The production frontend and runtime are native:
+
+- `runtime/cdc_diagnostic.c`, `cdc_lexer.c`, `cdc_ast.c`, and
+  `cdc_parser.c`: canonical Grammar-1 frontend.
+- `runtime/cdc_abi.c`: stable ABI and fused execution boundary.
+- `runtime/toolchain/`: the unified `cdc` driver and package lifecycle.
+- `runtime/cdc_store.c`: guarded durable state.
+
+The bridge and specialized runtimes also consume native source:
 
 - `runtime/cdc_source.c` / `runtime/cdc_source.h`: shared native `.cdc`
   line/attribute parser and primitive expectation core used by the bridge and
-  reducer runtimes. This removes parser/checker drift between C consumers but
-  does not yet replace the whole declaration bootloader.
+  reducer runtimes behind differential/deletion gates.
 
 - `runtime/cdc_bridge_runtime.c`: reads `bridge64.cdc`, validates the finite
   codebook, performs dyadic/triadic lookup, projects six-trit trace occupancy
@@ -50,18 +63,19 @@ The first reducer path also has a non-Python operational consumer:
   when `emcc` is available.
 
 All reducer semantics, invariants, capability claims, and witness obligations
-must be expressed as `.cdc` declarations. The bootloader may parse, collect, and
-check expectations; it may not become the reducer or witness suite.
+must be expressed as `.cdc` declarations. The frozen oracle may parse, collect,
+and check expectations; it may not become the reducer or witness suite.
 
-The minimal bootloader target for the Python phase is:
+The frozen-oracle contract is:
 
 ```text
 read .cdc source -> parse lines -> collect native declarations/obligations
                  -> verify expectations -> report
 ```
 
-Anything beyond that reintroduces host debt unless it has a named native removal
-gate.
+Anything beyond that would turn the oracle back into a product dependency and
+is forbidden. Deleting it requires a new explicit operator decision and an
+independent replacement; native coverage alone does not authorize deletion.
 
 ## Non-Negotiable Direction
 

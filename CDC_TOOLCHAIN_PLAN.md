@@ -1,5 +1,12 @@
 # CDC Toolchain Plan
 
+> **EXECUTED THROUGH PHASE I (2026-07-28).** The canonical frontend, stable ABI,
+> fused run/test path, guarded store, deterministic build, crash-safe install,
+> and trusted-local `cdc x` described by this plan are implemented and gated on
+> `main` at `79a508a`. Read future-tense sections as the construction record.
+> Remaining product work is CT5, package versions/lockfile, signing/anchoring,
+> unbounded cycle semantics, and the explicitly queued proof/fuzzing lanes.
+
 This document is the executable build plan for the native `cdc` toolchain: one
 binary, five commands, functionally equivalent to Bun's surface for the CDC
 ecosystem — Runtime (`cdc run`), Package manager (`cdc install`), Test runner

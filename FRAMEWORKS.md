@@ -10,9 +10,11 @@ not new machinery:
   use only pre-existing checked directives;
 - the contract layer adds exactly one declarative registry directive
   (`framework <key> label=... requires=... permits=...`) whose role contract
-  is enforced by the bootloader; the C runtimes remain untouched and skip the
-  directive, and the checker follows the bootloader's existing deletion gate
-  (native/C parity replaces it, per `NATIVE_SELF_HOSTING_MANDATE.md`);
+  is enforced by the frozen differential oracle and checked in the required
+  repository gate; the specialized reducer runtimes skip the declaration while
+  the canonical frontend retains it, and any future oracle deletion follows
+  the explicit Option-A replacement decision in
+  `NATIVE_SELF_HOSTING_MANDATE.md`;
 - every binding witness links to a job the C native runtime actually executes;
 - every exemplar ships with deterministic expectations checked by
   `./scripts/verify.sh`.
@@ -27,7 +29,9 @@ pattern while their job links (`guard=`, `reducer=`, `trace=`, `measure=`,
 ## The Framework Contract
 
 `framework=` and `role=` are not free-floating metadata: each framework
-declares its taxonomy as native semantics, and `cdc_boot.py` enforces it.
+declares its taxonomy as native semantics. The frozen `cdc_boot.py` oracle
+currently supplies the independent completeness check inside the required gate;
+it is not a product execution dependency.
 
 ```text
 framework H3 label=episodic requires=live,record,consolidate,aperture,content,recall,key,ordinal,policy permits=flow,commit,nest,guard,trace,measure,policy,bridge,counter
