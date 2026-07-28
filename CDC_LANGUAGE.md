@@ -1,13 +1,13 @@
 # The `.cdc` Language
 ### Native source format for the Coherence-Delta Calculus
 
-`.cdc` is the native language surface for the calculus kernel. In v0.3.0 the
-checked surface includes native declarations, witnesses, and the first
-source-declared reducer jobs: terms, reducer rules, field/module/cell/channel
-state, flow/commit/nest jobs, guard/trace/measure/policy/bridge/counter jobs,
-IR interpretation, council deliberation, bridge-coordinate source evolution,
-native replay JSON, invariants, capabilities, witnesses, and expectations are expressed in `.cdc`;
-Python is limited to the small `cdc_boot.py` loader/checker.
+`.cdc` is the native language surface for the calculus kernel. In package
+`0.2.4` / ABI `1.4`, the checked Grammar-1 surface includes terms, reducer
+rules, field/module/cell/channel state, flow/commit/nest jobs,
+guard/trace/measure/policy/bridge/counter jobs, IR interpretation, council
+deliberation, bridge-coordinate source evolution, native replay, durable
+store/persist jobs, the six RFTC forms, invariants, capabilities, witnesses,
+and expectations.
 
 The semantic target remains the full calculus:
 
@@ -18,15 +18,17 @@ nest(m,F)     nested bidirectional coherence-delta coupling
 trace/window  derived observer projection
 ```
 
-The bootloader does not implement those reductions. It verifies that the native
-source tree declares them and that every claim has a native witness handle. The
-non-Python runtime `runtime/cdc_native_runtime.c` consumes `native_reducer.cdc`,
+The canonical C frontend parses, diagnoses, and serializes the source. The
+frozen `cdc_boot.py` file remains a CI-only differential oracle and does not
+implement the reductions or sit in the product execution path. The native
+runtime `runtime/cdc_native_runtime.c` consumes `native_reducer.cdc`,
 `native_surface.cdc`, and `council_bridge.cdc`; executes the checked `flow`,
 `commit`, `nest`, `guard`, `trace`, `measure`, `policy`, `bridge`, `counter`,
 `interpret`, `council`, `evolve`, and `replay` jobs; and verifies their expectations.
-Both C runtimes share `runtime/cdc_source.c` / `runtime/cdc_source.h` for
-native `.cdc` line parsing, attribute extraction, typed attributes, and
-primitive expectation assertions.
+Canonical Grammar-1 acceptance is owned by `runtime/cdc_diagnostic.*`,
+`runtime/cdc_lexer.*`, `runtime/cdc_ast.*`, and `runtime/cdc_parser.*`.
+Specialized runtimes retain shared `runtime/cdc_source.c` /
+`runtime/cdc_source.h` accessors behind differential and deletion gates.
 `runtime/cdc_wasm_exports.c` exposes the replay path through a compile-checked
 C ABI for an eventual Emscripten build.
 
@@ -92,12 +94,12 @@ kwarg        = key "=" value ;
 
 ## Native Expectation Predicates
 
-The minimal bootloader currently verifies:
+The native verifier and frozen differential oracle agree on predicates such as:
 
 ```text
 expect native substrate == cdc
 expect host-debt <= 1
-expect python-files == 1
+expect python-files == 0
 expect bootloader minimal == true
 expect terms >= N
 expect rules >= N
@@ -125,6 +127,10 @@ expect frameworks >= N
 expect frameworks closed
 expect framework <framework-key> complete
 ```
+
+`python-files == 0` is the native kernel floor. The frozen oracle is exempt by
+the exact filename `cdc_boot.py`, and that exemption is rendered in every
+report. A second Python source file still violates the contract.
 
 `expect law K` requires both an `invariant K` declaration and at least one native
 `witness ... invariant=K`. `expect capability C` requires both a
@@ -182,6 +188,44 @@ layout without rewriting history — `durable=yes replay=stable`. Inline
 attributes check those observations; over-claiming any of them fails
 closed.
 
+### RFTC forms
+
+The reference-frame extension reserves six non-colliding Grammar-1 forms:
+
+```text
+frame <id> ...
+reduce <id> ...
+complex <id> ...
+topology <id> ...
+authority <id> ...
+transport <id> ...
+```
+
+Their `R1`-`R6` capability range is separate from the `H12`-`H17` Memory
+Manifold reservation. The accepted language surface is broader than the
+implemented dynamic semantics: ABI 1.4 currently supplies the authenticated
+local authority/transport supervisor, while recursive logical cells,
+cross-host reconciliation, and the complete RFTC scheduler remain queued.
+
+### Toolchain lifecycle
+
+The same canonical source reaches:
+
+```text
+cdc verify --parse
+cdc run
+cdc test --gate
+cdc build
+cdc install
+cdc x
+```
+
+`cdc build` emits a deterministic bundle and strict manifest.
+`cdc install` verifies captured member bytes and journals publication through
+`cdc_store`. `cdc x` re-verifies installed members and executes through the
+fused runtime. It remains trusted-local-only until CT5 provides a sealed
+capability environment and hostile-package gates.
+
 ## Native Files
 
 | file | content |
@@ -205,11 +249,15 @@ closed.
 | `system.cdc` | 32 capability declarations and native witness handles |
 | `relations.cdc` | angular, projected, cross-scale, detuning, and overlap relation witness handles |
 | `trace_windows.cdc` | balanced-ternary trace/window, local-counter, coupled-observer, and recursive-policy witness handles |
-| `cdc_boot.py` | minimal loader/checker; not the reducer or language semantics |
+| `cdc_boot.py` | frozen CI-only differential oracle; not a product dependency or reducer |
+| `runtime/cdc_diagnostic.c`, `cdc_lexer.c`, `cdc_ast.c`, `cdc_parser.c` | canonical Grammar-1 frontend with typed collecting diagnostics and canonical serialization |
+| `runtime/cdc_abi.c` / `runtime/cdc_abi.h` | stable ABI 1.4, including RFTC authority/transport control-plane surfaces |
 | `runtime/cdc_source.c` / `runtime/cdc_source.h` | shared native `.cdc` line parser, attribute reader, typed attribute accessors, and primitive expectation checks for C consumers |
 | `runtime/cdc_bridge_runtime.c` | non-Python bridge consumer for lookup, trace projection, generated codebook verification, interactive grid/SVG output, and finite validation |
 | `runtime/cdc_native_runtime.c` | non-Python reducer, full-surface, compile-IR, IR interpreter, finite-proof, council, source-evolution, persistence, and replay consumer for source-declared jobs |
 | `runtime/cdc_store.c` / `runtime/cdc_store.h` | durable, replayable event-log substrate behind the `store`/`persist` forms: authenticated record framing, typed recovery, snapshot/compaction, and the compare-and-set fence |
+| `runtime/toolchain/` | unified `cdc` driver, strict manifests, deterministic build, journaled install, and trusted-local execution |
+| `runtime/cdc_{rftc,authority,transport,supervisor}.c` | six-form RFTC runtime types and authenticated local supervisor boundary |
 | `runtime/cdc_blake3.c` / `runtime/cdc_digest.c` | vendored BLAKE3 and the canonical content/event digest surface |
 | `runtime/cdc_wasm_exports.c` | compile-checked C ABI wrapper for the native replay JSON path |
 | `formal/lean/CDCFinite.lean` | Lean mirror of the finite n=6 balanced-ternary carrier and algebraic law proofs |

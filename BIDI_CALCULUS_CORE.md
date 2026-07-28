@@ -325,7 +325,9 @@ surface, and witness suite in native `.cdc`: `kernel.cdc`, `laws.cdc`,
 `bridge64.cdc`, `bridge_codebooks.cdc`, `bridge_jobs.cdc`, `native_reducer.cdc`,
 `native_surface.cdc`, `bridge512.cdc`, `bridge4096.cdc`, `council_bridge.cdc`, `system.cdc`,
 `relations.cdc`, and `trace_windows.cdc`. The only Python file is `cdc_boot.py`,
-a minimal loader/checker. The bridge has a separate C runtime that consumes
+a frozen CI-only differential oracle exempted by name from the zero-Python
+kernel floor. The canonical Grammar-1 frontend and product execution path are
+native C. The bridge has a separate C runtime that consumes
 `bridge64.cdc` for lookup and trace-coordinate projection, regenerates/verifies
 the `bridge512.cdc` and `bridge4096.cdc` higher-arity codebooks, and emits the
 interactive bridge grid. The native reducer has a separate C runtime that

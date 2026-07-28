@@ -1,5 +1,11 @@
 # Formal Semantic Spine
 
+> **Current projection (2026-07-28):** the typed Grammar-1 AST, collecting
+> diagnostics, canonical serialization, fused runtime, durable store, receipts,
+> and ABI 1.4 now exist. This document remains the proof/semantic spine; older
+> future-tense frontend language below should be read as the design that led to
+> those accepted surfaces.
+
 This document pins the next formalization pass to one canonical object. CDC is
 the language; this spine is the semantic kernel that keeps `.cdc`, the paper,
 the bootloader, and the witnesses from drifting into parallel descriptions.
@@ -19,10 +25,10 @@ Every artifact should become a projection of the same semantic spine:
   -> theorem-prover obligations
 ```
 
-The current repository has a native `.cdc` contract/witness suite and one minimal
-Python bootloader. The refinement is to make the formal spine explicit enough
-that future reducer code and proofs can be generated from, or audited against,
-the same native source.
+The current repository has a native `.cdc` contract/witness suite, canonical C
+frontend, stable ABI, and fused runtime. The one Python file is a frozen
+differential oracle. The refinement is now to make additional reducer code and
+proofs generated from, or audited against, the same native source.
 
 Trace/window semantics are derived from this spine. They do not add a fourth
 foundational step kind. They name causal observer windows, trace spans, and
@@ -236,10 +242,15 @@ The next formal step is to extend those artifacts from finite carrier and
 finite-algebra witnesses into commit-barrier preservation, then the flow
 relation under explicit Lipschitz/determinism assumptions.
 
-## Acceptance Criteria For The Next Pass
+## Acceptance Criteria For The Next Formal Pass
 
-- `.cdc` grows from declaration parsing into `ProgramTerm`.
-- `cdc_boot.py` remains a minimal loader/checker and does not accumulate reducer semantics.
+- the accepted Grammar-1 AST remains the unique canonical parse projection;
+- `cdc_boot.py` remains a frozen differential oracle and accumulates no reducer
+  or product semantics;
+- RFTC dynamic state projects through the same runtime tuple and guarded
+  relation rather than creating a parallel semantics;
+- store receipts and downstream Memory Manifold decisions carry replayable
+  closure evidence through the ABI;
 - `native_reducer.cdc` and `native_surface.cdc` keep executable flow/commit/nest,
   guard, trace, measure, policy, bridge, and counter clauses synchronized with
   the native runtime.

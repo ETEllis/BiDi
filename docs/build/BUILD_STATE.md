@@ -7,26 +7,40 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- main: `4005a7b4922c2810d7af3ef0c5439a635f4786aa` (PR #7 merge);
-  active branch: `codex/c3-authority-transport`
+- last accepted implementation merge:
+  `79a508aa1441877aaeeafe415ef285983b186388` (PR #8);
+  later documentation-only commits do not change the implementation baseline
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
-- environment: Claude Code remote container — Linux 6.18.5, cc (Ubuntu 13.3.0),
-  Python 3.11.15, Lean pin `leanprover/lean4:4.31.0` (CI); full identity in
-  `evidence/gates/CT0/toolchain.txt`
-- tracked-file digests: `evidence/gates/CT0/source-identity.txt` (git blob ids)
-  and `evidence/gates/CT0/sha256-manifest.txt` (interim SHA-256, see D2)
+- package `0.2.4`; Grammar 1; ABI 1.4; Memory Manifold interface 1.3.0
+- required lanes: Linux native + formal proofs + paper; macOS full native suite
+  + CDC Studio compile/tests
+- canonical tracked-file provenance is BLAKE3. The original interim SHA-256
+  manifest remains historical evidence under D2 and is not a current public
+  digest.
 
 ## Last completed phase and gate
+
+- **PR #8 MERGED - C3 authenticated local control plane (2026-07-28).**
+  Exact implementation commit `54cff9a74008` landed as merge commit
+  `79a508a`. ABI 1.4 exposes canonical keyed-BLAKE3 transport envelopes,
+  scoped/versioned authority leases, nonce/replay and causal-order defense,
+  capacity refusal before mutation, retry after commit failure, and a
+  serialized exactly-once supervisor admission boundary. Permanent gates cover
+  every-byte wire mutation, wrong key/recipient/subject/frame/horizon/action/
+  quorum/expiry, forged tickets, partitions, causal gaps, cross-process wire,
+  concurrent duplicates, ASan/UBSan, and ThreadSanitizer. The result is
+  shared-key authenticated local control, not Ed25519/mTLS identity, a deployed
+  network, recursive cross-host cells, or a Q-level claim.
 
 - **PR #7 MERGED — C3 six-form language ingress (2026-07-28).** Exact head
   `cdcf14ca1c691839b3fa56283b333b73cddeedf2` passed the full native/formal/
   paper lane and CDC Studio macOS lane; merge commit `4005a7b`. The active
   D36 branch layers the authenticated C3 control plane on that merged source.
 
-- **C3 authenticated control-plane ABI implemented and full local gate green;
-  PR promotion pending (2026-07-28, D36).** ABI 1.4 exports keyed canonical
+- **C3 authenticated control-plane ABI implemented and merged
+  (2026-07-28, D36).** ABI 1.4 exports keyed canonical
   transport, scoped authority leases, replay/nonce and causal-order defense,
   and one opaque serialized supervisor admission boundary. Requested action
   and horizon are MAC-bound rather than supplied out of band. The maximal
@@ -476,6 +490,11 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 ## Material deviations and rationale
 
+The numbered items below are the **historical Phase-A execution environment**.
+Repository access, canonical BLAKE3, the macOS lane, and the bootloader choice
+were subsequently resolved. They are retained to explain earlier decisions, not
+as current blockers.
+
 1. **Remote container, not operator-local checkout.** The amendment's local
    paths (`/Users/edwardellis/...`, `/Volumes/ET External/...`) do not exist
    here; `ls /Volumes` → no such directory. Baseline recorded from the GitHub
@@ -497,27 +516,32 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 ## Next executable action
 
-None in this repository. Every component executable here is complete and
-gated (Phases A–D, CT0–CT3 closure, the deletion gates through the
-scanner, Phase I). Remaining items by category:
+The accepted `main` line is green through D36 and has no unmerged continuation
+that this file silently authorizes. The next implementation lanes, in dependency
+order, are:
 
-- **Queued with recorded reasons**: Ed25519 keyed authentication +
-  external anchor; CT5 sealed capability environment + hostile-package
-  counterexamples (until then `cdc x` is trusted-local-only);
-  `package.cdc` manifest layer / versioning / lockfile; `cycles=N`
-  per-cycle expectation families; fuzzing beyond the deterministic corpus
-  (CT1 full closure).
-- **Awaiting Edward**: the `cdc_boot.py` deletion choice
-  (`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`, options A/B/C). Status
-  quo is option A; the kernel floor stays untouched until he chooses.
-- **Blocked external**: Memory Manifold repository (Phases E–H); GIST /
-  Superposition bundle (Phase K, Track M); macOS host (CI lane is the
-  Swift compiler of record). PC6 stays hard-paused.
+1. connect `frame` / `reduce` / `complex` / `topology` to bounded dynamic RFTC
+   state, then add scheduler integration and cross-host reconciliation;
+2. close CT5 with a sealed capability environment and hostile-package
+   counterexamples before widening `cdc x`;
+3. add Ed25519 identity, rotation, and an externally retained anchor;
+4. add `package.cdc`, versioned coexistence, and a lockfile;
+5. extend per-cycle expectations, fuzzing, and the continuous proof layer.
+
+Cross-repository Memory Manifold and Superposition integrations have their own
+gates and may consume the current ABI. They do not change this repository's
+claim state until byte-parity and bypass counterexamples land.
+
+Bootloader Option A is already decided and implemented under D33:
+`cdc_boot.py` remains a frozen CI-only oracle. It is not awaiting a choice.
 
 ## External blockers
 
-- Memory Manifold repository access (blocks Phases E–H in this lane).
-- Superposition tree access or supplied document digests (blocks Phase K
-  conformance work; does not block A–D).
-- Operator push of `codex/mobius-u-identity-system` (blocks reconciliation
-  against the amendment's recorded local HEAD; does not block A–D).
+- There is no current repository-access or macOS-host blocker for the native
+  CDC lane.
+- Public release signing and whole-file rollback anchoring require an operator
+  signing identity and an external anchor.
+- Memory Manifold's authority-bearing receipt/store integration remains under
+  review in its owning repository.
+- Superposition's real-device PC6 field gate remains HARD-PAUSED and cannot be
+  resumed from this repository.

@@ -34,29 +34,33 @@
 \newcommand{\bidi}{\mathrm{bidi}\gamma\Delta}
 \newcommand{\nest}[1]{\mathopen{[\![}#1\mathclose{]\!]}}
 
-\title{\CDC:\\A Compact Executable Calculus for Hybrid Continuous-Discrete Coherence}
+\title{\CDC:\\A Compact Executable Calculus and Native Toolchain for Hybrid Continuous-Discrete Coherence}
 \author{Edward Ellis\\Independent Researcher}
-\date{June 18, 2026}
+\date{July 28, 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We introduce \CDC, a small formal substrate for systems that combine continuous
-dynamics, event-triggered balanced-ternary commitments, delayed angular coupling, local
-invariants, nested reference frames, and belief/error minimization. The calculus
-uses five canonical primitives---cells, channels, modules, fields, and
-commits---plus a bidirectional coherence-delta operator for coupling nested
-scales and path endpoints. Its current artifact includes a native source
-language (\texttt{.cdc}), one minimal Python bootloader, non-Python bridge and
-reducer runtimes, generated higher-arity bridge codebooks, native law witnesses,
-a finite proof checker, Lean/Coq finite carrier and algebraic law mirrors, and
-capability witnesses for hybrid flow, off-grid commits, delay lines,
-angle-biased relation channels, multirate nesting, predictive belief updates,
-local plasticity, local trace-order windows, balanced-ternary trace/window measurement, and a two-counter
-universality construction. The artifact includes a mechanized finite-carrier
-proof layer for the n=6 balanced-ternary walk spectrum plus finite algebraic
-law checks, while continuous-reduction proof obligations remain staged explicitly.
+We introduce \CDC, a small formal substrate and executable toolchain for systems
+that combine continuous dynamics, event-triggered balanced-ternary commitments,
+delayed angular coupling, local invariants, nested reference frames, and
+belief/error minimization. The calculus uses five canonical
+primitives---cells, channels, modules, fields, and commits---plus a
+bidirectional coherence-delta operator for coupling nested scales and path
+endpoints. The artifact includes a canonical native source language
+(\texttt{.cdc}), a typed collecting frontend, a stable C ABI, fused native
+execution, crash-safe guarded persistence, typed effect receipts,
+deterministic build/install/execute lifecycle, non-Python bridge and reducer
+runtimes, generated higher-arity bridge codebooks, a finite proof checker, and
+Lean/Rocq finite carrier and algebraic mirrors. A frozen Python bootloader is
+retained only as an independent CI differential oracle. A separately bounded
+Reference-Frame Topological Coherence (RFTC) extension adds six typed forms and
+an authenticated local control-plane experiment without promoting classical
+software evidence into a quantum or deployed-network claim. The mechanized
+layer covers the $n=6$ balanced-ternary walk spectrum, finite algebraic laws,
+and double-cover sheet parity; continuous-reduction, hostile-package, and
+cross-host obligations remain staged explicitly.
 \end{abstract}
 
 \section{Motivation}
@@ -278,11 +282,10 @@ permitting localized count is $51$.
 
 Together, the four bridge/carrier/existence/trace invariants, four algebraic
 invariants, and five reduction invariants make the 13-key semantic registry
-exercised by the native bootloader. The witness suite reports 14/14 invariant
-keys, 238/238 native \texttt{.cdc} expectations, 4811/4811 native witnesses,
-38/38 capability declarations, and 5/5 framework role contracts enforced for
+exercised by the canonical frontend and checked differentially against the
+frozen bootloader oracle. Framework role contracts are enforced for
 completeness, uniqueness, closure, and role-primitive compatibility. The bridge
-runtime also compiles as C and consumes
+runtime compiles as C and consumes
 \texttt{bridge64.cdc} for lookup, trace-coordinate projection, generated
 higher-arity codebook checks, source-declared bridge jobs, and interactive grid
 generation. The verified bootstrap bridge is \texttt{n=6}; \texttt{n=9} and
@@ -319,12 +322,15 @@ realization of the return path, not a physical spinor claim; and a physical
 light-cone reading, a continuous holonomy theorem, and any gravity
 application remain explicitly queued obligations, since the generic calculus
 speaks only of causal cones without a metric or null-propagation constraints.
-\texttt{runtime/cdc\_source.c} factors the shared native \texttt{.cdc}
-line parser, typed attribute reader, and primitive expectation checks used by
-the bridge and reducer runtimes; this is not yet full bootloader parity.
+\texttt{runtime/cdc\_lexer.c}, \texttt{runtime/cdc\_parser.c}, and the
+associated AST and diagnostic surfaces form the canonical Grammar-1 frontend.
+The older \texttt{runtime/cdc\_source.c} helpers remain only where the
+specialized bridge/reducer projections consume them; acceptance, canonical
+serialization, and rejection behavior are pinned by differentials before a
+legacy path may be deleted.
 \texttt{runtime/cdc\_wasm\_exports.c} compile-checks a C ABI for the native
 replay JSON path and links a live WASM module when Emscripten is available; live
-browser WASM execution and full bootloader parity remain queued.
+browser WASM execution remains queued.
 
 \section{Native Source Language}
 
@@ -347,10 +353,61 @@ proof trit-walk-n6 carrier=balanced-ternary arity=6 expect-admissible=267
 end
 \end{lstlisting}
 
-The loader \texttt{cdc\_boot.py} reads native declarations and verifies
-expectations. The C native runtime consumes the reducer source for execution,
-IR emission, IR interpretation, and finite proof checking; Python remains a
-declaration checker.
+The canonical C frontend parses and serializes this source into a stable AST.
+The native runtime consumes that source for execution, IR emission, IR
+interpretation, and finite proof checking. \texttt{cdc\_boot.py} is frozen as a
+CI-only independent differential oracle: it is exempt from the zero-Python
+kernel floor by name and is not a production execution dependency.
+
+\section{Executable Toolchain and Durable Closure}
+
+The current artifact exposes one \texttt{cdc} driver over the stable ABI.
+\texttt{cdc run} executes a parsed program through one live runtime;
+\texttt{cdc test --gate} evaluates typed per-job outcomes and treats an
+undeclared hold or a run with zero executable jobs as a failed gate. Typed
+receipts are constructed by the same code that produces each outcome, so human
+report text is not the authority from which effects are inferred.
+
+Durable state is a language form. A \texttt{store} declaration names a
+\texttt{cdc\_store}; \texttt{persist ... op=append} invokes the same
+balanced-ternary barrier as an in-memory commit. An accepted result may seal a
+transaction. A held or violated result has no durable write path. The store
+distinguishes a valid unsealed tail from corruption in committed history and
+from an I/O fault. Its implementation includes replay identity, byte-level
+attestation, atomic snapshot/compact generation transitions, stale-writer
+fencing, and process-local plus cross-process serialization.
+
+The package lifecycle reuses that substrate. \texttt{cdc build} emits a
+deterministic proof-carrying bundle whose manifest binds grammar and ABI
+versions, source digests, corpus identity, artifact digest, and contract
+verdict. \texttt{cdc install} captures members once, verifies them, journals
+one sealed install transaction, and atomically publishes a complete directory;
+kill matrices require either no package or a complete one. \texttt{cdc x}
+re-digests every installed member before fused execution. It is
+trusted-local-only: verification detects drift and tampering but is not a
+sandbox, remote package service, or hostile-code capability boundary.
+
+\section{Reference-Frame Topological Coherence}
+
+The RFTC extension maps the recursive record-closure operation into six typed
+source forms: \texttt{frame}, \texttt{reduce}, \texttt{complex},
+\texttt{topology}, \texttt{authority}, and \texttt{transport}. A seven-witness
+classical crucible independently tests synchronization onset, oriented winding
+preservation, hidden microstate granularity, macro/micro recovery, per-packet
+admissibility, redundant record closure, and a causal cut.
+
+ABI 1.4 adds a bounded local control-plane experiment. Canonical wire envelopes
+bind action, horizon, recipient, payload, and causal state under a
+domain-separated keyed BLAKE3 MAC. Scoped versioned authority leases, replay
+and causal-order checks, and a serialized supervisor admission boundary guard
+exactly-once local transition. Mutation, partition, capacity, forged-ticket,
+concurrency, sanitizer, and cross-process-wire counterexamples gate the
+construction.
+
+This surface demonstrates shared-key local authenticity and guarded
+cross-process admission. It does not demonstrate public-key identity, key
+rotation, mTLS, a deployed network, recursive cross-host cells, nonclassical
+physical behavior, or quantum advantage.
 
 \section{Universality and Boundaries}
 
@@ -375,7 +432,16 @@ The repository contains:
 \item verification matrix: claim-to-witness-to-proof tracking;
 \item source language: \nolinkurl{CDC_LANGUAGE.md};
 \item \texttt{kernel.cdc}: native self-hosting contract;
-\item \texttt{cdc\_boot.py}: minimal \texttt{.cdc} bootloader/checker;
+\item \texttt{cdc\_boot.py}: frozen CI-only differential oracle;
+\item canonical Grammar-1 frontend: collecting diagnostics, lexer, AST,
+parser, canonical serializer, and stable ABI 1.4;
+\item one native \texttt{cdc} driver implementing parse/verify, run, test,
+build, install, and trusted-local \texttt{x};
+\item \texttt{cdc\_store}: sealed transactions, replay/attest,
+snapshot/compact generations, fencing, recovery, and same-/cross-process
+coordination;
+\item typed effect receipts, ordered parity vectors, deterministic verdicts,
+and source/binary provenance;
 \item \texttt{laws.cdc}: native invariant and law/metatheorem witnesses;
 \item \texttt{bridge64.cdc}: explicit 64-row dyadic/triadic bridge codebook;
 \item \texttt{bridge\_codebooks.cdc}: higher-arity bridge declarations;
@@ -385,13 +451,18 @@ The repository contains:
 \item \texttt{native\_reducer.cdc}: source-declared reducer, compile, interpret, and finite proof jobs;
 \item \texttt{native\_surface.cdc}: source-declared guard, trace, measure, policy, bridge, and counter jobs;
 \item \texttt{council\_bridge.cdc}: source-declared council deliberation and bridge-coordinate source-evolution jobs;
-\item task frameworks (\nolinkurl{FRAMEWORKS.md}): \texttt{framework\_transition.cdc}, \texttt{framework\_procedural.cdc}, \texttt{framework\_episodic.cdc}, and \texttt{framework\_deliberative.cdc} with bootloader-enforced role contracts;
-\item \texttt{framework\_loop.cdc}: the generic task loop executed as one two-cycle composition over shared state, and the first executable Universal Operator instance with 720-degree lifted-frame closure, holonomy check, and guarded enactment;
+\item task frameworks (\nolinkurl{FRAMEWORKS.md}): transition, procedural,
+episodic, and deliberative exemplars with gate-enforced role contracts;
+\item the framework loop: a two-cycle composition over shared state and the
+first executable Universal Operator instance with 720-degree lifted-frame
+closure, holonomy check, and guarded enactment;
 \item shared native source core: common \texttt{.cdc} line/attribute parser and primitive expectation assertions;
 \item bridge runtime: verifies codebooks and emits the interactive SVG;
 \item native runtime: runs reducer, IR, proof, council, evolution, and replay jobs;
 \item WASM export surface: compile-checked C ABI for native replay JSON;
 \item Lean/Coq mirrors: finite carrier and algebraic law checks;
+\item RFTC classical crucible, six language forms, and the ABI 1.4
+authenticated local authority/transport supervisor;
 \item \texttt{system.cdc}: native capability witnesses;
 \item \texttt{relations.cdc}: angular/path relation witnesses;
 \item \texttt{trace\_windows.cdc}: balanced-ternary observer-window witnesses.
@@ -404,9 +475,13 @@ descriptions. \texttt{.cdc} source is parsed into a source AST; execution is
 understood against a runtime state tuple; reductions are classified as flow,
 commit, or nesting steps; and law checks discharge named invariant records. The
 source language, paper, and witness suite are kept close enough to be audited as
-projections of the same object. The self-hosting target is stronger: move the
-parser state, reducer state, witness state, and trace/window state into native
-\texttt{.cdc} terms until even the bootloader can be replaced.
+projections of the same object. The canonical native frontend has replaced the
+bootloader as an execution dependency; the Python file remains by explicit
+operator decision as an independent differential oracle. A stronger
+self-hosting target would move the reducer, proof checker, witness state, and
+trace/window state into native \texttt{.cdc} terms. Deleting the independent
+oracle is a separate evidence decision, not an automatic consequence of native
+coverage.
 
 This makes the theorem-prover lift narrow and explicit. The finite discrete
 layer now has a native C checker plus Lean and Coq source mirrors for the n=6
@@ -419,10 +494,17 @@ invariant table.
 
 \section{Conclusion}
 
-\CDC\ is a compact executable calculus for hybrid continuous-discrete coherence.
-Its contribution is a unified semantic vocabulary and working witness suite for
-systems that must flow continuously, commit discretely, preserve local
-invariants, and couple nested reference frames bidirectionally.
+\CDC\ is a compact executable calculus and native toolchain for hybrid
+continuous-discrete coherence. Its contribution is a shared semantic and
+durability boundary for systems that must flow continuously, commit
+discretely, preserve local invariants, couple nested reference frames
+bidirectionally, and retain replayable evidence of each accepted transition.
+The implementation closes the path from canonical source through execution,
+guarded storage, receipts, and package lifecycle while retaining independent
+differentials and falsifying counterexamples. The formal and engineering
+results remain intentionally bounded: finite proofs do not imply continuous
+theorems, local authenticated transport does not imply a deployed distributed
+system, and classical coherence experiments do not imply quantum behavior.
 
 \begin{thebibliography}{11}
 

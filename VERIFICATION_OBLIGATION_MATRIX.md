@@ -16,8 +16,8 @@ verification.
 |---|---|---|
 | proved | Mechanized in Lean/Rocq/Coq or exhaustively checked by the native finite proof checker | finite `n=6` carrier counts, finite algebraic mirrors, and finite double-cover sheet parity |
 | witnessed | Declared as a native `.cdc` invariant, law, capability, or witness link | semantic registry, reducer links, trace/window links, bridge witnesses |
-| runtime-checked | Executed by the C runtimes or freshness checks in `scripts/verify.sh` | shared native parser/expectation core, bridge lookup/generation, reducer flow/accepted commit/held commit/nest, replay JSON, surface/council/evolve, task-framework exemplars, paper compile |
-| queued | Explicit formalization or product parity work not yet claimed as proved | continuous flow theorem, arbitrary `n=3k` bridge proof/generator, self-hosted reducer, live WASM parity |
+| runtime-checked | Executed by the C runtimes or freshness checks in `scripts/verify.sh` | canonical frontend, bridge/reducer, guarded store, receipts, package lifecycle, RFTC local control plane, replay JSON, task frameworks, paper compile |
+| queued | Explicit formalization or product parity work not yet claimed as proved | continuous flow theorem, arbitrary `n=3k`, self-hosted reducer, live WASM, CT5, cross-host RFTC |
 
 | Claim | Current native witness | Formal obligation |
 |---|---|---|
