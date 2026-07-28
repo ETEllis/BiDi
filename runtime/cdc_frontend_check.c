@@ -5,9 +5,6 @@
  *                          byte-compared against `cdc_boot.py --dump`
  *   canon <files...>       emit canonical grammar-1 serialization
  *   roundtrip <files...>   parse -> canonical -> reparse -> structural equal
- *   attr-parity <files...> field-for-field comparison of frontend attribute
- *                          extraction vs the legacy cdc_read_attr scanner,
- *                          with typed divergence classes
  *   bounds                 adversarial corpus: typed diagnostics, no crash
  *   oom <file>             allocator-failure injection at every allocation
  *   reject <files...>      every file must produce >=1 error diagnostic
@@ -16,7 +13,12 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +29,7 @@
 #include "cdc_digest.h"
 #include "cdc_lexer.h"
 #include "cdc_parser.h"
+#include "cdc_receipt.h"
 #include "cdc_source.h"
 #include "cdc_store.h"
 
@@ -214,180 +217,10 @@ static int cmd_roundtrip(int argc, char **argv) {
     return 0;
 }
 
-/* ---- attr-parity ---------------------------------------------------- */
-
-typedef struct {
-    long checked;
-    long quoting;
-    long collision;
-    long duplicate;
-    long skipped_long;
-    long failed;
-} parity_counts;
-
-static void parity_line(const cdc_unit *program, const cdc_stmt *stmt,
-                        const char *raw_line, parity_counts *counts) {
-    char stripped[8192];
-    size_t i, j;
-
-    snprintf(stripped, sizeof(stripped), "%s", raw_line);
-    cdc_strip_comment(stripped);
-
-    for (i = 1; i < stmt->token_count; i++) {
-        const char *eq =
-            memchr(stmt->tokens[i].text, '=', stmt->tokens[i].length);
-        char key[256];
-        char legacy[4096];
-        const char *frontend_first;
-        const char *frontend_last;
-        size_t key_len;
-        int duplicated = 0;
-
-        if (!eq) {
-            continue;
-        }
-        key_len = (size_t)(eq - stmt->tokens[i].text);
-        if (key_len == 0 || key_len >= sizeof(key)) {
-            counts->skipped_long++;
-            continue;
-        }
-        memcpy(key, stmt->tokens[i].text, key_len);
-        key[key_len] = '\0';
-        if (strlen(key) > 60) { /* legacy needle buffer is 64 with "=" */
-            counts->skipped_long++;
-            continue;
-        }
-        /* only evaluate each key once per line (at its first occurrence) */
-        {
-            int earlier = 0;
-            for (j = 1; j < i; j++) {
-                const char *prior_eq = memchr(stmt->tokens[j].text, '=',
-                                              stmt->tokens[j].length);
-                if (prior_eq &&
-                    (size_t)(prior_eq - stmt->tokens[j].text) == key_len &&
-                    strncmp(stmt->tokens[j].text, key, key_len) == 0) {
-                    earlier = 1;
-                    break;
-                }
-            }
-            if (earlier) {
-                continue;
-            }
-        }
-        for (j = i + 1; j < stmt->token_count; j++) {
-            const char *later_eq = memchr(stmt->tokens[j].text, '=',
-                                          stmt->tokens[j].length);
-            if (later_eq &&
-                (size_t)(later_eq - stmt->tokens[j].text) == key_len &&
-                strncmp(stmt->tokens[j].text, key, key_len) == 0) {
-                duplicated = 1;
-                break;
-            }
-        }
-
-        frontend_first = cdc_stmt_attr_first(stmt, key);
-        frontend_last = cdc_stmt_attr(stmt, key);
-        counts->checked++;
-        if (duplicated ||
-            (frontend_first && frontend_last &&
-             strcmp(frontend_first, frontend_last) != 0)) {
-            counts->duplicate++;
-        }
-
-        if (!cdc_read_attr(stripped, key, legacy, sizeof(legacy))) {
-            counts->failed++;
-            fprintf(stderr, "attr-parity FAIL %s:%d %s: legacy scanner "
-                            "found nothing\n",
-                    base_name(program->file), stmt->line, key);
-            continue;
-        }
-        if (frontend_first && strcmp(legacy, frontend_first) == 0) {
-            continue; /* exact agreement */
-        }
-        /* collision: the legacy strstr hit begins before this token */
-        {
-            char needle[64];
-            const char *hit;
-            snprintf(needle, sizeof(needle), "%s=", key);
-            hit = strstr(stripped, needle);
-            /* a hit not immediately preceded by start-of-line or whitespace
-             * sits inside another token: the legacy scanner read from the
-             * middle of an unrelated attribute (substring collision) */
-            if (hit && hit != stripped && hit[-1] != ' ' &&
-                hit[-1] != '\t') {
-                counts->collision++;
-                fprintf(stderr, "attr-parity collision %s:%d %s\n",
-                        base_name(program->file), stmt->line, key);
-                continue;
-            }
-        }
-        /* quoting divergence: legacy retains quotes / truncates at space */
-        if (frontend_first && legacy[0] == '"') {
-            const char *body = legacy + 1;
-            size_t body_len = strlen(body);
-            if (body_len > 0 && body[body_len - 1] == '"') {
-                body_len--;
-            }
-            if (strncmp(frontend_first, body, body_len) == 0 &&
-                (frontend_first[body_len] == '\0' ||
-                 strchr(frontend_first + body_len, ' ') != NULL ||
-                 frontend_first[body_len] == ' ')) {
-                counts->quoting++;
-                continue;
-            }
-        }
-        counts->failed++;
-        fprintf(stderr,
-                "attr-parity FAIL %s:%d %s: legacy=%s frontend=%s\n",
-                base_name(program->file), stmt->line, key, legacy,
-                frontend_first ? frontend_first : "<none>");
-    }
-}
-
-static int cmd_attr_parity(int argc, char **argv) {
-    parity_counts counts;
-    int i;
-    memset(&counts, 0, sizeof(counts));
-    for (i = 0; i < argc; i++) {
-        cdc_unit program;
-        cdc_diag_list diags;
-        FILE *fp;
-        char raw[8192];
-        int line_no = 0;
-        size_t s = 0;
-
-        cdc_diag_list_init(&diags);
-        if (!parse_or_report(argv[i], &program, &diags)) {
-            cdc_unit_free(&program);
-            cdc_diag_list_free(&diags);
-            return 1;
-        }
-        fp = fopen(argv[i], "r");
-        if (!fp) {
-            fprintf(stderr, "cdc-frontend: cannot reopen %s\n", argv[i]);
-            return 1;
-        }
-        while (fgets(raw, sizeof(raw), fp)) {
-            line_no++;
-            cdc_trim_newline(raw);
-            while (s < program.count && program.stmts[s].line < line_no) {
-                s++;
-            }
-            if (s < program.count && program.stmts[s].line == line_no &&
-                program.stmts[s].kind != CDC_STMT_END) {
-                parity_line(&program, &program.stmts[s], raw, &counts);
-            }
-        }
-        fclose(fp);
-        cdc_unit_free(&program);
-        cdc_diag_list_free(&diags);
-    }
-    printf("frontend attr-parity checked=%ld quoting=%ld collision=%ld "
-           "duplicate=%ld skipped=%ld failed=%ld\n",
-           counts.checked, counts.quoting, counts.collision,
-           counts.duplicate, counts.skipped_long, counts.failed);
-    return counts.failed == 0 ? 0 : 1;
-}
+/* attr-parity retired with the legacy scanner it compared against (D26):
+ * it measured a reader nothing used. The independent oracle for the
+ * frontend is the dump differential against cdc_boot.py, which is
+ * untouched. */
 
 /* ---- bounds --------------------------------------------------------- */
 
@@ -729,21 +562,114 @@ static int cmd_oom_abi(const char *path) {
 static int digest_self_test(void) {
     uint8_t digest[CDC_DIGEST_SIZE];
     char hex[80];
+    /* Published BLAKE3 vectors (canonical algorithm per Amendment A3). */
     cdc_digest("", 0, digest);
     cdc_digest_hex(digest, hex, sizeof(hex));
-    if (strcmp(hex, "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e464"
-                    "9b934ca495991b7852b855") != 0) {
+    if (strcmp(hex, "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9ad"
+                    "c112b7cc9a93cae41f3262") != 0) {
         fprintf(stderr, "digest FAIL: empty vector -> %s\n", hex);
         return 0;
     }
     cdc_digest("abc", 3, digest);
     cdc_digest_hex(digest, hex, sizeof(hex));
-    if (strcmp(hex, "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396"
-                    "177a9cb410ff61f20015ad") != 0) {
+    if (strcmp(hex, "blake3:6437b3ac38465133ffb63b75273a8db548c558465d"
+                    "79db03fd359c6cd5bd9d85") != 0) {
         fprintf(stderr, "digest FAIL: abc vector -> %s\n", hex);
         return 0;
     }
     return 1;
+}
+
+/* Full reference-vector sweep against the committed fixture: single-block,
+ * block-boundary, chunk-boundary, and multi-level tree inputs, each hashed
+ * both one-shot and through irregular streaming splits so update-path
+ * boundary handling is covered too. */
+static int cmd_digest_vectors(const char *path) {
+    FILE *fp = fopen(path, "r");
+    char line[256];
+    long pass = 0, fail = 0;
+
+    if (!fp) {
+        fprintf(stderr, "digest-vectors: cannot open %s\n", path);
+        return 1;
+    }
+    if (!digest_self_test()) {
+        fclose(fp);
+        return 1;
+    }
+    while (fgets(line, sizeof(line), fp)) {
+        long n;
+        char want[80];
+        unsigned char *buf;
+        long i, offset, step;
+        cdc_digest_ctx ctx;
+        uint8_t out[CDC_DIGEST_SIZE];
+        char got[80];
+
+        if (line[0] == '#' || line[0] == '\n') {
+            continue;
+        }
+        if (sscanf(line, "%ld %79s", &n, want) != 2) {
+            continue;
+        }
+        buf = malloc((size_t)(n ? n : 1));
+        if (!buf) {
+            fclose(fp);
+            return 1;
+        }
+        for (i = 0; i < n; i++) {
+            buf[i] = (unsigned char)(i % 251);
+        }
+        /* one-shot */
+        cdc_digest(buf, (size_t)n, out);
+        cdc_digest_hex(out, got, sizeof(got));
+        if (strcmp(got + 7, want) != 0) {
+            fprintf(stderr, "digest-vectors FAIL len=%ld one-shot\n", n);
+            fail++;
+            free(buf);
+            continue;
+        }
+        /* streaming in growing irregular increments */
+        cdc_digest_init(&ctx);
+        offset = 0;
+        step = 1;
+        while (offset < n) {
+            long take = (n - offset < step) ? n - offset : step;
+            cdc_digest_update(&ctx, buf + offset, (size_t)take);
+            offset += take;
+            step = step * 7 + 13;
+        }
+        cdc_digest_final(&ctx, out);
+        cdc_digest_hex(out, got, sizeof(got));
+        if (strcmp(got + 7, want) != 0) {
+            fprintf(stderr, "digest-vectors FAIL len=%ld streaming\n", n);
+            fail++;
+            free(buf);
+            continue;
+        }
+        free(buf);
+        pass++;
+    }
+    fclose(fp);
+    printf("digest-vectors ok vectors=%ld failed=%ld\n", pass, fail);
+    return fail == 0 ? 0 : 1;
+}
+
+/* Native file digest so evidence records are produced by the same
+ * implementation the runtime uses (no external digest tool). */
+static int cmd_digest_file(int argc, char **argv) {
+    int i;
+    for (i = 0; i < argc; i++) {
+        uint8_t digest[CDC_DIGEST_SIZE];
+        char hex[80];
+        if (!cdc_digest_file(argv[i], digest)) {
+            fprintf(stderr, "digest-file: cannot read %s\n", argv[i]);
+            return 1;
+        }
+        cdc_digest_hex(digest, hex, sizeof(hex));
+        printf("%s  %s\n", hex, argv[i]);
+    }
+    return 0;
 }
 
 static int store_commit_txn(cdc_store *store, int which) {
@@ -915,20 +841,2168 @@ static int cmd_store_check(const char *base) {
         cdc_store_close(store);
         return 1;
     }
-    /* rollback leaves nothing; empty commit is a typed state error;
-     * declared-but-unlanded verbs fail closed. */
+    /* Rollback leaves nothing staged, so the following commit has no work
+     * and is a typed state error rather than an empty transaction. Fencing
+     * at the wrong seal is likewise a typed refusal. (snapshot/compact/
+     * fence behaviour proper is owned by the store-protocol suite.) */
     cdc_store_stage(store, "ghost", 5);
     cdc_store_rollback(store);
     if (cdc_store_commit(store) != CDC_STORE_ESTATE ||
-        cdc_store_snapshot(store) != CDC_STORE_EUNSUPPORTED ||
-        cdc_store_compact(store) != CDC_STORE_EUNSUPPORTED ||
-        cdc_store_fence(store, 2) != CDC_STORE_EUNSUPPORTED) {
+        cdc_store_fence(store, 99) != CDC_STORE_ESTATE) {
         fprintf(stderr, "store-check FAIL: typed statuses\n");
         cdc_store_close(store);
         return 1;
     }
     cdc_store_close(store);
     printf("store-check ok determinism=1 attest=%s\n", attest);
+    return 0;
+}
+
+static int read_file_bytes(const char *path, uint8_t **out, size_t *size);
+static int write_file_bytes(const char *path, const uint8_t *bytes,
+                            size_t size);
+
+static long file_size(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 ? (long)st.st_size : -1;
+}
+
+/* ---- kill-based crash matrix (out-of-process) ------------------------ */
+
+/* The in-process hook simulates a torn write; this one kills the process
+ * outright at each commit boundary, so unflushed stdio buffers are lost the
+ * way they are in a real power cut. The surviving parent asserts the store
+ * still recovers to exactly the old or the new sealed state. */
+static int cmd_store_kill(const char *base) {
+    char ref_old[80], ref_new[80];
+    int boundaries = 0, old_state = 0, new_state = 0, killed = 0;
+    int k;
+
+    if (!store_reference_digest(base, "kref1", 1, ref_old, sizeof(ref_old)) ||
+        !store_reference_digest(base, "kref2", 2, ref_new, sizeof(ref_new))) {
+        fprintf(stderr, "store-kill FAIL: reference stores\n");
+        return 1;
+    }
+    if (strcmp(ref_old, ref_new) == 0) {
+        fprintf(stderr, "store-kill FAIL: reference digests collide\n");
+        return 1;
+    }
+    {
+        char dir[512];
+        cdc_store *probe = NULL;
+        int i;
+        snprintf(dir, sizeof(dir), "%s/kprobe", base);
+        if (cdc_store_open(dir, &probe, NULL) != CDC_STORE_OK) {
+            return 1;
+        }
+        for (i = 0; i < 3; i++) {
+            cdc_store_stage(probe, "p", 1);
+        }
+        boundaries = cdc_store_commit_operations(probe);
+        cdc_store_close(probe);
+    }
+
+    for (k = 1; k <= boundaries; k++) {
+        char dir[512];
+        cdc_store *store = NULL;
+        char replayed[80];
+        uint64_t sealed;
+        int recovered = 0;
+        pid_t pid;
+        int status = 0;
+
+        snprintf(dir, sizeof(dir), "%s/kill_%d", base, k);
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            !store_commit_txn(store, 1)) {
+            fprintf(stderr, "store-kill FAIL: baseline txn (k=%d)\n", k);
+            return 1;
+        }
+        cdc_store_close(store);
+
+        fflush(NULL);
+        pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "store-kill FAIL: fork\n");
+            return 1;
+        }
+        if (pid == 0) {
+            cdc_store *child = NULL;
+            char payload[64];
+            int i;
+            if (cdc_store_open(dir, &child, NULL) != CDC_STORE_OK) {
+                _exit(90);
+            }
+            for (i = 0; i < 3; i++) {
+                snprintf(payload, sizeof(payload), "txn-2-event-%d", i);
+                cdc_store_stage(child, payload, strlen(payload));
+            }
+            cdc_store_set_kill_after(child, k);
+            cdc_store_commit(child); /* must not return */
+            _exit(91);               /* reached only if the kill missed */
+        }
+        if (waitpid(pid, &status, 0) < 0) {
+            fprintf(stderr, "store-kill FAIL: waitpid (k=%d)\n", k);
+            return 1;
+        }
+        if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL) {
+            fprintf(stderr,
+                    "store-kill FAIL: child survived injection k=%d "
+                    "(exit=%d)\n",
+                    k, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+            return 1;
+        }
+        killed++;
+
+        if (cdc_store_open(dir, &store, &recovered) != CDC_STORE_OK) {
+            fprintf(stderr, "store-kill FAIL: reopen after kill (k=%d)\n", k);
+            return 1;
+        }
+        sealed = cdc_store_sealed_count(store);
+        if (cdc_store_replay(store, replayed, sizeof(replayed)) !=
+                CDC_STORE_OK ||
+            cdc_store_verify(store) != CDC_STORE_OK) {
+            fprintf(stderr, "store-kill FAIL: replay/verify (k=%d)\n", k);
+            cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        if (sealed == 1 && strcmp(replayed, ref_old) == 0) {
+            old_state++;
+        } else if (sealed == 2 && strcmp(replayed, ref_new) == 0) {
+            new_state++;
+        } else {
+            fprintf(stderr,
+                    "store-kill FAIL: partial state at k=%d (sealed=%llu)\n",
+                    k, (unsigned long long)sealed);
+            return 1;
+        }
+    }
+    printf("store-kill ok boundaries=%d killed=%d old=%d new=%d\n",
+           boundaries, killed, old_state, new_state);
+    return 0;
+}
+
+/* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
+
+/* Attribute-key boundary counterexamples.
+ *
+ * History: the legacy reader matched `key=` as a bare substring, so an
+ * attribute whose NAME ended with the key was read instead of the key —
+ * `gain` read `action-gain=9.0` as 9.0, confidently wrong rather than
+ * missing (D22). That reader has been deleted; these cases now pin the same
+ * properties on the reader that REPLACED it, because the property is what
+ * matters, not the implementation that happened to hold it.
+ *
+ * Two expected values changed with the reader, and the change is the point:
+ * key matching is now exact by construction (the statement is tokenized
+ * before any lookup), and a quoted value is returned COMPLETE and unquoted
+ * where the legacy reader truncated it at the first space. */
+static int cmd_attr_boundary(void) {
+    static const struct {
+        const char *source;
+        const char *key;
+        int present;
+        const char *value;
+        const char *why;
+    } CASES[] = {
+        {"field f1 action-gain=9.0 gain=1.0 dt=0.125", "gain", 1, "1.0",
+         "a longer attribute ending in the key must not shadow it"},
+        {"field f1 action-gain=9.0 dt=0.125", "gain", 0, "",
+         "the key is absent even though a longer name contains it"},
+        {"module m action-gain=2.0", "action-gain", 1, "2.0",
+         "the longer name itself still reads"},
+        {"cell c theta=1.5 subtheta=9.9", "theta", 1, "1.5",
+         "first occurrence wins and is the whole token"},
+        {"cell c subtheta=9.9 theta=1.5", "theta", 1, "1.5",
+         "order does not let a suffix name win"},
+        {"guard g precision=1.0", "precision", 1, "1.0", "exact key reads"},
+        {"guard g imprecision=7.0", "precision", 0, "",
+         "a suffix match with no boundary is not a match"},
+        {"cell c theta=1.5 theta=9.9", "theta", 1, "1.5",
+         "first occurrence wins on a duplicated key"},
+        {"evolve e expect-contains=\"witness memory\" output=x",
+         "expect-contains", 1, "witness memory",
+         "a quoted value is returned complete, not truncated at a space"},
+        {"evolve e expect-contains=\"witness memory\" output=x", "output", 1,
+         "x", "a later attribute still reads past a quoted value"},
+    };
+    size_t i;
+    int failures = 0;
+
+    for (i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++) {
+        cdc_unit unit;
+        cdc_diag_list diags;
+        const char *got;
+        cdc_diag_list_init(&diags);
+        cdc_unit_init(&unit);
+        if (!cdc_unit_parse_buffer(CASES[i].source, strlen(CASES[i].source),
+                                   "<attr-boundary>", &unit, &diags) ||
+            diags.errors > 0 || unit.count != 1) {
+            fprintf(stderr, "attr-boundary FAIL: could not parse: %s\n",
+                    CASES[i].source);
+            failures++;
+            cdc_diag_list_free(&diags);
+            cdc_unit_free(&unit);
+            continue;
+        }
+        cdc_diag_list_free(&diags);
+        got = cdc_stmt_attr_first(&unit.stmts[0], CASES[i].key);
+        if ((got != NULL) != (CASES[i].present != 0)) {
+            fprintf(stderr, "attr-boundary FAIL: %s (presence %d, want %d)\n",
+                    CASES[i].why, got != NULL, CASES[i].present);
+            failures++;
+        } else if (got && strcmp(got, CASES[i].value) != 0) {
+            fprintf(stderr, "attr-boundary FAIL: %s (got [%s], want [%s])\n",
+                    CASES[i].why, got, CASES[i].value);
+            failures++;
+        }
+        cdc_unit_free(&unit);
+    }
+    if (failures) {
+        return 1;
+    }
+    printf("attr-boundary ok cases=%zu shadowing=0 quoted-value=complete\n",
+           sizeof(CASES) / sizeof(CASES[0]));
+    return 0;
+}
+
+/* Computes the corpus identity for a file set, from a DIFFERENT binary
+ * than the one that stamps verdicts. That makes the check independent:
+ * the gate can confirm a verdict names the corpus it actually ran on
+ * rather than trusting the same code that produced the claim. */
+static int cmd_corpus_digest(int count, char **paths) {
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char hex[96];
+    if (!cdc_digest_corpus((const char *const *)paths, (size_t)count,
+                           digest)) {
+        fprintf(stderr, "corpus-digest: a file was unreadable\n");
+        return 1;
+    }
+    cdc_digest_hex(digest, hex, sizeof(hex));
+    printf("corpus %s files=%d\n", hex, count);
+    return 0;
+}
+
+/* Opens a store and reports its state, so a shell gate can assert that a
+ * run stopped by the lifecycle contract left durable state intact rather
+ * than half-applied. */
+static int cmd_store_inspect(const char *dir) {
+    cdc_store *store = NULL;
+    int recovered = 0;
+    char replay[96];
+    cdc_store_status status = cdc_store_open(dir, &store, &recovered);
+    if (status != CDC_STORE_OK) {
+        printf("store-inspect open=%s\n", cdc_store_status_name(status));
+        return 1;
+    }
+    if (cdc_store_replay(store, replay, sizeof(replay)) != CDC_STORE_OK) {
+        printf("store-inspect open=ok replay=failed\n");
+        cdc_store_close(store);
+        return 1;
+    }
+    printf("store-inspect open=ok recovered=%d sealed=%llu events=%llu "
+           "generation=%llu verify=%s replay=%s\n",
+           recovered, (unsigned long long)cdc_store_sealed_count(store),
+           (unsigned long long)cdc_store_event_count(store),
+           (unsigned long long)cdc_store_generation(store),
+           cdc_store_status_name(cdc_store_verify(store)), replay);
+    cdc_store_close(store);
+    return 0;
+}
+
+/* ---- parity vectors from the oracle report (interface section 7) -----
+ *
+ * The bootloader is the oracle for contract checks. It cannot produce
+ * BLAKE3 digests (no stdlib BLAKE3 in Python, and shelling out per check
+ * would be 250+ subprocesses), so its vectors are RE-RENDERED here from the
+ * report it independently computed: each `  OK <label>   [<source>]` line
+ * becomes the same six-field record the native evaluator emits.
+ *
+ * What that does and does not test. The digest function is shared, so it is
+ * not under test — it does not need to be, because it is already gated by
+ * 31 reference vectors. What IS under test is everything the two
+ * implementations compute separately: each check's identifier, its verdict,
+ * its full evaluated label, and the ORDER of all of them. A divergence in
+ * any of those changes the vector, and the chained trace digest carries the
+ * change forward so a reordering cannot cancel out. */
+static int cmd_vectors_from_report(const char *report_path) {
+    FILE *fp = fopen(report_path, "r");
+    char line[4096];
+    cdc_vector_chain chain;
+    long emitted = 0;
+
+    if (!fp) {
+        fprintf(stderr, "vectors-from-report: cannot read %s\n", report_path);
+        return 1;
+    }
+    cdc_vector_chain_init(&chain);
+    while (fgets(line, sizeof(line), fp)) {
+        const char *decision;
+        char *label;
+        char *source;
+        char *bracket;
+        char record[512];
+        size_t len = strlen(line);
+
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (strncmp(line, "  OK ", 5) == 0) {
+            decision = "commit";
+            label = line + 5;
+        } else if (strncmp(line, "  FAIL ", 7) == 0) {
+            decision = "fail";
+            label = line + 7;
+        } else {
+            continue; /* banner, rule, or summary line */
+        }
+        /* the source is the LAST "   [" ... "]" on the line, so a label
+         * containing brackets cannot truncate it */
+        bracket = strrchr(label, '[');
+        if (!bracket || bracket == label || bracket[-1] != ' ' ||
+            label[strlen(label) - 1] != ']') {
+            fprintf(stderr, "vectors-from-report: unparsable record: %s\n",
+                    line);
+            fclose(fp);
+            return 1;
+        }
+        source = bracket + 1;
+        label[strlen(label) - 1] = '\0'; /* drop ']' */
+        /* drop the three spaces before '[' */
+        {
+            char *end = bracket - 1;
+            while (end > label && *end == ' ') {
+                *end-- = '\0';
+            }
+            *bracket = '\0';
+        }
+        if (cdc_vector_render(&chain, source, decision, NULL, label,
+                              strlen(label), NULL, record,
+                              sizeof(record)) < 0) {
+            fprintf(stderr, "vectors-from-report: record too long\n");
+            fclose(fp);
+            return 1;
+        }
+        printf("%s\n", record);
+        emitted++;
+    }
+    fclose(fp);
+    if (emitted == 0) {
+        fprintf(stderr, "vectors-from-report: no check records found\n");
+        return 1;
+    }
+    return 0;
+}
+
+/* ---- typed effect receipts (gate CT3) --------------------------------
+ *
+ * The carrier `cdc test` now trusts instead of prose. These cases pin the
+ * properties that make it trustworthy: a round trip preserves every field,
+ * an unknown version fails CLOSED rather than being skipped as noise, a
+ * malformed record is an error rather than a silent zero, and an outcome
+ * cannot be absent — a receipt records an effect, and "no effect" is not
+ * one. */
+static int cmd_receipt_check(void) {
+    int failures = 0;
+    char path[256];
+    void *stream;
+    cdc_receipt out, back;
+    FILE *fp;
+    char line[4096];
+
+    snprintf(path, sizeof(path), "build/receipt_check_%ld.txt",
+             (long)getpid());
+    if (setenv("CDC_RECEIPTS", path, 1) != 0) {
+        fprintf(stderr, "receipt-check FAIL: setenv\n");
+        return 1;
+    }
+    stream = cdc_receipt_open_env();
+    if (!stream) {
+        fprintf(stderr, "receipt-check FAIL: stream not opened\n");
+        return 1;
+    }
+
+    /* A fully-populated persist receipt survives a round trip intact. */
+    cdc_receipt_init(&out);
+    snprintf(out.kind, sizeof(out.kind), "persist");
+    snprintf(out.job, sizeof(out.job), "journal-hold");
+    snprintf(out.op, sizeof(out.op), "append");
+    out.outcome = CDC_OUTCOME_HELD;
+    snprintf(out.reason, sizeof(out.reason), "balance-violation");
+    out.declared_hold = 1;
+    snprintf(out.trits, sizeof(out.trits), "-+0");
+    snprintf(out.balance, sizeof(out.balance), "violated");
+    out.durable = 0;
+    out.replay_stable = 1;
+    out.sealed = 7;
+    out.events = 21;
+    out.generation = 3;
+    snprintf(out.witness, sizeof(out.witness), "persistence-hold-native");
+    snprintf(out.closure, sizeof(out.closure),
+             "blake3:0000000000000000000000000000000000000000000000000000000000000001");
+    if (cdc_receipt_emit(stream, &out) != 1) {
+        fprintf(stderr, "receipt-check FAIL: emit\n");
+        failures++;
+    }
+
+    /* A receipt with no outcome is not a receipt. */
+    {
+        cdc_receipt empty;
+        cdc_receipt_init(&empty);
+        snprintf(empty.kind, sizeof(empty.kind), "commit");
+        snprintf(empty.job, sizeof(empty.job), "c1");
+        snprintf(empty.reason, sizeof(empty.reason), "none");
+        if (cdc_receipt_emit(stream, &empty) != -1) {
+            fprintf(stderr,
+                    "receipt-check FAIL: outcome-less receipt was emitted\n");
+            failures++;
+        }
+    }
+    /* A witness named without its digest is not a link, and is refused:
+     * "this effect discharges W" is only evidence if W is identified. */
+    {
+        cdc_receipt dangling;
+        cdc_receipt_init(&dangling);
+        snprintf(dangling.kind, sizeof(dangling.kind), "commit");
+        snprintf(dangling.job, sizeof(dangling.job), "c1");
+        dangling.outcome = CDC_OUTCOME_ACCEPTED;
+        snprintf(dangling.reason, sizeof(dangling.reason), "none");
+        snprintf(dangling.witness, sizeof(dangling.witness), "w1");
+        if (cdc_receipt_emit(stream, &dangling) != -1) {
+            fprintf(stderr,
+                    "receipt-check FAIL: witness without a closure digest "
+                    "was emitted\n");
+            failures++;
+        }
+    }
+    /* A value that breaks the token vocabulary is refused, not quoted. */
+    {
+        cdc_receipt bad;
+        cdc_receipt_init(&bad);
+        snprintf(bad.kind, sizeof(bad.kind), "commit");
+        snprintf(bad.job, sizeof(bad.job), "has space");
+        bad.outcome = CDC_OUTCOME_ACCEPTED;
+        snprintf(bad.reason, sizeof(bad.reason), "none");
+        if (cdc_receipt_emit(stream, &bad) != -1) {
+            fprintf(stderr, "receipt-check FAIL: non-token job accepted\n");
+            failures++;
+        }
+    }
+    cdc_receipt_close(stream);
+
+    fp = fopen(path, "r");
+    if (!fp || !fgets(line, sizeof(line), fp)) {
+        fprintf(stderr, "receipt-check FAIL: emitted stream unreadable\n");
+        if (fp) {
+            fclose(fp);
+        }
+        return 1;
+    }
+    fclose(fp);
+    if (cdc_receipt_parse(line, &back) != 1) {
+        fprintf(stderr, "receipt-check FAIL: parse\n");
+        return 1;
+    }
+    if (strcmp(back.kind, out.kind) != 0 || strcmp(back.job, out.job) != 0 ||
+        strcmp(back.op, out.op) != 0 || back.outcome != out.outcome ||
+        strcmp(back.reason, out.reason) != 0 ||
+        back.declared_hold != out.declared_hold ||
+        strcmp(back.trits, out.trits) != 0 ||
+        strcmp(back.balance, out.balance) != 0 ||
+        back.durable != out.durable ||
+        back.replay_stable != out.replay_stable ||
+        back.sealed != out.sealed || back.events != out.events ||
+        back.generation != out.generation ||
+        strcmp(back.witness, out.witness) != 0 ||
+        strcmp(back.closure, out.closure) != 0) {
+        fprintf(stderr, "receipt-check FAIL: round trip lost a field\n");
+        failures++;
+    }
+
+    /* Malformed and foreign records. */
+    {
+        struct {
+            const char *line;
+            int want;
+            const char *why;
+        } cases[] = {
+            {"native reducer ok steps=3\n", 0, "foreign line is not a receipt"},
+            {"\n", 0, "blank line is not a receipt"},
+            {"cdc-receipt v=2 kind=commit job=c1 outcome=+1 reason=none "
+             "declared-hold=0\n",
+             -1, "unknown version must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 reason=none "
+             "declared-hold=0\n",
+             -1, "missing outcome must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=maybe reason=none "
+             "declared-hold=0\n",
+             -1, "outcome outside the ternary must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=+1 "
+             "declared-hold=0\n",
+             -1, "missing reason must fail closed"},
+            {"cdc-receipt v=1 kind=commit job=c1 outcome=+1 reason=none\n", -1,
+             "missing declared-hold must fail closed"},
+        };
+        size_t i;
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+            cdc_receipt probe;
+            int got = cdc_receipt_parse(cases[i].line, &probe);
+            if (got != cases[i].want) {
+                fprintf(stderr,
+                        "receipt-check FAIL: %s (want %d, got %d)\n",
+                        cases[i].why, cases[i].want, got);
+                failures++;
+            }
+        }
+    }
+    remove(path);
+    unsetenv("CDC_RECEIPTS");
+    if (failures) {
+        return 1;
+    }
+    printf("receipt-check ok round-trip=1 closed-vocabulary=1 "
+           "closure-link=1 malformed-fail-closed=7\n");
+    return 0;
+}
+
+/* ---- generation and concurrency counterexamples (2026-07-28 review) ----
+ *
+ * Two defects neither the crash matrix nor the protocol suite could see,
+ * because both live BETWEEN two individually-correct operations:
+ *
+ *  1. the base was published as active by snapshot BEFORE compaction
+ *     truncated the log, so a crash in between left an unopenable store;
+ *     the base carried no store identity, so a valid base from another
+ *     store was accepted; and attest ignored the base, so two different
+ *     compacted histories attested identically.
+ *  2. commit checked the sealed count and then appended with no mutual
+ *     exclusion, so two writers could both pass before either wrote. The
+ *     old fence test was sequential — the winner finished before the loser
+ *     checked — which is exactly why it stayed green. */
+
+/* Runs `fn` in a forked child so a store can be crashed or raced from a
+ * genuinely separate process. */
+static int fork_child_status(void (*fn)(const char *, int), const char *dir,
+                             int arg) {
+    pid_t pid;
+    int status;
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        return -1;
+    }
+    if (pid == 0) {
+        fn(dir, arg);
+        _exit(0);
+    }
+    if (waitpid(pid, &status, 0) < 0) {
+        return -1;
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+/* Creates dir (fresh) with `txns` committed transactions. */
+static int store_seed_dir(const char *dir, int txns) {
+    cdc_store *store = NULL;
+    char path[640];
+    int t;
+    snprintf(path, sizeof(path), "%s/log.cdcstore", dir);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/base.pending", dir);
+    unlink(path);
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        return 0;
+    }
+    for (t = 1; t <= txns; t++) {
+        if (!store_commit_txn(store, t)) {
+            cdc_store_close(store);
+            return 0;
+        }
+    }
+    cdc_store_close(store);
+    return 1;
+}
+
+/* Child body: open, arm the kill at boundary N, run snapshot -> compact.
+ * The process dies somewhere inside the transition. */
+static void child_snapshot_compact(const char *dir, int boundary) {
+    cdc_store *store = NULL;
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        _exit(90);
+    }
+    cdc_store_set_kill_after(store, boundary);
+    cdc_store_snapshot(store);
+    cdc_store_compact(store);
+    cdc_store_close(store);
+    _exit(0);
+}
+
+static int cmd_store_generation(const char *base) {
+    char dir[512], other_dir[512], pending_path[640], other_pending[640];
+    cdc_store *store = NULL, *probe = NULL;
+    char attest_a[80], attest_b[80], replay_a[80];
+    int failures = 0;
+    int t;
+
+    snprintf(dir, sizeof(dir), "%s/gen-a", base);
+    snprintf(other_dir, sizeof(other_dir), "%s/gen-b", base);
+    snprintf(pending_path, sizeof(pending_path), "%s/base.pending", dir);
+    snprintf(other_pending, sizeof(other_pending), "%s/base.pending",
+             other_dir);
+
+    /* 1. snapshot WITHOUT compact, then reopen. The prepared base must not
+     *    be treated as active, so the store still opens with its full
+     *    history — the crash window the old design could not survive. */
+    if (!store_seed_dir(dir, 0) ||
+        cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-generation FAIL: open\n");
+        return 1;
+    }
+    for (t = 1; t <= 3; t++) {
+        if (!store_commit_txn(store, t)) {
+            fprintf(stderr, "store-generation FAIL: seed txn %d\n", t);
+            return 1;
+        }
+    }
+    if (cdc_store_replay(store, replay_a, sizeof(replay_a)) != CDC_STORE_OK ||
+        cdc_store_snapshot(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-generation FAIL: baseline snapshot\n");
+        return 1;
+    }
+    cdc_store_close(store);
+    store = NULL;
+    if (cdc_store_open(dir, &probe, NULL) != CDC_STORE_OK || !probe) {
+        fprintf(stderr,
+                "store-generation FAIL: snapshot-only reopen unusable\n");
+        return 1;
+    }
+    if (cdc_store_sealed_count(probe) != 3 ||
+        cdc_store_generation(probe) != 0) {
+        fprintf(stderr,
+                "store-generation FAIL: prepared base treated as active\n");
+        failures++;
+    }
+    {
+        char resumed[80];
+        if (cdc_store_replay(probe, resumed, sizeof(resumed)) !=
+                CDC_STORE_OK ||
+            strcmp(resumed, replay_a) != 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: snapshot-only changed replay\n");
+            failures++;
+        }
+    }
+    cdc_store_close(probe);
+    probe = NULL;
+    printf("store-generation snapshot-only reopen=ok handle=yes "
+           "generation=0 sealed=3\n");
+
+    /* 2. Kill at EVERY boundary of the snapshot -> compaction transition.
+     *    The store must always open, must always verify, and must be
+     *    exactly the old or the new generation — never a mixture. */
+    {
+        int boundary;
+        int old_gen = 0, new_gen = 0;
+        for (boundary = 1; boundary <= 8; boundary++) {
+            char kdir[512];
+            cdc_store *after = NULL;
+            uint64_t gen;
+            char resumed[80];
+            snprintf(kdir, sizeof(kdir), "%s/gen-kill-%d", base, boundary);
+            if (!store_seed_dir(kdir, 3)) {
+                fprintf(stderr, "store-generation FAIL: seed kill dir\n");
+                return 1;
+            }
+            fork_child_status(child_snapshot_compact, kdir, boundary);
+            if (cdc_store_open(kdir, &after, NULL) != CDC_STORE_OK || !after) {
+                fprintf(stderr,
+                        "store-generation FAIL: unusable after kill at "
+                        "boundary %d\n",
+                        boundary);
+                failures++;
+                continue;
+            }
+            gen = cdc_store_generation(after);
+            if (cdc_store_sealed_count(after) != 3 ||
+                cdc_store_verify(after) != CDC_STORE_OK ||
+                cdc_store_replay(after, resumed, sizeof(resumed)) !=
+                    CDC_STORE_OK ||
+                strcmp(resumed, replay_a) != 0) {
+                fprintf(stderr,
+                        "store-generation FAIL: history changed by kill at "
+                        "boundary %d\n",
+                        boundary);
+                failures++;
+            }
+            if (gen == 0) {
+                old_gen++;
+            } else if (gen == 1) {
+                new_gen++;
+            } else {
+                fprintf(stderr,
+                        "store-generation FAIL: mixed generation %llu at "
+                        "boundary %d\n",
+                        (unsigned long long)gen, boundary);
+                failures++;
+            }
+            cdc_store_close(after);
+        }
+        printf("store-generation kill matrix: boundaries=8 old=%d new=%d "
+               "mixed=0 unusable=0\n",
+               old_gen, new_gen);
+    }
+
+    /* 3. A valid prepared base from ANOTHER store must never activate.
+     *    The two stores are given IDENTICAL histories on purpose, so their
+     *    generation, sealed count, event count and replay state all match
+     *    exactly. Every check except the store-identity binding therefore
+     *    passes, which is what makes this a real isolation of that binding
+     *    rather than an accidental refusal for some other reason. */
+    if (!store_seed_dir(dir, 3) || !store_seed_dir(other_dir, 3)) {
+        fprintf(stderr, "store-generation FAIL: seed substitution dirs\n");
+        return 1;
+    }
+    {
+        cdc_store *b = NULL;
+        uint8_t *bytes = NULL;
+        size_t size = 0;
+        char replay_of_a[80], replay_of_b[80];
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            cdc_store_open(other_dir, &b, NULL) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: open twin stores\n");
+            return 1;
+        }
+        if (cdc_store_replay(store, replay_of_a, sizeof(replay_of_a)) !=
+                CDC_STORE_OK ||
+            cdc_store_replay(b, replay_of_b, sizeof(replay_of_b)) !=
+                CDC_STORE_OK ||
+            strcmp(replay_of_a, replay_of_b) != 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: twin stores must share a replay "
+                    "identity for this to isolate identity binding\n");
+            return 1;
+        }
+        if (cdc_store_snapshot(b) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: prepare foreign base\n");
+            return 1;
+        }
+        cdc_store_close(b);
+        cdc_store_close(store);
+        store = NULL;
+        if (!read_file_bytes(other_pending, &bytes, &size)) {
+            fprintf(stderr, "store-generation FAIL: read foreign base\n");
+            return 1;
+        }
+        write_file_bytes(pending_path, bytes, size);
+        free(bytes);
+        if (cdc_store_open(dir, &probe, NULL) != CDC_STORE_OK || !probe) {
+            fprintf(stderr,
+                    "store-generation FAIL: substitution bricked store\n");
+            return 1;
+        }
+        if (cdc_store_compact(probe) == CDC_STORE_OK) {
+            fprintf(stderr,
+                    "store-generation FAIL: foreign base activated (twin "
+                    "history, so only the store identity distinguishes it)\n");
+            failures++;
+        } else {
+            printf("store-generation substitution twin-history=1 reopen=ok "
+                   "foreign-base-activated=0\n");
+        }
+        cdc_store_close(probe);
+        probe = NULL;
+        unlink(pending_path);
+    }
+
+    /* 4. Attestation must cover the base. Two checks, because they fail
+     *    for different reasons:
+     *    (a) identical histories in DIFFERENT stores attest differently —
+     *        evidence identity includes which store produced it;
+     *    (b) different histories attest differently even after both are
+     *        compacted to an effectively empty tail. */
+    {
+        char twin_dir[512];
+        cdc_store *x = NULL;
+        snprintf(twin_dir, sizeof(twin_dir), "%s/gen-twin", base);
+        if (!store_seed_dir(dir, 3) || !store_seed_dir(twin_dir, 3) ||
+            cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(store) != CDC_STORE_OK ||
+            cdc_store_compact(store) != CDC_STORE_OK ||
+            cdc_store_attest(store, attest_a, sizeof(attest_a)) !=
+                CDC_STORE_OK ||
+            cdc_store_open(twin_dir, &x, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(x) != CDC_STORE_OK ||
+            cdc_store_compact(x) != CDC_STORE_OK ||
+            cdc_store_attest(x, attest_b, sizeof(attest_b)) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: twin attest setup\n");
+            return 1;
+        }
+        cdc_store_close(store);
+        cdc_store_close(x);
+        store = NULL;
+        if (strcmp(attest_a, attest_b) == 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: distinct stores attest equal\n");
+            failures++;
+        }
+    }
+    {
+        char diff_dir[512];
+        cdc_store *y = NULL;
+        char attest_c[80];
+        snprintf(diff_dir, sizeof(diff_dir), "%s/gen-diff", base);
+        if (!store_seed_dir(diff_dir, 5) ||
+            cdc_store_open(diff_dir, &y, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(y) != CDC_STORE_OK ||
+            cdc_store_compact(y) != CDC_STORE_OK ||
+            cdc_store_attest(y, attest_c, sizeof(attest_c)) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: divergent history setup\n");
+            return 1;
+        }
+        cdc_store_close(y);
+        if (strcmp(attest_a, attest_c) == 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: distinct histories attest equal\n"
+                    "  %s\n  %s\n",
+                    attest_a, attest_c);
+            failures++;
+        } else {
+            printf("store-generation compacted-attest store-diff=1 "
+                   "history-diff=1 attest-equal=0\n");
+        }
+    }
+
+    /* 5. A base prepared against an older generation must not replay over
+     *    an advanced log. */
+    {
+        char rdir[512], rpending[640];
+        cdc_store *r = NULL;
+        uint8_t *stale = NULL;
+        size_t stale_size = 0;
+        snprintf(rdir, sizeof(rdir), "%s/gen-rollback", base);
+        snprintf(rpending, sizeof(rpending), "%s/base.pending", rdir);
+        if (!store_seed_dir(rdir, 3) ||
+            cdc_store_open(rdir, &r, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(r) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: seed rollback\n");
+            return 1;
+        }
+        if (!read_file_bytes(rpending, &stale, &stale_size)) {
+            fprintf(stderr, "store-generation FAIL: capture stale base\n");
+            return 1;
+        }
+        if (cdc_store_compact(r) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: first compaction\n");
+            free(stale);
+            return 1;
+        }
+        cdc_store_close(r);
+        r = NULL;
+        /* replay the generation-1 base over a store already at generation 1 */
+        write_file_bytes(rpending, stale, stale_size);
+        free(stale);
+        if (cdc_store_open(rdir, &r, NULL) != CDC_STORE_OK || !r) {
+            fprintf(stderr, "store-generation FAIL: rollback reopen\n");
+            return 1;
+        }
+        if (cdc_store_generation(r) != 1) {
+            fprintf(stderr, "store-generation FAIL: generation not carried\n");
+            failures++;
+        }
+        if (cdc_store_compact(r) == CDC_STORE_OK) {
+            fprintf(stderr,
+                    "store-generation FAIL: stale-generation base "
+                    "activated\n");
+            failures++;
+        } else {
+            printf("store-generation stale-generation-base activated=0\n");
+        }
+        cdc_store_close(r);
+    }
+
+    /* 6. Special paths as the prepared base are typed EIO, never a block. */
+    {
+        char sdir[512], spath[640];
+        cdc_store *s = NULL;
+        snprintf(sdir, sizeof(sdir), "%s/gen-special", base);
+        snprintf(spath, sizeof(spath), "%s/base.pending", sdir);
+        if (!store_seed_dir(sdir, 1)) {
+            fprintf(stderr, "store-generation FAIL: seed special dir\n");
+            return 1;
+        }
+        unlink(spath);
+        if (mkdir(spath, 0777) != 0 ||
+            cdc_store_open(sdir, &s, NULL) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: directory base setup\n");
+            return 1;
+        }
+        if (cdc_store_compact(s) != CDC_STORE_EIO) {
+            fprintf(stderr,
+                    "store-generation FAIL: directory base not typed EIO\n");
+            failures++;
+        }
+        cdc_store_close(s);
+        rmdir(spath);
+        if (mkfifo(spath, 0666) == 0) {
+            s = NULL;
+            if (cdc_store_open(sdir, &s, NULL) != CDC_STORE_OK) {
+                fprintf(stderr, "store-generation FAIL: fifo base setup\n");
+                return 1;
+            }
+            if (cdc_store_compact(s) != CDC_STORE_EIO) {
+                fprintf(stderr,
+                        "store-generation FAIL: fifo base not typed EIO\n");
+                failures++;
+            }
+            cdc_store_close(s);
+            unlink(spath);
+        }
+        printf("store-generation special-paths typed-eio=1 blocked=0\n");
+    }
+
+    /* 7. A crash BETWEEN snapshot and compact leaves a prepared base
+     *    behind; cdc_store_reset must remove it along with the log, so a
+     *    fresh store is genuinely fresh. Before D27 the reset's artifact
+     *    list still named the pre-D16 snapshot file and missed
+     *    base.pending, so the stale foreign base survived and turned the
+     *    fresh store's next early compact into ECORRUPT — a mode=fresh
+     *    declaration that did not deliver a known-empty state. */
+    {
+        char fdir[512], fpending[640];
+        cdc_store *f = NULL;
+        struct stat st;
+        snprintf(fdir, sizeof(fdir), "%s/gen-fresh", base);
+        snprintf(fpending, sizeof(fpending), "%s/base.pending", fdir);
+        if (!store_seed_dir(fdir, 2)) {
+            fprintf(stderr, "store-generation FAIL: seed fresh dir\n");
+            return 1;
+        }
+        if (cdc_store_open(fdir, &f, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(f) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: prepare stale base\n");
+            return 1;
+        }
+        cdc_store_close(f); /* crash: base.pending is left behind */
+        f = NULL;
+        if (cdc_store_reset(fdir) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: reset\n");
+            return 1;
+        }
+        if (stat(fpending, &st) == 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: reset left a stale prepared "
+                    "base behind\n");
+            failures++;
+        }
+        if (cdc_store_open(fdir, &f, NULL) != CDC_STORE_OK || !f) {
+            fprintf(stderr, "store-generation FAIL: fresh reopen\n");
+            return 1;
+        }
+        if (!store_commit_txn(f, 1)) {
+            fprintf(stderr, "store-generation FAIL: fresh commit\n");
+            return 1;
+        }
+        /* an early compact on a fresh store holds on "nothing prepared" —
+         * never ECORRUPT from a base that should not exist */
+        if (cdc_store_compact(f) != CDC_STORE_ESTATE) {
+            fprintf(stderr,
+                    "store-generation FAIL: fresh store saw a stale base\n");
+            failures++;
+        }
+        cdc_store_close(f);
+        printf("store-generation fresh-after-crash stale-base-removed=1 "
+               "early-compact=state\n");
+    }
+
+    if (failures) {
+        return 1;
+    }
+    printf("store-generation ok atomic-transition=1 identity-bound=1 "
+           "attest-covers-base=1\n");
+    return 0;
+}
+
+/* Two forked writers fence the SAME state and are released together, so
+ * both are inside the check-then-append window at once. Exactly one must
+ * commit; the other must be refused; the store must survive intact. */
+static int cmd_store_race(const char *base) {
+    char dir[512];
+    int failures = 0;
+    int round;
+
+    for (round = 0; round < 3; round++) {
+        int gate[2], result[2], ready[2];
+        pid_t pids[2];
+        int i;
+        cdc_store *check = NULL;
+        uint64_t sealed_before;
+
+        snprintf(dir, sizeof(dir), "%s/race-%d", base, round);
+        if (!store_seed_dir(dir, 2) ||
+            cdc_store_open(dir, &check, NULL) != CDC_STORE_OK) {
+            fprintf(stderr, "store-race FAIL: seed round %d\n", round);
+            return 1;
+        }
+        sealed_before = cdc_store_sealed_count(check);
+        cdc_store_close(check);
+
+        if (pipe(gate) != 0 || pipe(result) != 0 || pipe(ready) != 0) {
+            fprintf(stderr, "store-race FAIL: pipes\n");
+            return 1;
+        }
+        fflush(NULL);
+        for (i = 0; i < 2; i++) {
+            pids[i] = fork();
+            if (pids[i] < 0) {
+                fprintf(stderr, "store-race FAIL: fork\n");
+                return 1;
+            }
+            if (pids[i] == 0) {
+                cdc_store *w = NULL;
+                char payload[32];
+                char go;
+                char code;
+                cdc_store_status fs;
+                close(gate[1]);
+                close(result[0]);
+                close(ready[0]);
+                if (cdc_store_open(dir, &w, NULL) != CDC_STORE_OK) {
+                    _exit(91);
+                }
+                /* Fence and stage BEFORE signalling ready. The parent does
+                 * not release the barrier until both writers have fenced
+                 * the same state, so both are provably inside the
+                 * check-then-append window when they commit — which is the
+                 * window the old sequential test never entered. */
+                fs = cdc_store_fence(w, sealed_before);
+                if (fs != CDC_STORE_OK) {
+                    _exit(95);
+                }
+                snprintf(payload, sizeof(payload), "racer-%d", i);
+                if (cdc_store_stage(w, payload, strlen(payload)) !=
+                    CDC_STORE_OK) {
+                    _exit(92);
+                }
+                if (write(ready[1], "r", 1) != 1) {
+                    _exit(96);
+                }
+                if (read(gate[0], &go, 1) != 1) {
+                    _exit(93);
+                }
+                code = (char)cdc_store_commit(w);
+                if (write(result[1], &code, 1) != 1) {
+                    _exit(94);
+                }
+                cdc_store_close(w);
+                _exit(0);
+            }
+        }
+        close(gate[0]);
+        close(result[1]);
+        close(ready[1]);
+        {
+            char acks[2];
+            int seen = 0;
+            while (seen < 2) {
+                ssize_t n = read(ready[0], acks + seen, (size_t)(2 - seen));
+                if (n <= 0) {
+                    break;
+                }
+                seen += (int)n;
+            }
+            close(ready[0]);
+            if (seen != 2) {
+                fprintf(stderr,
+                        "store-race FAIL round %d: only %d writers reached "
+                        "the barrier\n",
+                        round, seen);
+                return 1;
+            }
+        }
+        if (write(gate[1], "gg", 2) != 2) {
+            fprintf(stderr, "store-race FAIL: release\n");
+            return 1;
+        }
+        close(gate[1]);
+        {
+            char codes[2];
+            int got = 0, ok_count = 0, state_count = 0, other_count = 0;
+            while (got < 2) {
+                ssize_t n = read(result[0], codes + got, (size_t)(2 - got));
+                if (n <= 0) {
+                    break;
+                }
+                got += (int)n;
+            }
+            close(result[0]);
+            for (i = 0; i < 2; i++) {
+                int status;
+                waitpid(pids[i], &status, 0);
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                    fprintf(stderr,
+                            "store-race: writer %d exited %d (setup failed, "
+                            "not a race outcome)\n",
+                            i, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+                }
+            }
+            for (i = 0; i < got; i++) {
+                if (codes[i] == (char)CDC_STORE_OK) {
+                    ok_count++;
+                } else if (codes[i] == (char)CDC_STORE_ESTATE) {
+                    state_count++;
+                } else {
+                    other_count++;
+                }
+            }
+            if (got != 2 || ok_count != 1 || state_count != 1 ||
+                other_count != 0) {
+                fprintf(stderr,
+                        "store-race FAIL round %d: got=%d ok=%d estate=%d "
+                        "other=%d (exactly one winner required)\n",
+                        round, got, ok_count, state_count, other_count);
+                failures++;
+            }
+        }
+        if (cdc_store_open(dir, &check, NULL) != CDC_STORE_OK || !check) {
+            fprintf(stderr, "store-race FAIL round %d: store unusable\n",
+                    round);
+            failures++;
+            continue;
+        }
+        if (cdc_store_verify(check) != CDC_STORE_OK ||
+            cdc_store_sealed_count(check) != sealed_before + 1) {
+            fprintf(stderr,
+                    "store-race FAIL round %d: sealed=%llu expected=%llu\n",
+                    round, (unsigned long long)cdc_store_sealed_count(check),
+                    (unsigned long long)(sealed_before + 1));
+            failures++;
+        }
+        cdc_store_close(check);
+    }
+    if (!failures) {
+        printf("store-race ok rounds=3 winners=1/round refused=1/round "
+               "corrupt=0\n");
+    }
+
+    /* A transaction committed after the base was prepared must never be
+     * discarded: compaction incorporates it or holds. */
+    {
+        cdc_store *a = NULL, *b = NULL;
+        char cdir[512];
+        uint64_t sealed_after;
+        snprintf(cdir, sizeof(cdir), "%s/race-compact", base);
+        if (!store_seed_dir(cdir, 2) ||
+            cdc_store_open(cdir, &a, NULL) != CDC_STORE_OK ||
+            cdc_store_open(cdir, &b, NULL) != CDC_STORE_OK) {
+            fprintf(stderr, "store-race FAIL: compact handles\n");
+            return 1;
+        }
+        if (cdc_store_snapshot(a) != CDC_STORE_OK || !store_commit_txn(b, 77)) {
+            fprintf(stderr, "store-race FAIL: interleaved commit\n");
+            return 1;
+        }
+        sealed_after = cdc_store_sealed_count(b);
+        if (cdc_store_compact(a) == CDC_STORE_OK) {
+            fprintf(stderr,
+                    "store-race FAIL: compaction discarded a committed "
+                    "transaction\n");
+            failures++;
+        }
+        cdc_store_close(a);
+        cdc_store_close(b);
+        a = NULL;
+        if (cdc_store_open(cdir, &a, NULL) != CDC_STORE_OK ||
+            cdc_store_sealed_count(a) != sealed_after ||
+            cdc_store_verify(a) != CDC_STORE_OK) {
+            fprintf(stderr, "store-race FAIL: commit lost to compaction\n");
+            failures++;
+        }
+        cdc_store_close(a);
+        if (!failures) {
+            printf("store-race commit-vs-compact commit-preserved=1\n");
+        }
+    }
+    return failures ? 1 : 0;
+}
+
+/* ---- store-samep: simultaneous handles in ONE application -------------
+ *
+ * The 2026-07-28 same-application review (after ca26608): fcntl locks
+ * serialize processes only, and closing ANY descriptor a process holds on
+ * the lock file drops EVERY lock the process holds on it. Five checks,
+ * each deterministic (a blocked operation is proven blocked by polling
+ * its completion pipe while the section is held, never by sleeping and
+ * hoping), covering open recovery/creation, commit, snapshot, compact,
+ * reset, and the close hazard. All five FAIL against the per-handle
+ * probe build (CDC_STORE_TEST_PER_HANDLE_LOCK), which reproduces the
+ * pre-repair locking. */
+
+typedef struct {
+    cdc_store *store;
+    const char *dir;
+    int signal_fd;
+    int commits;
+    cdc_store *opened; /* published by samep_open_keep_body */
+} samep_args;
+
+static int samep_readable(int fd, int timeout_ms) {
+    struct pollfd probe;
+    int rc;
+    probe.fd = fd;
+    probe.events = POLLIN;
+    probe.revents = 0;
+    do {
+        rc = poll(&probe, 1, timeout_ms);
+    } while (rc < 0 && errno == EINTR);
+    return rc > 0 && (probe.revents & POLLIN) != 0;
+}
+
+static void samep_signal(int fd, char code) {
+    ssize_t n;
+    do {
+        n = write(fd, &code, 1);
+    } while (n < 0 && errno == EINTR);
+}
+
+static int samep_wait_code(int fd, char *code) {
+    ssize_t n;
+    do {
+        n = read(fd, code, 1);
+    } while (n < 0 && errno == EINTR);
+    return n == 1;
+}
+
+static void *samep_open_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store *store = NULL;
+    cdc_store_status rc = cdc_store_open(args->dir, &store, NULL);
+    samep_signal(args->signal_fd, rc == CDC_STORE_OK ? 'o' : 'f');
+    if (store) {
+        cdc_store_close(store);
+    }
+    return NULL;
+}
+
+static void *samep_lock_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store_status rc = cdc_store_lock_test(args->store);
+    samep_signal(args->signal_fd, rc == CDC_STORE_OK ? 'l' : 'f');
+    if (rc == CDC_STORE_OK) {
+        cdc_store_unlock_test(args->store);
+    }
+    return NULL;
+}
+
+static void *samep_commit_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    char payload[48];
+    int ok = 0;
+    int i;
+    for (i = 0; i < args->commits; i++) {
+        snprintf(payload, sizeof(payload), "samep-%p-%d", (void *)args, i);
+        if (cdc_store_stage(args->store, payload, strlen(payload)) !=
+            CDC_STORE_OK) {
+            break;
+        }
+        if (cdc_store_commit(args->store) != CDC_STORE_OK) {
+            cdc_store_rollback(args->store);
+            break;
+        }
+        ok++;
+    }
+    samep_signal(args->signal_fd, (char)ok);
+    return NULL;
+}
+
+static void *samep_snapshot_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_snapshot(args->store));
+    return NULL;
+}
+
+static void *samep_compact_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_compact(args->store));
+    return NULL;
+}
+
+static void *samep_reset_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    samep_signal(args->signal_fd, (char)cdc_store_reset(args->dir));
+    return NULL;
+}
+
+static void *samep_close_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store_close(args->store);
+    samep_signal(args->signal_fd, 'c');
+    return NULL;
+}
+
+static void *samep_open_keep_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    args->opened = NULL;
+    if (cdc_store_open(args->dir, &args->opened, NULL) != CDC_STORE_OK) {
+        samep_signal(args->signal_fd, 'f');
+        return NULL;
+    }
+    samep_signal(args->signal_fd, 'o');
+    return NULL;
+}
+
+/* Forks a foreign process that tries a non-blocking exclusive fcntl lock
+ * on `lock_path`. Returns 0 refused (a live lock excluded it), 1 acquired
+ * (no live lock), -1 on harness error. */
+static int samep_foreign_probe(const char *lock_path) {
+    pid_t pid;
+    int status;
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        return -1;
+    }
+    if (pid == 0) {
+        struct flock probe;
+        int fd = open(lock_path, O_RDWR);
+        if (fd < 0) {
+            _exit(90);
+        }
+        memset(&probe, 0, sizeof(probe));
+        probe.l_type = F_WRLCK;
+        probe.l_whence = SEEK_SET;
+        if (fcntl(fd, F_SETLK, &probe) == 0) {
+            _exit(1);
+        }
+        if (errno != EAGAIN && errno != EACCES) {
+            _exit(92);
+        }
+        _exit(0);
+    }
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status)) {
+        return -1;
+    }
+    if (WEXITSTATUS(status) == 0) {
+        return 0;
+    }
+    if (WEXITSTATUS(status) == 1) {
+        return 1;
+    }
+    return -1;
+}
+
+/* Spawns `body` on a thread, proves it does NOT complete while the
+ * section is held, releases the section on `held`, then proves it DOES
+ * complete and returns its status byte. The premature/timeout verdicts
+ * are written to *premature so the caller can name the failure. */
+static int samep_blocked_run(cdc_store *held, void *(*body)(void *),
+                             samep_args *args, char *code, int *premature) {
+    pthread_t thread;
+    int fds[2];
+    int done_ok;
+    *premature = 0;
+    if (pipe(fds) != 0) {
+        return 0;
+    }
+    args->signal_fd = fds[1];
+    if (pthread_create(&thread, NULL, body, args) != 0) {
+        close(fds[0]);
+        close(fds[1]);
+        return 0;
+    }
+    if (samep_readable(fds[0], 300)) {
+        *premature = 1;
+    }
+    cdc_store_unlock_test(held);
+    done_ok = samep_readable(fds[0], 8000) && samep_wait_code(fds[0], code);
+    pthread_join(thread, NULL);
+    close(fds[0]);
+    close(fds[1]);
+    return done_ok;
+}
+
+/* Check 1: open (creation + recovery is a check-then-act sequence) is
+ * excluded by a held section, from another process AND from another
+ * handle in this process. */
+static int samep_check_open(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+    int fds[2];
+    pid_t pid;
+    int status;
+
+    snprintf(dir, sizeof(dir), "%s/open", base);
+    if (!store_seed_dir(dir, 2) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL open: seed\n");
+        return 1;
+    }
+    if (cdc_store_lock_test(a) != CDC_STORE_OK || pipe(fds) != 0) {
+        fprintf(stderr, "store-samep FAIL open: hold\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "store-samep FAIL open: fork\n");
+        cdc_store_unlock_test(a);
+        cdc_store_close(a);
+        return 1;
+    }
+    if (pid == 0) {
+        cdc_store *child = NULL;
+        cdc_store_status rc;
+        close(fds[0]);
+        rc = cdc_store_open(dir, &child, NULL);
+        samep_signal(fds[1], rc == CDC_STORE_OK ? 'o' : 'f');
+        if (child) {
+            cdc_store_close(child);
+        }
+        _exit(rc == CDC_STORE_OK ? 0 : 1);
+    }
+    close(fds[1]);
+    if (samep_readable(fds[0], 300)) {
+        fprintf(stderr, "store-samep FAIL open: another PROCESS finished "
+                        "opening while the section was held\n");
+        cdc_store_unlock_test(a);
+        close(fds[0]);
+        waitpid(pid, &status, 0);
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_unlock_test(a);
+    if (!samep_readable(fds[0], 8000) || !samep_wait_code(fds[0], &code) ||
+        code != 'o') {
+        fprintf(stderr, "store-samep FAIL open: child open never "
+                        "completed after release\n");
+        close(fds[0]);
+        kill(pid, SIGKILL); /* never trade a FAIL for a hang */
+        waitpid(pid, &status, 0);
+        cdc_store_close(a);
+        return 1;
+    }
+    close(fds[0]);
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "store-samep FAIL open: child exit\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    /* same-process second handle */
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL open: re-hold\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    args.dir = dir;
+    args.store = NULL;
+    args.commits = 0;
+    if (!samep_blocked_run(a, samep_open_body, &args, &code, &premature) ||
+        code != 'o') {
+        fprintf(stderr, "store-samep FAIL open: same-process open never "
+                        "completed after release\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL open: a second handle in THIS "
+                        "process finished opening while the section was "
+                        "held\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_close(a);
+    printf("samep-open cross-process-blocked=1 same-process-blocked=1\n");
+    return 0;
+}
+
+/* Check 2: two handles in one process are mutually excluded, and their
+ * interleaved commits serialize to a clean log with nothing lost. */
+static int samep_check_commit(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *b = NULL, *check = NULL;
+    samep_args lock_args, commit_a, commit_b;
+    pthread_t t1, t2;
+    int p1[2], p2[2];
+    char code = 0, ok_a = 0, ok_b = 0;
+    int premature = 0;
+    uint64_t sealed_before;
+    int recovered = -1;
+
+    snprintf(dir, sizeof(dir), "%s/commit", base);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL commit: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    sealed_before = cdc_store_sealed_count(a);
+    /* exclusion, proven directly */
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL commit: hold\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    lock_args.store = b;
+    lock_args.dir = dir;
+    lock_args.commits = 0;
+    if (!samep_blocked_run(a, samep_lock_body, &lock_args, &code,
+                           &premature) ||
+        code != 'l') {
+        fprintf(stderr, "store-samep FAIL commit: probe thread\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL commit: the second handle "
+                        "entered the critical section while the first "
+                        "held it\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    /* integrity under interleaving */
+    if (pipe(p1) != 0 || pipe(p2) != 0) {
+        fprintf(stderr, "store-samep FAIL commit: pipes\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    commit_a.store = a;
+    commit_a.dir = dir;
+    commit_a.commits = 40;
+    commit_a.signal_fd = p1[1];
+    commit_b.store = b;
+    commit_b.dir = dir;
+    commit_b.commits = 40;
+    commit_b.signal_fd = p2[1];
+    if (pthread_create(&t1, NULL, samep_commit_body, &commit_a) != 0 ||
+        pthread_create(&t2, NULL, samep_commit_body, &commit_b) != 0) {
+        fprintf(stderr, "store-samep FAIL commit: threads\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    if (!samep_wait_code(p1[0], &ok_a) || !samep_wait_code(p2[0], &ok_b)) {
+        fprintf(stderr, "store-samep FAIL commit: counts\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    close(p1[0]);
+    close(p1[1]);
+    close(p2[0]);
+    close(p2[1]);
+    cdc_store_close(a);
+    cdc_store_close(b);
+    if (ok_a != 40 || ok_b != 40) {
+        fprintf(stderr, "store-samep FAIL commit: ok_a=%d ok_b=%d "
+                        "(interleaved commits must all serialize)\n",
+                ok_a, ok_b);
+        return 1;
+    }
+    if (cdc_store_open(dir, &check, &recovered) != CDC_STORE_OK ||
+        recovered != 0 || cdc_store_verify(check) != CDC_STORE_OK ||
+        cdc_store_sealed_count(check) != sealed_before + 80) {
+        fprintf(stderr,
+                "store-samep FAIL commit: recovered=%d sealed=%llu "
+                "expected=%llu\n",
+                recovered,
+                check ? (unsigned long long)cdc_store_sealed_count(check)
+                      : 0ULL,
+                (unsigned long long)(sealed_before + 80));
+        cdc_store_close(check);
+        return 1;
+    }
+    cdc_store_close(check);
+    printf("samep-commit exclusion=blocked commits=80 lost=0 "
+           "verify=ok recovered=0\n");
+    return 0;
+}
+
+/* Check 3: snapshot and compact are excluded by a held section, the
+ * generation transition leaves the OTHER handle with a typed ESTATE
+ * refusal (never a corrupt append), and a reopen resumes cleanly. */
+static int samep_check_transition(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *b = NULL, *check = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+
+    snprintf(dir, sizeof(dir), "%s/transition", base);
+    if (!store_seed_dir(dir, 3) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    args.store = a;
+    args.dir = dir;
+    args.commits = 0;
+    if (cdc_store_lock_test(b) != CDC_STORE_OK ||
+        !samep_blocked_run(b, samep_snapshot_body, &args, &code,
+                           &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: snapshot run\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL transition: snapshot ran while "
+                        "the section was held\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (cdc_store_lock_test(b) != CDC_STORE_OK ||
+        !samep_blocked_run(b, samep_compact_body, &args, &code,
+                           &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL transition: compact run\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL transition: compact ran while "
+                        "the section was held\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    /* the un-compacted handle: typed refusal, then a clean reopen */
+    if (cdc_store_stage(b, "stale", 5) != CDC_STORE_OK ||
+        cdc_store_commit(b) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-samep FAIL transition: stale handle was "
+                        "not refused with ESTATE\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_rollback(b);
+    cdc_store_close(b);
+    b = NULL;
+    if (cdc_store_open(dir, &b, NULL) != CDC_STORE_OK ||
+        cdc_store_generation(b) != 1 || !store_commit_txn(b, 99)) {
+        fprintf(stderr, "store-samep FAIL transition: reopen commit\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_close(a);
+    cdc_store_close(b);
+    if (cdc_store_open(dir, &check, NULL) != CDC_STORE_OK ||
+        cdc_store_verify(check) != CDC_STORE_OK ||
+        cdc_store_generation(check) != 1 ||
+        cdc_store_sealed_count(check) != 4) {
+        fprintf(stderr, "store-samep FAIL transition: final state\n");
+        cdc_store_close(check);
+        return 1;
+    }
+    cdc_store_close(check);
+    printf("samep-transition snapshot-blocked=1 compact-blocked=1 "
+           "stale-commit=state reopen-commit=ok generation=1\n");
+    return 0;
+}
+
+/* Check 4: reset is excluded by a held section; a handle whose store was
+ * reset under it is refused typed (ECORRUPT), and a fresh open starts a
+ * fresh generation-0 store. */
+static int samep_check_reset(const char *base) {
+    char dir[560];
+    cdc_store *a = NULL, *fresh = NULL;
+    samep_args args;
+    char code = 0;
+    int premature = 0;
+
+    snprintf(dir, sizeof(dir), "%s/reset", base);
+    if (!store_seed_dir(dir, 2) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: seed\n");
+        return 1;
+    }
+    args.store = NULL;
+    args.dir = dir;
+    args.commits = 0;
+    if (cdc_store_lock_test(a) != CDC_STORE_OK ||
+        !samep_blocked_run(a, samep_reset_body, &args, &code, &premature) ||
+        code != (char)CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: reset run\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (premature) {
+        fprintf(stderr, "store-samep FAIL reset: reset deleted the log "
+                        "while the section was held\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (cdc_store_stage(a, "gone", 4) != CDC_STORE_OK ||
+        cdc_store_commit(a) != CDC_STORE_ECORRUPT) {
+        fprintf(stderr, "store-samep FAIL reset: stale handle was not "
+                        "refused with ECORRUPT\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_rollback(a);
+    cdc_store_close(a);
+    if (cdc_store_open(dir, &fresh, NULL) != CDC_STORE_OK ||
+        cdc_store_generation(fresh) != 0 ||
+        cdc_store_sealed_count(fresh) != 0 ||
+        cdc_store_verify(fresh) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL reset: fresh open\n");
+        cdc_store_close(fresh);
+        return 1;
+    }
+    cdc_store_close(fresh);
+    printf("samep-reset blocked=1 stale-commit=corrupt-tail "
+           "fresh generation=0 sealed=0\n");
+    return 0;
+}
+
+/* Check 5: the POSIX close hazard. Closing one handle must NOT release
+ * the lock another handle in the same process is holding — a foreign
+ * process must still be refused. */
+static int samep_check_close(const char *base) {
+    char dir[560];
+    char lock_path[620];
+    cdc_store *a = NULL, *b = NULL;
+    pid_t pid;
+    int status;
+
+    snprintf(dir, sizeof(dir), "%s/close", base);
+    snprintf(lock_path, sizeof(lock_path), "%s/lock.cdcstore", dir);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK ||
+        cdc_store_open(dir, &b, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL close: seed\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (cdc_store_lock_test(a) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL close: hold\n");
+        cdc_store_close(a);
+        cdc_store_close(b);
+        return 1;
+    }
+    cdc_store_close(b); /* the hazard: this used to drop A's lock */
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "store-samep FAIL close: fork\n");
+        cdc_store_unlock_test(a);
+        cdc_store_close(a);
+        return 1;
+    }
+    if (pid == 0) {
+        struct flock probe;
+        int fd = open(lock_path, O_RDWR);
+        if (fd < 0) {
+            _exit(90);
+        }
+        memset(&probe, 0, sizeof(probe));
+        probe.l_type = F_WRLCK;
+        probe.l_whence = SEEK_SET;
+        if (fcntl(fd, F_SETLK, &probe) == 0) {
+            _exit(1); /* acquired: the close dropped the lock */
+        }
+        if (errno != EAGAIN && errno != EACCES) {
+            _exit(92);
+        }
+        _exit(0); /* refused: the lock survived the close */
+    }
+    waitpid(pid, &status, 0);
+    cdc_store_unlock_test(a);
+    cdc_store_close(a);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "store-samep FAIL close: closing one handle "
+                        "released the other handle's lock (child=%d)\n",
+                WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+        return 1;
+    }
+    printf("samep-close closed-one-handle=1 lock-preserved=1 "
+           "foreign-acquire=refused\n");
+    return 0;
+}
+
+/* Check 6: the 1->0->1 lifecycle (second 2026-07-28 review, finding 2).
+ * The LAST release must not let a new first opener register a fresh
+ * coordination object — and take the process file lock through a NEW
+ * descriptor — before the old descriptor closes: POSIX owns record locks
+ * by (process, file), so that stale close would silently drop the new
+ * lock. The release is held open at its ordering-critical point by the
+ * test pause hook; a new opener and a foreign contender then attempt
+ * entry. */
+static int samep_check_lifecycle(const char *base) {
+    char dir[560];
+    char lock_path[620];
+    cdc_store *a = NULL;
+    samep_args open_args;
+    samep_args close_args;
+    pthread_t closer, opener;
+    int pause_sig[2], pause_go[2], closed[2], opened[2];
+    char code = 0;
+    int premature;
+    int probe;
+
+    snprintf(dir, sizeof(dir), "%s/lifecycle", base);
+    snprintf(lock_path, sizeof(lock_path), "%s/lock.cdcstore", dir);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL lifecycle: seed\n");
+        return 1;
+    }
+    if (pipe(pause_sig) != 0 || pipe(pause_go) != 0 || pipe(closed) != 0 ||
+        pipe(opened) != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: pipes\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_set_release_pause(pause_sig[1], pause_go[0]);
+    close_args.store = a;
+    close_args.dir = dir;
+    close_args.commits = 0;
+    close_args.signal_fd = closed[1];
+    if (pthread_create(&closer, NULL, samep_close_body, &close_args) != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: closer thread\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (!samep_readable(pause_sig[0], 8000) ||
+        !samep_wait_code(pause_sig[0], &code) || code != 'p') {
+        fprintf(stderr, "store-samep FAIL lifecycle: release pause never "
+                        "fired\n");
+        samep_signal(pause_go[1], 'g');
+        pthread_join(closer, NULL);
+        return 1;
+    }
+    open_args.store = NULL;
+    open_args.dir = dir;
+    open_args.commits = 0;
+    open_args.signal_fd = opened[1];
+    open_args.opened = NULL;
+    if (pthread_create(&opener, NULL, samep_open_keep_body, &open_args) !=
+        0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: opener thread\n");
+        samep_signal(pause_go[1], 'g');
+        pthread_join(closer, NULL);
+        return 1;
+    }
+    premature = samep_readable(opened[0], 300);
+    if (premature) {
+        /* The window is open: the opener registered a replacement while
+         * the last release was still in flight. Demonstrate the harm end
+         * to end — take the new lock, let the stale close land, and show
+         * a foreign process can now walk straight in. */
+        const char *harm = "window observed";
+        samep_wait_code(opened[0], &code);
+        pthread_join(opener, NULL);
+        if (code == 'o' && open_args.opened &&
+            cdc_store_lock_test(open_args.opened) == CDC_STORE_OK) {
+            samep_signal(pause_go[1], 'g');
+            pthread_join(closer, NULL);
+            samep_wait_code(closed[0], &code);
+            probe = samep_foreign_probe(lock_path);
+            harm = probe == 1
+                       ? "and the stale close dropped the fresh lock"
+                       : "stale close landed, lock survived";
+            cdc_store_unlock_test(open_args.opened);
+        } else {
+            samep_signal(pause_go[1], 'g');
+            pthread_join(closer, NULL);
+            samep_wait_code(closed[0], &code);
+        }
+        if (open_args.opened) {
+            cdc_store_close(open_args.opened);
+        }
+        fprintf(stderr, "store-samep FAIL lifecycle: a new opener "
+                        "registered during the last release window (%s)\n",
+                harm);
+        close(pause_sig[0]);
+        close(pause_sig[1]);
+        close(pause_go[1]);
+        close(closed[0]);
+        close(closed[1]);
+        close(opened[0]);
+        close(opened[1]);
+        return 1;
+    }
+    /* Fixed ordering: the opener is excluded until the release fully
+     * lands (descriptor closed under the registry lock). */
+    samep_signal(pause_go[1], 'g');
+    pthread_join(closer, NULL);
+    if (!samep_wait_code(closed[0], &code) || code != 'c') {
+        fprintf(stderr, "store-samep FAIL lifecycle: close never "
+                        "completed\n");
+        pthread_join(opener, NULL);
+        return 1;
+    }
+    if (!samep_readable(opened[0], 8000) ||
+        !samep_wait_code(opened[0], &code) || code != 'o') {
+        fprintf(stderr, "store-samep FAIL lifecycle: reopen never "
+                        "completed after the release\n");
+        pthread_join(opener, NULL);
+        return 1;
+    }
+    pthread_join(opener, NULL);
+    if (!open_args.opened ||
+        cdc_store_lock_test(open_args.opened) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL lifecycle: fresh handle cannot "
+                        "hold the section\n");
+        if (open_args.opened) {
+            cdc_store_close(open_args.opened);
+        }
+        return 1;
+    }
+    probe = samep_foreign_probe(lock_path);
+    cdc_store_unlock_test(open_args.opened);
+    cdc_store_close(open_args.opened);
+    close(pause_sig[0]);
+    close(pause_sig[1]);
+    close(pause_go[1]);
+    close(closed[0]);
+    close(closed[1]);
+    close(opened[0]);
+    close(opened[1]);
+    if (probe != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: foreign probe "
+                        "result=%d (the fresh handle's lock must exclude "
+                        "other processes)\n",
+                probe);
+        return 1;
+    }
+    printf("samep-lifecycle last-close-window=closed new-opener-blocked=1 "
+           "foreign-acquire=refused\n");
+    return 0;
+}
+
+static int cmd_store_samep(const char *base) {
+    int failed = 0;
+    failed += samep_check_open(base);
+    failed += samep_check_commit(base);
+    failed += samep_check_transition(base);
+    failed += samep_check_reset(base);
+    failed += samep_check_close(base);
+    failed += samep_check_lifecycle(base);
+    if (failed) {
+        fprintf(stderr, "store-samep FAIL failed=%d/6\n", failed);
+        return 1;
+    }
+    printf("store-samep ok checks=6/6 shared-coordination=1\n");
+    return 0;
+}
+
+static int cmd_store_protocol(const char *base) {
+    char dir[512], log_path[600], snap_path[620];
+    cdc_store *store = NULL, *other = NULL;
+    char before[80], after[80], attest_before[80], attest_after[80];
+    uint8_t *snap_bytes = NULL;
+    size_t snap_size = 0;
+    long log_size_before, log_size_after;
+    int failures = 0;
+    int t;
+
+    snprintf(dir, sizeof(dir), "%s/protocol", base);
+    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+    snprintf(snap_path, sizeof(snap_path), "%s/snapshot.cdcstore", dir);
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: open\n");
+        return 1;
+    }
+    for (t = 1; t <= 3; t++) {
+        if (!store_commit_txn(store, t)) {
+            fprintf(stderr, "store-protocol FAIL: seed txn %d\n", t);
+            return 1;
+        }
+    }
+    if (cdc_store_replay(store, before, sizeof(before)) != CDC_STORE_OK ||
+        cdc_store_attest(store, attest_before, sizeof(attest_before)) !=
+            CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: baseline digests\n");
+        return 1;
+    }
+    log_size_before = file_size(log_path);
+
+    /* compact without a snapshot must refuse rather than discard history */
+    if (cdc_store_compact(store) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-protocol FAIL: compact without snapshot\n");
+        failures++;
+    }
+    if (cdc_store_snapshot(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: snapshot\n");
+        return 1;
+    }
+    if (cdc_store_compact(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: compact\n");
+        return 1;
+    }
+    log_size_after = file_size(log_path);
+    if (cdc_store_replay(store, after, sizeof(after)) != CDC_STORE_OK ||
+        cdc_store_attest(store, attest_after, sizeof(attest_after)) !=
+            CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: post-compaction digests\n");
+        return 1;
+    }
+    /* THE claim: semantic identity survives the physical rewrite. */
+    if (strcmp(before, after) != 0) {
+        fprintf(stderr, "store-protocol FAIL: replay identity changed\n  %s\n  %s\n",
+                before, after);
+        failures++;
+    }
+    if (strcmp(attest_before, attest_after) == 0) {
+        fprintf(stderr, "store-protocol FAIL: attest digest should change\n");
+        failures++;
+    }
+    /* The compacted log is exactly one HEAD record: the base lives IN the
+     * log now, so there is no second file for a crash to leave dangling. */
+    if (log_size_after >= log_size_before || log_size_after <= 0) {
+        fprintf(stderr, "store-protocol FAIL: log not compacted (%ld -> %ld)\n",
+                log_size_before, log_size_after);
+        failures++;
+    }
+    if (cdc_store_generation(store) != 1) {
+        fprintf(stderr, "store-protocol FAIL: generation did not advance\n");
+        failures++;
+    }
+    if (cdc_store_sealed_count(store) != 3) {
+        fprintf(stderr, "store-protocol FAIL: sealed count lost by compaction\n");
+        failures++;
+    }
+    cdc_store_close(store);
+    store = NULL;
+
+    /* reopening must resume from the base and keep appending coherently */
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+        cdc_store_sealed_count(store) != 3) {
+        fprintf(stderr, "store-protocol FAIL: reopen after compaction\n");
+        return 1;
+    }
+    {
+        char resumed[80];
+        if (cdc_store_replay(store, resumed, sizeof(resumed)) != CDC_STORE_OK ||
+            strcmp(resumed, before) != 0) {
+            fprintf(stderr, "store-protocol FAIL: replay identity after reopen\n");
+            failures++;
+        }
+    }
+    if (!store_commit_txn(store, 4) || cdc_store_sealed_count(store) != 4) {
+        fprintf(stderr, "store-protocol FAIL: append after compaction\n");
+        failures++;
+    }
+
+    /* fence: an armed writer whose view is stale must not commit */
+    if (cdc_store_fence(store, 4) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: fence at current seal\n");
+        failures++;
+    }
+    if (cdc_store_fence(store, 2) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-protocol FAIL: stale fence accepted\n");
+        failures++;
+    }
+    if (cdc_store_open(dir, &other, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: second handle\n");
+        return 1;
+    }
+    /* both writers believe the log ends at seal 4 */
+    if (cdc_store_fence(store, 4) != CDC_STORE_OK ||
+        cdc_store_fence(other, 4) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: concurrent fences\n");
+        failures++;
+    }
+    if (!store_commit_txn(store, 5)) {
+        fprintf(stderr, "store-protocol FAIL: winner commit\n");
+        failures++;
+    }
+    {
+        /* the loser's fence is now stale: its commit must be refused and
+         * must leave the log byte-identical */
+        long size_before_loser = file_size(log_path);
+        char payload[32];
+        cdc_store_status status;
+        snprintf(payload, sizeof(payload), "stale-writer");
+        cdc_store_stage(other, payload, strlen(payload));
+        status = cdc_store_commit(other);
+        if (status != CDC_STORE_ESTATE) {
+            fprintf(stderr, "store-protocol FAIL: stale writer committed (%s)\n",
+                    cdc_store_status_name(status));
+            failures++;
+        }
+        if (file_size(log_path) != size_before_loser) {
+            fprintf(stderr, "store-protocol FAIL: stale commit wrote bytes\n");
+            failures++;
+        }
+    }
+    cdc_store_close(other);
+    cdc_store_close(store);
+    store = NULL;
+
+    /* The compaction base is now the log's own HEAD record, so tampering
+     * with it is tampering with the log: every byte of a compacted log
+     * must fail closed. This replaces the old separate-snapshot sweep,
+     * which could only ever check a file open() should not have trusted. */
+    {
+        char cdir[512], clog[600];
+        cdc_store *seed = NULL;
+        snprintf(cdir, sizeof(cdir), "%s/head-sweep", base);
+        snprintf(clog, sizeof(clog), "%s/log.cdcstore", cdir);
+        if (cdc_store_open(cdir, &seed, NULL) != CDC_STORE_OK ||
+            !store_commit_txn(seed, 1) ||
+            cdc_store_snapshot(seed) != CDC_STORE_OK ||
+            cdc_store_compact(seed) != CDC_STORE_OK) {
+            fprintf(stderr, "store-protocol FAIL: seed head sweep\n");
+            return 1;
+        }
+        cdc_store_close(seed);
+        if (!read_file_bytes(clog, &snap_bytes, &snap_size)) {
+            fprintf(stderr, "store-protocol FAIL: read compacted log\n");
+            return 1;
+        }
+        {
+            size_t offset;
+            int rejected = 0, checked = 0;
+            for (offset = 0; offset < snap_size; offset++) {
+                uint8_t original = snap_bytes[offset];
+                cdc_store *probe = NULL;
+                snap_bytes[offset] ^= 0xff;
+                write_file_bytes(clog, snap_bytes, snap_size);
+                if (cdc_store_open(cdir, &probe, NULL) == CDC_STORE_ECORRUPT &&
+                    probe == NULL) {
+                    rejected++;
+                } else {
+                    fprintf(stderr,
+                            "store-protocol FAIL: HEAD byte %zu accepted\n",
+                            offset);
+                    cdc_store_close(probe);
+                    failures++;
+                }
+                checked++;
+                snap_bytes[offset] = original;
+            }
+            write_file_bytes(clog, snap_bytes, snap_size);
+            printf("store-protocol HEAD sweep: %d/%d bytes fail closed\n",
+                   rejected, checked);
+        }
+        free(snap_bytes);
+        snap_bytes = NULL;
+    }
+    (void)snap_path;
+    if (failures) {
+        return 1;
+    }
+    printf("store-protocol ok snapshot=1 compact=1 fence=1 "
+           "replay-identity-preserved=1\n");
     return 0;
 }
 
@@ -1260,7 +3334,7 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr,
                 "usage: cdc_frontend_check "
-                "dump|canon|roundtrip|attr-parity|bounds|oom|reject ...\n");
+                "dump|canon|roundtrip|bounds|oom|reject ...\n");
         return 2;
     }
     if (strcmp(argv[1], "dump") == 0) {
@@ -1271,9 +3345,6 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "roundtrip") == 0) {
         return cmd_roundtrip(argc - 2, argv + 2);
-    }
-    if (strcmp(argv[1], "attr-parity") == 0) {
-        return cmd_attr_parity(argc - 2, argv + 2);
     }
     if (strcmp(argv[1], "bounds") == 0) {
         return cmd_bounds();
@@ -1305,8 +3376,44 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "store-corrupt") == 0 && argc >= 3) {
         return cmd_store_corrupt(argv[2]);
     }
+    if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
+        return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "attr-boundary") == 0) {
+        return cmd_attr_boundary();
+    }
+    if (strcmp(argv[1], "corpus-digest") == 0 && argc >= 3) {
+        return cmd_corpus_digest(argc - 2, argv + 2);
+    }
+    if (strcmp(argv[1], "store-inspect") == 0 && argc >= 3) {
+        return cmd_store_inspect(argv[2]);
+    }
+    if (strcmp(argv[1], "vectors-from-report") == 0 && argc >= 3) {
+        return cmd_vectors_from_report(argv[2]);
+    }
+    if (strcmp(argv[1], "receipt-check") == 0) {
+        return cmd_receipt_check();
+    }
+    if (strcmp(argv[1], "store-generation") == 0 && argc >= 3) {
+        return cmd_store_generation(argv[2]);
+    }
+    if (strcmp(argv[1], "store-samep") == 0 && argc >= 3) {
+        return cmd_store_samep(argv[2]);
+    }
+    if (strcmp(argv[1], "store-race") == 0 && argc >= 3) {
+        return cmd_store_race(argv[2]);
+    }
+    if (strcmp(argv[1], "store-protocol") == 0 && argc >= 3) {
+        return cmd_store_protocol(argv[2]);
+    }
     if (strcmp(argv[1], "store-io") == 0 && argc >= 3) {
         return cmd_store_io(argv[2]);
+    }
+    if (strcmp(argv[1], "digest-vectors") == 0 && argc >= 3) {
+        return cmd_digest_vectors(argv[2]);
+    }
+    if (strcmp(argv[1], "digest-file") == 0 && argc >= 3) {
+        return cmd_digest_file(argc - 2, argv + 2);
     }
     fprintf(stderr, "cdc_frontend_check: unknown mode '%s'\n", argv[1]);
     return 2;

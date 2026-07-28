@@ -7,6 +7,7 @@ static const char *const FORM_DIRECTIVES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
+    "store",   "persist",
 };
 
 int cdc_directive_is_form(const char *directive) {

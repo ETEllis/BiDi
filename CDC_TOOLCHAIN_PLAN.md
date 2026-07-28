@@ -497,3 +497,25 @@ scheduled for deletion).
 - Nothing in this plan enters the proved tier of
   `VERIFICATION_OBLIGATION_MATRIX.md` without mechanization; all new claims
   land as witnessed or runtime-checked.
+
+
+## Amendment Record — Phase I landed (2026-07-28)
+
+`cdc build`, `cdc install`, and `cdc x` are live (DECISIONS D28), with the
+gates and counterexamples in `scripts/verify.sh`. Scope notes against this
+plan's original phase sketches:
+
+- The Phase 0 manifest layer (`package.cdc`, `lock.cdc`, versioned
+  dependency resolution) did NOT land and remains queued; packages are
+  plain directories installed by name. Versioned coexistence arrives with
+  that layer.
+- The per-command capability allocations sketched here (H6–H11) are
+  superseded: H6 was allocated to the persistence framework (D15), and
+  Phase I introduced no new frameworks or grammar — build/install/x are
+  driver commands over the existing language surface, and kernel.cdc is
+  untouched.
+- `cdc x` is trusted-local-only until the CT5 hostile-package gates pass;
+  git/registry/network package sources remain named queued host gates.
+- Bundle integrity uses canonical BLAKE3 (D2 closed), not the bridge4096
+  tag sketched here; Ed25519 signing over bundle and package manifests
+  remains queued.

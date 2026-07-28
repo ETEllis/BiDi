@@ -2,6 +2,8 @@
 
 #include "cdc_registry.h"
 
+#include "cdc_receipt.h"
+
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,6 +128,7 @@ static const char *const FORM_NAMES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
+    "store",   "persist",
 };
 enum { FORM_NAME_COUNT = sizeof(FORM_NAMES) / sizeof(FORM_NAMES[0]) };
 
@@ -414,6 +417,8 @@ static const link_form LINK_FORMS[] = {
     {"council", {"deliberate", NULL, NULL}},
     {"evolution", {"evolve", NULL, NULL}},
     {"universal", {"universal", NULL, NULL}},
+    {"store", {"store", NULL, NULL}},
+    {"persistence", {"persist", NULL, NULL}},
 };
 enum { LINK_FORM_COUNT = sizeof(LINK_FORMS) / sizeof(LINK_FORMS[0]) };
 
@@ -925,6 +930,19 @@ static int eval_expect(cdc_registry *registry, const cdc_stmt *stmt,
                              mem);
     }
 
+    if (strcmp(head, "store") == 0 && argc >= 2) {
+        const char *forms[1];
+        forms[0] = "store";
+        return eval_job_link(registry, stmt, "store", forms, 1, "job", mem);
+    }
+
+    if (strcmp(head, "persistence") == 0 && argc >= 2) {
+        const char *forms[1];
+        forms[0] = "persist";
+        return eval_job_link(registry, stmt, "persistence", forms, 1, "job",
+                             mem);
+    }
+
     if (strcmp(head, "python-files") == 0 && argc >= 3) {
         strlist files = {0};
         long want;
@@ -971,6 +989,42 @@ unknown:
         fprintf(mem, " %s", expect_arg(stmt, i));
     }
     return 0;
+}
+
+int cdc_registry_vectors(cdc_registry *registry, const char *python_root,
+                         FILE *stream) {
+    size_t i;
+    size_t passed = 0;
+    cdc_vector_chain chain;
+
+    cdc_vector_chain_init(&chain);
+    for (i = 0; i < registry->expect_count; i++) {
+        char *label_buf = NULL;
+        size_t label_len = 0;
+        FILE *mem = open_memstream(&label_buf, &label_len);
+        char record[512];
+        int ok;
+        if (!mem) {
+            return -1;
+        }
+        ok = eval_expect(registry, registry->expects[i].stmt, python_root,
+                         mem);
+        fclose(mem);
+        passed += ok ? 1 : 0;
+        /* The effects digest covers the check's full evaluated label, so a
+         * check whose verdict is unchanged but whose REASON changed still
+         * shows up as a different vector. */
+        if (cdc_vector_render(&chain, registry->expects[i].source,
+                              ok ? "commit" : "fail", NULL, label_buf,
+                              label_len, NULL, record,
+                              sizeof(record)) < 0) {
+            free(label_buf);
+            return -1;
+        }
+        free(label_buf);
+        fprintf(stream, "%s\n", record);
+    }
+    return passed == registry->expect_count ? 1 : 0;
 }
 
 int cdc_registry_report(cdc_registry *registry, const char *python_root,

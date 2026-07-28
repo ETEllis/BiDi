@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Möbi𝒰s Console — BiDi Coherence-Delta Calculus</title>
+<meta name="description" content="Operator console for the CDC toolchain: typed ternary outcomes, the Universal Operator's double cover, the bridge codebook, and the durable store's failure taxonomy.">
+<style>
+/* ---------------------------------------------------------------------------
+   Möbi𝒰s design tokens — mirrored verbatim from ui/design/mobius-tokens.json.
+   scripts/verify.sh fails if these drift. Nothing here is decorative invention:
+   the palette is the identity's color law (cobalt-indigo substrate → phase
+   indigo → white/electric hinge → cyan resolve) and 7.16197° is the wordmark's
+   shipped invariant, used as the product's only tilt angle.
+--------------------------------------------------------------------------- */
+:root{
+  --abyss:#040d1d; --night:#07152c; --deep:#0b1e3d; --raised:#122a52; --hairline:#1d356b;
+  --indigo:#707ddd; --indigo-deep:#394db8; --violet-ink:#27316f;
+  --electric:#137dff; --electric-deep:#0c6fd8; --paper:#f8fbff;
+  --cyan:#31e2e7; --cyan-lift:#43f0ec; --teal:#008d9b;
+  --ember:#ff6b57;
+  --tilt:7.16197deg;
+  --r-sm:6px; --r-md:10px; --r-lg:16px;
+  --s-xs:4px; --s-sm:8px; --s-md:16px; --s-lg:24px; --s-xl:40px; --s-xxl:64px;
+  --restore:2.4s;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1100px 620px at 78% -8%, rgba(19,125,255,.16), transparent 62%),
+    radial-gradient(820px 520px at 4% 8%, rgba(112,125,221,.12), transparent 58%),
+    var(--abyss);
+  color:var(--paper);
+  font:400 15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  letter-spacing:-.005em;
+  min-height:100vh;
+}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;font-variant-ligatures:none}
+.wrap{max-width:1120px;margin:0 auto;padding:var(--s-xxl) var(--s-lg) var(--s-xxl)}
+
+/* ---- masthead ---------------------------------------------------------- */
+.mast{display:flex;align-items:center;gap:var(--s-md);margin-bottom:var(--s-xl)}
+.mark{width:56px;height:40px;flex:none;transform:rotate(var(--tilt))}
+.mast h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em}
+.mast p{margin:1px 0 0;font-size:11px;color:var(--indigo);letter-spacing:.01em}
+.mast .spacer{flex:1}
+.live{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:500;
+  color:rgba(248,251,255,.62);padding:6px 11px;border:1px solid var(--hairline);
+  border-radius:999px;background:rgba(11,30,61,.55)}
+.live i{width:6px;height:6px;border-radius:50%;background:var(--cyan);display:block;
+  box-shadow:0 0 0 3px rgba(49,226,231,.16)}
+
+/* ---- hero -------------------------------------------------------------- */
+.hero{margin:0 0 var(--s-xxl)}
+.hero h2{font-size:clamp(30px,5.2vw,50px);line-height:1.04;margin:0 0 var(--s-md);
+  font-weight:600;letter-spacing:-.032em;max-width:16ch}
+.hero h2 em{font-style:normal;color:var(--cyan)}
+.hero .law{font-size:15px;color:rgba(248,251,255,.6);max-width:56ch;margin:0}
+
+/* ---- layout ------------------------------------------------------------ */
+section{margin-bottom:var(--s-xxl)}
+.eyebrow{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(248,251,255,.34);margin:0 0 var(--s-md)}
+.panel{background:linear-gradient(180deg,rgba(18,42,82,.55),rgba(11,30,61,.42));
+  border:1px solid var(--hairline);border-radius:var(--r-md);padding:var(--s-lg)}
+.grid2{display:grid;grid-template-columns:minmax(300px,1fr) minmax(280px,1fr);gap:var(--s-lg);
+  align-items:start}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+
+/* ---- ternary vocabulary ------------------------------------------------ */
+/* Zero is equilibrium, not a lesser failure. It gets the calmest treatment of
+   the three; only a violated invariant is warm. */
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 7px;
+  border-radius:999px;font-size:12px;font-weight:600;border:1px solid}
+.chip b{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.chip.commit{color:var(--cyan);background:rgba(49,226,231,.13);border-color:rgba(49,226,231,.32)}
+.chip.commit b{background:rgba(49,226,231,.2);border:1px solid rgba(49,226,231,.5)}
+.chip.hold{color:var(--indigo);background:rgba(112,125,221,.1);border-color:rgba(112,125,221,.3)}
+.chip.hold b{background:rgba(112,125,221,.2);border:1px solid rgba(112,125,221,.5)}
+.chip.violated{color:var(--ember);background:rgba(255,107,87,.13);border-color:rgba(255,107,87,.33)}
+.chip.violated b{background:rgba(255,107,87,.2);border:1px solid rgba(255,107,87,.5)}
+.chip small{font-weight:500;font-size:10px;opacity:.72;font-family:ui-monospace,Menlo,monospace}
+
+.trits{display:inline-flex;gap:3px}
+.trits span{width:23px;height:23px;display:grid;place-items:center;border-radius:5px;
+  font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;border:1px solid}
+.t-p{color:var(--cyan);background:rgba(49,226,231,.12);border-color:rgba(49,226,231,.34)}
+.t-z{color:var(--indigo);background:rgba(112,125,221,.12);border-color:rgba(112,125,221,.34)}
+.t-n{color:var(--ember);background:rgba(255,107,87,.12);border-color:rgba(255,107,87,.34)}
+
+/* ---- reduction ladder -------------------------------------------------- */
+.ladder{display:grid;gap:1px;background:var(--hairline);border:1px solid var(--hairline);
+  border-radius:var(--r-md);overflow:hidden}
+.rung{display:grid;grid-template-columns:104px 1fr auto;gap:var(--s-md);align-items:center;
+  background:linear-gradient(180deg,rgba(18,42,82,.5),rgba(11,30,61,.4));padding:14px var(--s-md)}
+.rung .verb{font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--paper);
+  letter-spacing:.04em}
+.rung .verb span{display:block;font-family:inherit;font-size:9.5px;font-weight:500;
+  color:rgba(248,251,255,.36);margin-top:4px;letter-spacing:.02em}
+.rung .body{display:flex;align-items:center;gap:var(--s-md);flex-wrap:wrap;font-size:12px;
+  color:rgba(248,251,255,.66)}
+.kv{font:500 11.5px/1 ui-monospace,"SF Mono",Menlo,monospace;color:rgba(248,251,255,.5)}
+.kv b{color:var(--paper);font-weight:600}
+
+/* ---- double cover ------------------------------------------------------ */
+.cover{display:grid;place-items:center;padding:var(--s-md) 0 var(--s-lg)}
+.cover svg{width:100%;max-width:340px;height:auto;overflow:visible}
+.band{fill:none;stroke-width:2;stroke-linecap:round}
+@keyframes restore{to{transform:rotate(720deg)}}
+.spin{transform-origin:50% 50%;animation:restore var(--restore) linear infinite}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.legend{display:grid;gap:9px;margin-top:var(--s-sm)}
+.legend div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-md);
+  font-size:11px}
+.legend dt{color:rgba(248,251,255,.46);font-weight:500}
+.legend dd{margin:0;font:600 11.5px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--cyan)}
+.legend dd.pending{color:var(--indigo)}
+
+/* ---- closure ----------------------------------------------------------- */
+.closure{display:flex;align-items:center;gap:var(--s-lg);flex-wrap:wrap;margin-bottom:var(--s-md)}
+.coord{display:block}
+.coord em{display:block;font-style:normal;font-size:10px;font-weight:500;
+  color:rgba(248,251,255,.42);margin-bottom:5px}
+.coord strong{font:600 21px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.02em}
+.equals{font-size:20px;color:var(--cyan)}
+.verdict{font-size:13px;color:rgba(248,251,255,.72);margin:0;max-width:52ch}
+
+/* ---- bridge grid ------------------------------------------------------- */
+.bridge{display:grid;grid-template-columns:repeat(16,1fr);gap:4px}
+@media (max-width:720px){.bridge{grid-template-columns:repeat(8,1fr)}}
+.cellx{aspect-ratio:1;border-radius:4px;background:rgba(18,42,82,.6);
+  border:1px solid rgba(29,53,107,.9);display:grid;place-items:center;
+  font:600 8px/1 ui-monospace,Menlo,monospace;color:rgba(248,251,255,.26);
+  transition:background .18s ease,color .18s ease,transform .18s ease}
+.cellx:hover{background:var(--raised);color:rgba(248,251,255,.8);transform:translateY(-1px)}
+.cellx.on{background:var(--cyan);color:var(--abyss);border-color:var(--cyan-lift);
+  box-shadow:0 0 0 3px rgba(49,226,231,.18)}
+.cellx.enacted{border-color:var(--electric);color:var(--paper);
+  box-shadow:inset 0 0 0 1px rgba(19,125,255,.55)}
+.bridge-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--s-lg);
+  margin-top:var(--s-lg);flex-wrap:wrap}
+.readouts{display:flex;gap:var(--s-xl)}
+.readouts div em{display:block;font-style:normal;font-size:10px;font-weight:500;
+  color:rgba(248,251,255,.42);margin-top:4px}
+.readouts div strong{font:600 17px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--cyan)}
+.keys{display:grid;gap:6px;font-size:10.5px;color:rgba(248,251,255,.45)}
+.keys span{display:flex;align-items:center;gap:7px}
+.keys i{width:11px;height:11px;border-radius:3px;display:block}
+.keys .sw-on{background:var(--cyan)}
+.keys .sw-enacted{border:1px solid var(--electric);box-shadow:inset 0 0 0 1px rgba(19,125,255,.5)}
+
+/* ---- reciprocal cones -------------------------------------------------- */
+.cones{display:flex;gap:var(--s-xl);margin:var(--s-lg) 0 var(--s-md)}
+.cones div strong{display:block;font:600 15px/1 ui-monospace,"SF Mono",Menlo,monospace}
+.cones div em{font-style:normal;font-size:10px;font-weight:500;
+  color:rgba(248,251,255,.42);display:block;margin-top:4px}
+.cones-note{font-size:11px;color:rgba(248,251,255,.45)}
+
+/* ---- taxonomy ---------------------------------------------------------- */
+.tax{display:grid;gap:1px;background:var(--hairline);border:1px solid var(--hairline);
+  border-radius:var(--r-md);overflow:hidden}
+.tax .row{display:grid;grid-template-columns:170px 1fr;gap:var(--s-md);padding:15px var(--s-md);
+  background:linear-gradient(180deg,rgba(18,42,82,.5),rgba(11,30,61,.4));align-items:start}
+.tax h4{margin:0 0 3px;font-size:13px;font-weight:600}
+.tax p{margin:0;font-size:11.5px;color:rgba(248,251,255,.55);max-width:62ch}
+@media (max-width:720px){.tax .row{grid-template-columns:1fr}}
+
+footer{border-top:1px solid var(--hairline);padding-top:var(--s-lg);
+  font-size:11px;color:rgba(248,251,255,.34);display:flex;gap:var(--s-md);flex-wrap:wrap}
+footer .mono{color:rgba(248,251,255,.46)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <!-- The closed band, drawn once, at the identity tilt. Same geometry the
+         operator watches below: one body, many projections. -->
+    <svg class="mark" viewBox="0 0 56 40" aria-hidden="true">
+      <defs>
+        <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#31e2e7"/><stop offset=".55" stop-color="#137dff"/>
+          <stop offset="1" stop-color="#707ddd"/>
+        </linearGradient>
+      </defs>
+      <path d="M6 20c0-8 8-13 22-13s22 5 22 13-8 13-22 13S6 28 6 20z" fill="none"
+            stroke="url(#markGrad)" stroke-width="2.2"/>
+      <path d="M6 20c8 6 14 8 22 8s14-2 22-8" fill="none" stroke="url(#markGrad)"
+            stroke-width="1.5" opacity=".62"/>
+      <circle cx="28" cy="20" r="2.6" fill="#f8fbff"/>
+    </svg>
+    <div>
+      <h1>Möbi𝒰s Console</h1>
+      <p>BiDi Coherence-Delta Calculus · native toolchain</p>
+    </div>
+    <div class="spacer"></div>
+    <span class="live"><i></i>replay bound to runtime output</span>
+  </header>
+
+  <section class="hero">
+    <h2>One geometry.<br>Many <em>projections</em>.</h2>
+    <p class="law">One turn inverts the sheet; two turns restore it. Every result this
+      system produces is balanced ternary — accepted, held, or violated — and a held
+      result is equilibrium, not a near-miss.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Reduction · live record</p>
+    <div class="ladder" id="ladder"></div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Universal Operator</p>
+    <div class="grid2">
+      <div class="panel">
+        <div class="cover">
+          <svg id="band" viewBox="-72 -54 144 108" role="img"
+               aria-label="Lifted double cover: the band carries a half twist, so one turn returns the projection with the sheet inverted and only the second turn restores it."></svg>
+        </div>
+        <dl class="legend" id="legend"></dl>
+      </div>
+      <div class="panel">
+        <p class="eyebrow">Closure</p>
+        <div class="closure" id="closure"></div>
+        <p class="verdict" id="verdict"></p>
+        <div class="cones" id="cones"></div>
+        <p class="verdict cones-note">The cones must be angularly biased and mutually
+          reciprocal within one flow evaluation; their sum is the accumulated holonomy
+          carried across the turn.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Bridge codebook · 2⁶ = 4³ = 64</p>
+    <div class="panel">
+      <div class="bridge" id="bridge"></div>
+      <div class="bridge-foot">
+        <div class="readouts" id="readouts"></div>
+        <div class="keys">
+          <span><i class="sw-on"></i>projected occupancy</span>
+          <span><i class="sw-enacted"></i>enacted coordinate</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Durable store · failure taxonomy</p>
+    <div class="tax">
+      <div class="row">
+        <span class="chip commit"><b>+</b>recoverable tail</span>
+        <div><h4>Truncated at the last seal</h4>
+          <p>A torn or valid-unsealed tail is discarded: the unfinished transaction never
+             happened. Exactly the old or the new state is visible, never a partial batch.</p></div>
+      </div>
+      <div class="row">
+        <span class="chip violated"><b>−</b>corrupt prefix</span>
+        <div><h4>Fails closed, evidence preserved</h4>
+          <p>Any integrity violation inside a structurally complete record returns no handle
+             and never modifies a byte. Corrupted evidence is preserved, not repaired.</p></div>
+      </div>
+      <div class="row">
+        <span class="chip hold"><b>0</b>I/O fault</span>
+        <div><h4>A fault is a fault</h4>
+          <p>A read error is never mistaken for end-of-file, so it can never authorize
+             truncation. Nothing is recovered and nothing is lost.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Rendered from <span class="mono">demo/replay.json</span> — real runtime output, not sample data.</span>
+    <span class="mono">grammar 1 · abi 1.2 · blake3</span>
+  </footer>
+</div>
+
+<!-- The runtime's own replay record. scripts/verify.sh asserts this block is
+     byte-identical to demo/replay.json, so the console can never drift from
+     what the runtime actually produced. -->
+<script type="application/json" id="replay-data">
+{
+  "flow": {
+    "thetaCouncilB": "0.25",
+    "thetaCouncilBRaw": "0.250000",
+    "channelWeight": "0.25"
+  },
+  "commit": {
+    "trits": "0+-",
+    "balance": "admissible",
+    "status": "accepted",
+    "reason": "none"
+  },
+  "hold": {
+    "trits": "-+0",
+    "balance": "violated",
+    "status": "held",
+    "reason": "balance-violation"
+  },
+  "nest": {
+    "up": "0.666667",
+    "parentBelief": "0.666667",
+    "childPrior": "0.666667"
+  },
+  "trace": {
+    "trits": "+0-+0-",
+    "events": "4"
+  },
+  "bridge": {
+    "dyadic": "101101",
+    "triadic": "231",
+    "index": "45"
+  },
+  "universal": {
+    "operator": "U720",
+    "frame": "agent",
+    "receptiveAngle": "0.375000",
+    "radiantAngle": "-0.250000",
+    "holonomy": "0.125000",
+    "halfProjection": "returned",
+    "halfSheet": "inverted",
+    "fullProjection": "returned",
+    "fullSheet": "restored",
+    "recordCoordinate": "110101",
+    "decisionCoordinate": "110101",
+    "enactedCoordinate": "110101",
+    "status": "accepted",
+    "reason": "none"
+  }
+}
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var data = JSON.parse(document.getElementById("replay-data").textContent);
+
+  function tritClass(ch) { return ch === "+" ? "t-p" : (ch === "-" ? "t-n" : "t-z"); }
+  function trits(word) {
+    return '<span class="trits">' + word.split("").map(function (c) {
+      return '<span class="' + tritClass(c) + '">' + (c === "-" ? "−" : c) + "</span>";
+    }).join("") + "</span>";
+  }
+  function chip(status, reason) {
+    var kind = status === "accepted" ? "commit" : (status === "held" ? "hold" : "violated");
+    var glyph = kind === "commit" ? "+" : (kind === "hold" ? "0" : "−");
+    var extra = (reason && reason !== "none") ? "<small>" + reason + "</small>" : "";
+    return '<span class="chip ' + kind + '"><b>' + glyph + "</b>" + status + extra + "</span>";
+  }
+  function kv(label, value) {
+    return '<span class="kv">' + label + " <b>" + value + "</b></span>";
+  }
+
+  // Reduction ladder — the three foundational steps plus the derived surface.
+  var rungs = [
+    ["flow", "continuous", kv("θ council.b", data.flow.thetaCouncilB) + kv("weight", data.flow.channelWeight)],
+    ["commit", "guarded", trits(data.commit.trits) + chip(data.commit.status, data.commit.reason) + kv("balance", data.commit.balance)],
+    ["commit", "held", trits(data.hold.trits) + chip(data.hold.status, data.hold.reason) + kv("balance", data.hold.balance)],
+    ["nest", "bidirectional", kv("up", data.nest.up) + kv("parent belief", data.nest.parentBelief) + kv("child prior", data.nest.childPrior)],
+    ["trace", "window-local", trits(data.trace.trits) + kv("events", data.trace.events)]
+  ];
+  document.getElementById("ladder").innerHTML = rungs.map(function (r) {
+    return '<div class="rung"><div class="verb">' + r[0] + "<span>" + r[1] +
+      '</span></div><div class="body">' + r[2] + "</div><div></div></div>";
+  }).join("");
+
+  // Double-cover legend — the acceptance facts the runtime checks.
+  var u = data.universal;
+  var legend = [
+    ["one turn", u.halfSheet, u.halfSheet === "restored"],
+    ["two turns", u.fullSheet, u.fullSheet === "restored"],
+    ["projection", u.fullProjection, u.fullProjection === "returned"],
+    ["holonomy", u.holonomy, true]
+  ];
+  document.getElementById("legend").innerHTML = legend.map(function (l) {
+    return "<div><dt>" + l[0] + '</dt><dd class="' + (l[2] ? "" : "pending") + '">' + l[1] + "</dd></div>";
+  }).join("");
+
+  // Closure — the equality that authorizes enactment.
+  var agree = u.recordCoordinate === u.decisionCoordinate;
+  document.getElementById("closure").innerHTML =
+    '<span class="coord"><em>recorded</em><strong>' + u.recordCoordinate + "</strong></span>" +
+    '<span class="equals">' + (agree ? "=" : "≠") + "</span>" +
+    '<span class="coord"><em>decided</em><strong>' + u.decisionCoordinate + "</strong></span>" +
+    chip(agree ? "accepted" : "violated", agree ? "none" : "coordinate-mismatch");
+  document.getElementById("verdict").textContent = agree
+    ? "What the organism recorded is what it decided, so the coordinate is enacted — written to source with an appended witness."
+    : "The record and the decision disagree. Nothing is enacted and no output is written.";
+
+  // Reciprocal cones — the angular budget that must balance.
+  document.getElementById("cones").innerHTML = [
+    ["receptive", u.receptiveAngle, "var(--indigo)"],
+    ["radiant", u.radiantAngle, "var(--electric)"],
+    ["holonomy", u.holonomy, "var(--cyan)"]
+  ].map(function (c) {
+    return '<div><strong style="color:' + c[2] + '">' + c[1] + "</strong><em>" + c[0] + "</em></div>";
+  }).join("");
+
+  // Bridge codebook — 64 cells. The projected occupancy (the bridge job's own
+  // coordinate) is filled; the operator's enacted coordinate is outlined. They
+  // are different addresses and the interface does not conflate them.
+  var projected = parseInt(data.bridge.index, 10);
+  var enacted = parseInt(u.enactedCoordinate || u.recordCoordinate, 2);
+  var cells = "";
+  for (var i = 0; i < 64; i++) {
+    var t = ((i >> 4) & 3).toString() + ((i >> 2) & 3).toString() + (i & 3).toString();
+    var klass = "cellx" + (i === projected ? " on" : "") + (i === enacted ? " enacted" : "");
+    var dy = i.toString(2);
+    while (dy.length < 6) { dy = "0" + dy; }
+    cells += '<div class="' + klass + '" title="index ' + i + " · dyadic " + dy +
+      " · triadic " + t + '">' + t + "</div>";
+  }
+  document.getElementById("bridge").innerHTML = cells;
+
+  document.getElementById("readouts").innerHTML = [
+    ["dyadic", data.bridge.dyadic],
+    ["triadic", data.bridge.triadic],
+    ["index", data.bridge.index],
+    ["enacted", u.enactedCoordinate || "—"]
+  ].map(function (r) {
+    return "<div><strong>" + r[1] + "</strong><em>" + r[0] + "</em></div>";
+  }).join("");
+
+  // ---- the double cover ---------------------------------------------------
+  // A real Möbius ribbon: the band's half twist makes the two edges exchange
+  // places once per turn, which is exactly why one turn inverts the sheet and
+  // two restore it. Drawn as depth-sorted quads so the crossing is legible.
+  var svg = document.getElementById("band");
+  var NS = "http://www.w3.org/2000/svg";
+  var SEGMENTS = 132, R = 40, HALF = 11, SQUASH = 0.42;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function point(theta, edge, phase) {
+    var twist = (theta + phase) / 2;
+    var w = HALF * edge;
+    var r = R + w * Math.cos(twist);
+    return {
+      x: r * Math.cos(theta),
+      y: r * Math.sin(theta) * SQUASH - w * Math.sin(twist) * 0.85,
+      depth: Math.sin(theta)
+    };
+  }
+
+  function render(phase) {
+    var quads = [];
+    for (var s = 0; s < SEGMENTS; s++) {
+      var t0 = (s / SEGMENTS) * Math.PI * 2;
+      var t1 = ((s + 1) / SEGMENTS) * Math.PI * 2;
+      var a = point(t0, 1, phase), b = point(t1, 1, phase);
+      var c = point(t1, -1, phase), d = point(t0, -1, phase);
+      quads.push({ pts: [a, b, c, d], depth: (a.depth + b.depth) / 2, t: t0 });
+    }
+    // paint far side first so the near side crosses over it
+    quads.sort(function (p, q) { return p.depth - q.depth; });
+    var parts = [];
+    quads.forEach(function (q) {
+      var lift = (q.depth + 1) / 2;                 // 0 far … 1 near
+      var hue = Math.abs(Math.cos((q.t + phase) / 2)); // sheet handedness
+      var fill = hue > 0.5 ? "49,226,231" : "112,125,221";
+      var alpha = (0.20 + lift * 0.62).toFixed(3);
+      var dAttr = "M" + q.pts.map(function (p) {
+        return p.x.toFixed(2) + " " + p.y.toFixed(2);
+      }).join("L") + "Z";
+      parts.push('<path d="' + dAttr + '" fill="rgba(' + fill + "," + alpha + ')"/>');
+    });
+    // leading edge highlight and the traveling incident
+    var head = point(-phase, 1, phase);
+    parts.push('<circle cx="' + head.x.toFixed(2) + '" cy="' + head.y.toFixed(2) +
+      '" r="3.2" fill="#f8fbff"/>');
+    svg.innerHTML =
+      '<circle r="' + (R + 20) + '" fill="none" stroke="#43f0ec" stroke-opacity=".2" ' +
+      'stroke-width="1" stroke-dasharray="2 7"/>' + parts.join("");
+  }
+
+  if (reduce) {
+    render(Math.PI * 0.6);
+  } else {
+    var start = null;
+    requestAnimationFrame(function step(ts) {
+      if (start === null) { start = ts; }
+      // one full restoration (two turns) every 2.4s × 2, per the motion token
+      var turns = ((ts - start) / (2400 * 2)) % 1;
+      render(turns * Math.PI * 4);
+      requestAnimationFrame(step);
+    });
+  }
+}());
+</script>
+</body>
+</html>

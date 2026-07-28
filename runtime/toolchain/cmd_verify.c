@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../cdc_abi.h"
+#include "../cdc_digest.h"
 
 static int verify_parse(int argc, char **argv) {
     int i;
@@ -44,7 +45,7 @@ static int verify_parse(int argc, char **argv) {
 /* --contract: the bootloader-parity contract report over a file set.
  * Output is byte-identical to `python3 cdc_boot.py <files>` for valid
  * corpora (gate toolchain-verify-parity). */
-static int verify_contract(int argc, char **argv) {
+static int verify_contract_or_vectors(int argc, char **argv, int vectors) {
     cdc_runtime *runtime = NULL;
     cdc_result *result = NULL;
     int i;
@@ -73,12 +74,31 @@ static int verify_contract(int argc, char **argv) {
             return 1;
         }
     }
-    if (cdc_runtime_verify(runtime, NULL, &result) != CDC_OK) {
+    if ((vectors ? cdc_runtime_vectors(runtime, NULL, &result)
+                 : cdc_runtime_verify(runtime, NULL, &result)) != CDC_OK) {
         fprintf(stderr, "cdc verify: contract evaluation failed\n");
         cdc_runtime_destroy(runtime);
         return 1;
     }
     fputs(cdc_result_text(result), stdout);
+    if (vectors) {
+        /* CT0: a trailing record naming the corpus these vectors describe.
+         * The contract REPORT cannot carry it — it must stay byte-identical
+         * to the bootloader — so the identity lives on the vector stream,
+         * which has no oracle to match. That exclusion retires with
+         * cdc_boot.py. */
+        uint8_t digest[CDC_DIGEST_SIZE];
+        char corpus[96];
+        if (!cdc_digest_corpus((const char *const *)argv, (size_t)argc,
+                               digest)) {
+            fprintf(stderr, "cdc verify: corpus unreadable\n");
+            cdc_result_destroy(result);
+            cdc_runtime_destroy(runtime);
+            return 1;
+        }
+        cdc_digest_hex(digest, corpus, sizeof(corpus));
+        printf("corpus %s files=%d\n", corpus, argc);
+    }
     rc = cdc_result_error_count(result) == 0 ? 0 : 1;
     cdc_result_destroy(result);
     cdc_runtime_destroy(runtime);
@@ -98,10 +118,18 @@ int cdc_cmd_verify(int argc, char **argv) {
             fprintf(stderr, "cdc verify --contract: no files given\n");
             return 2;
         }
-        return verify_contract(argc - 1, argv + 1);
+        return verify_contract_or_vectors(argc - 1, argv + 1, 0);
+    }
+    if (argc >= 1 && strcmp(argv[0], "--vectors") == 0) {
+        if (argc < 2) {
+            fprintf(stderr, "cdc verify --vectors: no files given\n");
+            return 2;
+        }
+        return verify_contract_or_vectors(argc - 1, argv + 1, 1);
     }
     fprintf(stderr,
             "cdc verify: available: cdc verify --parse <files...> | "
-            "cdc verify --contract <files...>\n");
+            "cdc verify --contract <files...> | "
+            "cdc verify --vectors <files...>\n");
     return 3;
 }

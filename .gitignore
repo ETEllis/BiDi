@@ -9,6 +9,7 @@ __pycache__/
 # Local build outputs (repository root only; docs/build/ is tracked)
 /dist/
 /build/
+/cdc_modules/
 *.egg-info/
 
 # LaTeX/arXiv build outputs

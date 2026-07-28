@@ -1,0 +1,66 @@
+{
+  "$schema-note": "Canonical Möbi𝒰s product design tokens. SINGLE SOURCE OF TRUTH. The macOS app (ui/macos/CDCStudio/Sources/CDCStudio/DesignSystem/MobiusTokens.swift) and the web console (ui/web/console/index.html) mirror these values verbatim; scripts/verify.sh fails if any surface drifts. Every value is derived from the shipped identity system (docs/identity/MOBIUS_U_IDENTITY_SYSTEM.md, assets/identity/*.svg) — nothing here is invented decoration.",
+
+  "version": "1.0.0",
+
+  "color": {
+    "substrate": {
+      "abyss":   "#040d1d",
+      "night":   "#07152c",
+      "deep":    "#0b1e3d",
+      "raised":  "#122a52",
+      "hairline":"#1d356b"
+    },
+    "phase": {
+      "indigo":  "#707ddd",
+      "indigoDeep": "#394db8",
+      "violetInk": "#27316f"
+    },
+    "hinge": {
+      "electric":"#137dff",
+      "electricDeep": "#0c6fd8",
+      "paper":   "#f8fbff"
+    },
+    "resolve": {
+      "cyan":    "#31e2e7",
+      "cyanLift":"#43f0ec",
+      "teal":    "#008d9b"
+    },
+    "ember": {
+      "note": "The ONLY warm token in the system. Reserved exclusively for a violated invariant (-1). Never used for emphasis, branding, or ordinary alerts.",
+      "core":    "#ff6b57"
+    }
+  },
+
+  "ternary": {
+    "note": "The product's result carrier is balanced ternary, not boolean. Zero is resting equilibrium — a first-class outcome, never styled as a lesser failure (Amendment A7, relational zero).",
+    "commit":   { "value":  1, "glyph": "+", "color": "#31e2e7", "label": "accepted" },
+    "hold":     { "value":  0, "glyph": "0", "color": "#707ddd", "label": "held" },
+    "violated": { "value": -1, "glyph": "−", "color": "#ff6b57", "label": "violated" }
+  },
+
+  "geometry": {
+    "holonomyRadians": 0.125,
+    "identityTiltDegrees": 7.16197,
+    "tiltNote": "7.16197° is the wordmark's shipped identity invariant (verified in the identity asset gate). It is the ONLY rotational accent angle in the product.",
+    "turnDegrees": 360,
+    "restoreDegrees": 720
+  },
+
+  "radius": { "sm": 6, "md": 10, "lg": 16, "pill": 999 },
+
+  "space": { "unit": 4, "xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 40, "xxl": 64 },
+
+  "type": {
+    "displayTracking": -0.02,
+    "monoNote": "Coordinates, trits, and digests are always monospaced — they are addresses, not prose.",
+    "scale": { "caption": 11, "body": 13, "title": 17, "display": 28, "hero": 44 }
+  },
+
+  "motion": {
+    "note": "Motion performs the second turn: one turn inverts the sheet, two turns restore it. Every signature animation is a 720° restoration, never a spinner.",
+    "restoreSeconds": 2.4,
+    "settleSeconds": 0.42,
+    "reducedMotionRespected": true
+  }
+}

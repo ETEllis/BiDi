@@ -7,7 +7,7 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #3)
+- branch: `claude/bun-equivalent-build-plan-lxe772` (draft PR #4; PR #3 merged at `3e851ff`). PR #3 is finished and must not be reused.
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -18,6 +18,185 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   and `evidence/gates/CT0/sha256-manifest.txt` (interim SHA-256, see D2)
 
 ## Last completed phase and gate
+
+- **Second review round repaired (2026-07-28, D30).** Four findings at
+  `810f1f6`, each confirmed against the reviewer's own probes and gated:
+  (1) BSD `wc` padding failed the suite on a real Mac while both CI lanes
+  stayed green — counts are portable now and the macOS lane runs the FULL
+  native suite (formal proofs stay Linux-only); (2) `coord_release`
+  closed its descriptor after releasing the registry lock — a new opener
+  could register in the gap and the stale close dropped its fresh lock;
+  closed under the lock now, with a deterministic 1->0->1 lifecycle check
+  and a permanent release-window probe build that only that check
+  catches; (3) manifest headers were "format only" — one strict shared
+  parser now reads both formats everywhere, counts are re-derived, and a
+  permanent sweep mutates/removes every header field; (4) concurrent
+  installs duplicated the journal (29/30 trials) — capture-once immutable
+  bytes, a package-scoped lock, attempt-unique staging, a CHECKED final
+  directory sync before `durable=1`, an `after-latch` kill boundary, and
+  deterministic fifo-rendezvous concurrency gates (identical, divergent,
+  and mid-install mutation).
+
+- **Same-application store coordination repaired (2026-07-28, D29).**
+  The repair requested after `ca26608` was confirmed absent (five checks,
+  5/5 failing at `fe3d61d`) and landed: all handles in one process that
+  name the same store share a reference-counted coordination object — one
+  pthread mutex plus ONE fcntl descriptor, keyed by lock-file
+  device+inode and pid, alive until the last close — so same-process
+  handles are mutually excluded, closing one handle can no longer drop
+  the lock another is holding (the POSIX close-drops-locks hazard), and
+  a forked child never adopts an inherited object. Open recovery and
+  reset joined commit/snapshot/compact inside the critical section. The
+  `store-samep` suite proves blocking deterministically (polled
+  completion pipes while the section is held; premature completion IS
+  the failure) across open, commit, snapshot+compact, reset, and the
+  close hazard; verify.sh requires it to fail exactly 5/5 against the
+  permanent per-handle probe build, and it runs under ASan/UBSan plus a
+  guarded ThreadSanitizer lane (clean on first contact). A handle whose
+  store was compacted or reset under it is refused typed
+  (ESTATE/ECORRUPT), never allowed a corrupt append.
+
+- **Phase I COMPLETE — `cdc build` / `cdc install` / `cdc x`
+  (2026-07-28, D28).** The last three toolchain commands are live and
+  hard-gated:
+  - `cdc build` emits the canonical bundle plus a manifest binding
+    grammar/ABI versions, per-source digests, the corpus identity, the
+    artifact digest, and the contract verdict. A red corpus is refused; a
+    bundle that does not re-verify with the sources' own verdicts is never
+    emitted; outputs are temp-then-rename, deterministic (built twice,
+    byte-compared), and cross-checked byte-for-byte against
+    `cdc_frontend_check canon`. `--check` types source-drift by file,
+    manifest-malformed by line, and bundle/manifest disagreement as
+    `artifact-mismatch` (which side moved is not guessable from inside).
+  - `cdc install` journals every member through a sealed `cdc_store`
+    transaction (the journal IS the install record) and latches the
+    directory by staging + fsync + rename. Kill matrix at three named
+    boundaries (process genuinely SIGKILLed, rc=137): the package
+    directory is never present after a kill, the journal always opens and
+    verifies, a plain re-run heals. A held package writes NOTHING (journal
+    byte-identity gated); zero expectations refuse (`zero-evidence`);
+    reinstalls are idempotent when identical and refused typed when
+    divergent. The install effect carries a D17 receipt.
+  - `cdc x` re-digests every member against the install manifest, requires
+    the directory to be exactly the manifest's member set (unmanifested
+    code does not run), recomputes the corpus identity, and rejects path
+    separators in the request itself. TRUSTED-LOCAL-ONLY until CT5; the
+    boundary is stated in code, docs, and matrix, not sandboxed around.
+  - The sanitized sweep runs Phase I too, and caught a real bug on first
+    contact (unterminated `read_all` buffers walked into the heap).
+  - `deletion gates status`: scanner deleted, `attr-parity` retired,
+    `attr-boundary` repointed, `--dump` kept as the last independent
+    oracle (D22–D27); `cdc_boot.py` deletion awaits Edward's A/B/C choice
+    (`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`); kernel floor
+    untouched.
+
+- **Independent review of `1ea1ddd` repaired (2026-07-28).** Two mechanism
+  defects and three overclaims. Recorded as D16; the withdrawn claims are
+  listed there rather than softened here.
+
+  - **Snapshot/compaction is now ONE atomic generation transition.** The
+    base moved into the log's own HEAD record (store uuid, monotonic
+    generation, base sealed/events/state, anchor over the replaced HEAD).
+    `snapshot` prepares `base.pending`, which `open` never reads; `compact`
+    rebuilds the log and activates it with fsync -> rename -> directory
+    fsync. Killing a child at each of the 8 boundaries of that transition
+    leaves the old generation or the new one, never a mixture, and the
+    store always opens and verifies.
+  - **The fence is backed by real mutual exclusion.** An fcntl write lock
+    on `lock.cdcstore` is held across re-scan + append + fsync(file) +
+    fsync(dir), and across compaction. The armed token is the whole
+    (generation, sealed, replay-state) triple. Two forked writers released
+    from a barrier after both fenced now yield exactly one commit and one
+    refusal, three rounds running; the previous test was sequential and
+    could not enter that window.
+  - **Attestation covers the base**, so two different histories compacted
+    to the same sealed count attest differently, and two stores with
+    identical histories attest differently.
+  - Both new suites (`store-generation`, `store-race`) were verified to
+    FAIL against deliberately re-broken builds before being accepted —
+    removing the lock reproduces the reviewer's `writer-a=ok writer-b=ok
+    reopen=corrupt-tail`; removing the identity binding activates a foreign
+    base; skipping the HEAD in attest collapses distinct histories.
+  - **Provenance is head-bound.** `scripts/regen_provenance.sh` regenerates
+    the manifest from `git ls-files`; the gate checks the path set and the
+    bytes, with a counterexample that modifies a tracked file and restores
+    it. The old manifest claimed "all tracked files" at 166 entries against
+    186 tracked.
+  - **CDC Studio has a required macOS CI lane** (`macos-14`, `swift build`
+    then `swift test`). The Linux structural gate was correct as a platform
+    guard but was the only required UI check, so a surface that did not
+    compile reached a green PR. The compile error is fixed (`padded` was a
+    `String` method applied to `ReversedCollection<String>`), and the
+    subprocess drain now reads stdout and stderr concurrently with a
+    SIGTERM/SIGKILL timeout — draining one to EOF before the other
+    deadlocks deterministically once the child fills the undrained pipe.
+
+- **Phase D COMPLETE — persistence became a language form (2026-07-28).**
+  `store` and `persist` are source directives (capability `H6`,
+  `framework_persistence.cdc`), so durable state is exercised through
+  `cdc run` / `cdc test` rather than as a C library called out of band.
+  The gate is the calculus itself: `op=append` invokes the identical
+  `execute_commit` barrier that governs in-memory latching, and only an
+  accepted decision reaches `cdc_store_stage`/`cdc_store_commit` — a
+  violated prefix balance stages nothing, so no code path exists on which
+  a held decision could write.
+
+  What the gate checks (all in `scripts/verify.sh`):
+  - the barrier gate itself — admissible → `durable=yes replay=changed`;
+    violated → `held reason=balance-violation durable=no replay=stable`;
+  - **byte-identity measured outside the runtime that claims it**: seed one
+    accepted append, copy the 176-byte sealed log, replay three violating
+    appends over the same store, `cmp` — identical;
+  - the compaction divergence `durable=yes replay=stable` (D14's resumable
+    chain restated at the language level), and `compact-uncovered` holding
+    when no base covers the sealed prefix;
+  - a real compare-and-set counterexample written in `.cdc` — two declared
+    handles onto one directory, the rival moves the log, the fenced writer's
+    perfectly admissible append is refused before a byte is written;
+  - four permanent counterexamples: overclaimed durability, overclaimed
+    replay identity, undeclared durable hold (A7 applies to persistence
+    with no exception — `cdc test --gate` fails at runtime exit 0), and
+    uncovered compaction;
+  - an ASan/UBSan pass over the whole persistence path (three store handles,
+    two onto one directory).
+
+  `durable` and `replay` are **observed** from the store on every job, never
+  taken from the declaration; the two overclaim fixtures exist to keep that
+  true. Recorded as D15.
+
+- **Phase D substrate work (2026-07-28).** Store protocol completed
+  (snapshot / compact / compare-and-set fence) on a resumable replay chain:
+  compaction preserves the replay identity byte-for-byte while the attest
+  digest over raw bytes changes, and a stale writer's commit is refused
+  without writing. Snapshots are authenticated and swept byte-by-byte
+  (85/85 fail closed). Out-of-process crash matrix added: 7/7 children
+  genuinely SIGKILLed at every commit boundary, each recovering to exactly
+  the old or new sealed state — a distinct loss mode from the in-process
+  torn-write matrix (unflushed stdio buffers are lost), which is why the
+  old/new split differs and only the invariants are gated.
+  The `.cdc`-declared persistence surface that this substrate was built for
+  landed in the same session (entry above). Typed effect receipts through
+  the ABI moved to CT2/CT3 closure.
+
+- **Foundation merged (2026-07-28).** PR #3 merged at pinned head `82ab066`
+  → merge commit `3e851ff` on `main`, after verifying remote head exactness,
+  a completed/success required check, and clean mergeability. Branch
+  restarted from the merged main per ADR D12; continuation is draft PR #4.
+
+- **Canonical BLAKE3 — D2 CLOSED (`e4ba69b`).** Vendored dependency-free
+  implementation; 31 reference vectors verified one-shot and through
+  irregular streaming splits under plain and ASan builds; evidence
+  re-digested by the implementation itself; interim sha256 manifest retained
+  unmodified. All store suites green under the new identities.
+
+- **Product surfaces landed (`41286c5`).** Canonical design tokens derived
+  from the shipped identity system; macOS CDC Studio (SwiftUI, SwiftPM, zero
+  dependencies, drives the real binary); self-contained web console whose
+  embedded record byte-matches `demo/replay.json`; `scripts/verify_ui.sh`
+  gating token parity, self-containment, and app structure. Swift compilation
+  is an external macOS step (recorded boundary); the console was
+  render-verified in Chromium with zero page errors and zero external
+  requests.
 
 - **2026-07-23 adversarial-review repairs: COMPLETE (this commit).** Both
   blocking defects fixed with permanent counterexamples hard-gated in
@@ -66,9 +245,10 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   snapshot/compact/fence); and the **crash matrix — injected failure at
   every one of the 7 commit write/flush/sync boundaries recovers to
   exactly the old (3) or new (4) sealed state, never partial** (plain +
-  ASan). Open items and their order live in RESUME_HERE (BLAKE3 swap,
-  snapshot/compact/fence, kill-based injection, .cdc-declared
-  persistence jobs, BiDi-decision wiring).
+  ASan). Every open item listed here at the time — BLAKE3 swap,
+  snapshot/compact/fence, kill-based injection, `.cdc`-declared persistence
+  jobs, BiDi-decision wiring — has since landed; see the Phase D COMPLETE
+  entry above.
 
 - **Fused executor — cdc run (gate CT3): LIVE (previous commit).** One
   parse, one live Runtime, every declared stage family; universal
@@ -88,8 +268,10 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   job, unexpected holds fail the gate even when the runtime exits 0
   (proven by the tracked silent_hold.cdc fixture: runtime green, gate
   red with expected=0 unexpected=1 fail=0). Executable-corpus gate:
-  runs=23 commit=11 hold=5 (all expected) nest=10 fail=0, exact-gated in
-  verify.sh. CT3 remaining: cancellation/budgets/deterministic-mode
+  runs=24 commit=19 hold=8 (all expected) nest=10 fail=0, exact-gated in
+  verify.sh — the persistence framework was absorbed by adding one mode
+  rule and no policy change, because the ternary vocabulary already
+  covered durable holds. CT3 remaining: cancellation/budgets/deterministic-mode
   contract, per-check ordered vector export, fused `cdc run`.
 
 - **Unified-driver passthrough parity: LIVE (previous commit).** The guarded
@@ -245,16 +427,22 @@ CI run 29960029272 (ci.yml, --require-formal) on 99747e0 -> in progress at freez
 
 ## Next executable action
 
-Phase B steps 3 (second half) through 7: (a) add `CDC_BRIDGE_NO_MAIN` to
-`runtime/cdc_bridge_runtime.c` (A11) and link both legacy runtimes into
-`build/cdc` as passthrough verbs with byte-identical output (the existing
-verify.sh greps are the parity gate); (b) implement grammar-1 registry +
-expect evaluation inside `cdc verify` (C mirror of `cdc_boot.py` semantics)
-and gate its pass/total plus per-check parity vector against the bootloader
-(gate toolchain-verify-parity, per-check format per interface §7); (c) then
-Phase C `cdc run`/`cdc test` on the ABI execution surface (ABI 1.1);
-(d) legacy scanner + `--dump` deletion through the recorded gates. Fuzzing
-beyond the deterministic corpus remains queued for CT1 PASS.
+None in this repository. Every component executable here is complete and
+gated (Phases A–D, CT0–CT3 closure, the deletion gates through the
+scanner, Phase I). Remaining items by category:
+
+- **Queued with recorded reasons**: Ed25519 keyed authentication +
+  external anchor; CT5 sealed capability environment + hostile-package
+  counterexamples (until then `cdc x` is trusted-local-only);
+  `package.cdc` manifest layer / versioning / lockfile; `cycles=N`
+  per-cycle expectation families; fuzzing beyond the deterministic corpus
+  (CT1 full closure).
+- **Awaiting Edward**: the `cdc_boot.py` deletion choice
+  (`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`, options A/B/C). Status
+  quo is option A; the kernel floor stays untouched until he chooses.
+- **Blocked external**: Memory Manifold repository (Phases E–H); GIST /
+  Superposition bundle (Phase K, Track M); macOS host (CI lane is the
+  Swift compiler of record). PC6 stays hard-paused.
 
 ## External blockers
 

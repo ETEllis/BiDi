@@ -1,84 +1,113 @@
-# RESUME_HERE — BiDi/CDC lane: full baton to completion
+# RESUME_HERE — BiDi/CDC lane: baton complete in this repository
 
-Updated 2026-07-24. This is the complete continuation contract from the
-current head through the end of the amendment's Phase L, written for
-whichever agent holds the baton next (per amendment §14 the integration
-lane inherits when this lane's capacity ends). Read in order:
-`CDC_TOOLCHAIN_PLAN.md` (with Amendment Record) → the two operator-held
-documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
-`CDC_MEMORY_MANIFOLD_INTERFACE.md` → `docs/build/BUILD_STATE.md` →
-`docs/build/DECISIONS.md` (D1–D8).
+Updated 2026-07-28. **Every component executable in this repository is
+COMPLETE and gated.** What remains is queued-with-reason, blocked on
+external access, or awaiting one operator decision — all listed below with
+their exact blockers. Read in order: `CDC_TOOLCHAIN_PLAN.md` (with
+Amendment Record) → the two operator-held documents (2026-07-22 amendment;
+2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D28).
 
-## Where the build stands (exact)
+## Current head (2026-07-28)
 
-- **CT0 PARTIAL** — provenance recorded; binary reproducibility + embedded
-  verdict identity open (closes in step 4 below).
-- **CT1 PASS** — frontend differential + both review counterexamples,
-  hard-gated incl. ASan/UBSan.
-- **CT2 SUBSTANTIALLY LIVE** — ABI 1.2; toolchain-verify-parity
-  (byte-identical bootloader reports, success + failure); unified binary
-  passthrough parity (12 modes, exit codes included). Open: ordered
-  per-check vector export; full-binary sanitizer sweep.
-- **CT3 SUBSTANTIALLY LIVE** — `cdc test --gate` with the A7 typed policy
-  (separate commit/hold/nest/fail; undeclared holds fail the gate even at
-  runtime exit 0 — silent_hold.cdc fixture); `cdc run` is the fused
-  single-process executor (universal closure path; multi-stage chaining
-  over one live Runtime; fail-closed). Open: cancellation/budget/
-  deterministic-mode contract; per-check vectors; cycles=N (blocked on
-  per-cycle expectation families — inline expect-* pins first-cycle
-  state; this is a language-design item, not a runtime bug).
-- **CT4/MM1 SEEDED** — `cdc_store` reference backend: append-only sealed
-  transactions, torn-tail recovery, fsync(file+dir) boundaries, interim
-  sha256 identities (D2), replay determinism, attest; **crash matrix
-  green: injection at all 7 commit boundaries recovers to exactly old or
-  new state** (plain + ASan). Open: snapshot/compact/fence (declared,
-  fail closed), BLAKE3 vendoring + re-digest, kill-based (out-of-process)
-  crash injection, .cdc-declared persistence jobs, BiDi-decision wiring.
-- **PC6 HARD-PAUSED** (unchanged, untouchable from this lane).
-- PR #3: draft, all commits green through the combined identity+toolchain
-  gate. **Do not merge without operator sign-off.**
+- `main` = `3e851ff` — **PR #3 merged** under the baton's Section 1
+  authorization. PR #3 is finished and must not be reused.
+- Work branch `claude/bun-equivalent-build-plan-lxe772`, open as **draft
+  PR #4**, carries the whole post-merge arc. Rather than pinning SHAs that
+  drift, the arc is indexed by its decision record: BLAKE3 + product
+  surfaces + store protocol (D13–D14), persistence as a language form
+  (D15), the 2026-07-28 review repair — store generations, real
+  interprocess serialization, head-bound provenance, required macOS CI
+  lane, claims withdrawn (D16), CT2/CT3/CT0 closure — typed receipts,
+  ordered vectors with a chained trace digest, lifecycle contract,
+  whole-binary sanitizers, closure witnesses, corpus-bound verdicts
+  (D17–D21), the deletion gates through the scanner (D22–D27), and
+  Phase I — `cdc build` / `cdc install` / `cdc x` (D28).
+- Full `./scripts/verify.sh` green locally at this head, including the
+  Phase I gate section and the sanitized Phase I sweep.
+- The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
+  never merged and every finding is repaired with permanent
+  counterexamples (D16 records the withdrawn claims). **Do not merge PR #4
+  without operator sign-off.**
 
-## Baton: remaining work in dependency order
+## COMPLETE in this repository (all hard-gated in `./scripts/verify.sh`)
 
-1. **Phase D completion (this repo).** Vendor BLAKE3 (reference C), swap
-   `cdc_digest` to it, re-digest evidence (D2 closes). Implement
-   snapshot/compact/fence with the same crash-matrix discipline. Add
-   kill-based crash injection (spawn self, SIGKILL at boundaries) to
-   verify.sh. Declare persistence ops as `.cdc` jobs (append/replay/
-   attest exercised through `cdc run/test/verify`, per amendment D.6) —
-   this is also where store mutations route through a BiDi commit
-   decision (A10) rather than direct calls.
-2. **CT2/CT3 closure (this repo).** Per-check ordered vector export
-   (interface §7 format) from cdc test and cdc verify; lifecycle/
-   cancellation/budget contract for cdc run; full-binary sanitizer sweep;
-   then CT0 completion: reproducible-build check + manifest digest
-   embedded in every verdict line.
-3. **Deletion gates (this repo, after 2).** Migrate native/bridge runtime
-   internals to the grammar-1 frontend (byte-identical outputs; greps are
-   the net) → delete legacy scanner + `cdc_boot.py --dump`
-   (frontend-differential-dump gate) → after toolchain-verify-parity
-   holds a full release cycle, delete `cdc_boot.py` and renegotiate
-   `python-files == 1` → `== 0` in kernel.cdc (operator-approved kernel
-   change). External fuzzing lands here for CT1 full closure.
-4. **Phase I (this repo).** `cdc install/build/x` per the plan +
-   amendment A3/A4/A8: BLAKE3 manifests binding
-   source/deps/toolchain/grammar-ABI/artifact/test/proof digests;
-   crash-durable installs on the cdc_store substrate (the store's sealed
-   transactions ARE the install journal); `cdc x` trusted-local-only
-   until the sealed capability environment passes hostile-package gates
-   (CT5).
-5. **Phases E–H (Memory Manifold repo — NOT this repo).** Blocked in this
-   environment until that repository is added to a session (or executed
-   locally). The interface contract v1.0.3 (H12–H17, data contracts,
-   store protocol, read/decide/apply semantics) is the binding surface;
-   the cdc_store sealed-transaction + replay-digest model is the intended
-   persistence core. MM0–MM6 gates as specified in the amendment.
-6. **Phases J–L.** Product/SDK conformance (MM7), Superposition backend
-   substitution (MM8 — requires the operator-side worktree; the adapter
-   contract is interface §5), comparative/adversarial evidence (MM9),
-   independent reproduction (RG0). These are integration-lane and
-   operator-gated; nothing here may convert local evidence into device
-   claims, and PC6 stays paused until its own gate.
+1. **Canonical frontend + ABI** (grammar 1, ABI 1.3), differential oracle,
+   adversarial/allocator/sanitizer sweeps (D5, D7, D13, D17).
+2. **Unified `cdc` driver**: verify/run/test/build/install/x + legacy verb
+   passthrough, byte-identical to the standalone binaries.
+3. **Durable store**: sealed transactions, typed recovery, generations
+   with atomic activation, triple fence token, attest-from-byte-0;
+   in-process + SIGKILL crash matrices; 8-boundary transition matrix;
+   fresh-after-crash (D10–D16, D27); same-application coordination — a
+   process-local refcounted coordination object (one mutex + one fcntl
+   descriptor per store per process) serializing open recovery, commit,
+   snapshot, compact, and reset across handles AND processes, gated by
+   the five-check `store-samep` suite with a permanent per-handle probe
+   build required to fail 5/5, plus ASan/UBSan and a guarded TSan lane
+   (D29).
+4. **Persistence as a language form**: `store`/`persist` directives gated
+   by the same commit barrier; durable/replay observed, never declared
+   (D15).
+5. **Typed effect receipts, parity vectors, lifecycle contract, closure
+   witnesses, corpus-bound verdicts, same-machine reproducible builds**
+   (D17–D21). CT0, CT2, CT3 CLOSED.
+6. **Deletion gates**: legacy scanner deleted after a real defect fix and
+   a pinned migration precondition; both runtimes migrated to `cdc_stmt`
+   accessors with differential evidence; `attr-parity` retired;
+   `attr-boundary` repointed; `cdc_boot.py --dump` deliberately kept as
+   the last independent oracle (D22–D26).
+7. **Phase I**: `cdc build` proof-carrying bundles (deterministic,
+   cross-checked, refusal-first); `cdc install` crash-durable journaled
+   installs on the cdc_store substrate (four-boundary kill matrix,
+   held-writes-nothing, zero-evidence refusal, idempotent/divergent
+   reinstalls, typed receipts); `cdc x` manifest-verified trusted-local
+   execution (D28). Hardened by the second review round (D30):
+   capture-once immutable member bytes, package-scoped install lock with
+   deterministic concurrent-install gates, attempt-unique staging,
+   checked final directory sync before `durable=1`, one strict shared
+   manifest parser with a permanent field-mutation sweep, portable
+   counts with the macOS CI lane running the full native suite, and the
+   coordination registry's last-close window closed with its own probe
+   build.
+
+## QUEUED, with recorded reasons (not blockers, not claims)
+
+- **Ed25519 keyed authentication + external anchor** — integrity tags are
+  unkeyed (corruption detection, not forgery resistance); whole-file
+  generation rollback is detectable only against an externally retained
+  anchor. Stated in D16; queued behind CT5-adjacent key management.
+- **CT5: sealed capability environment + hostile-package
+  counterexamples** — until these pass, `cdc x` is TRUSTED-LOCAL-ONLY
+  (no network, no registries, no archives; verification is drift/tamper
+  detection, not a sandbox). Stated in code, docs, and matrix (D28).
+- **`package.cdc` manifest layer, versioning, lockfile** — packages are
+  plain directories installed by name; versioned coexistence arrives with
+  the manifest layer (plan Amendment Record).
+- **`cycles=N` per-cycle expectation families** — inline expect-* pins
+  first-cycle state; a language-design item, not a runtime bug (D19 era).
+- **Fuzzing beyond the deterministic corpus** — queued for CT1 full
+  closure.
+
+## AWAITING EDWARD (one decision; nothing proceeds without it)
+
+- **`cdc_boot.py` deletion** — `docs/build/BOOTLOADER_DELETION_PROPOSAL.md`
+  lays out freeze (A) / replace-then-delete (B) / delete-now (C) with the
+  exact `kernel.cdc` gate diff. Until he chooses, the status quo IS
+  option A: the bootloader stays, `python-files == 1` stays, and the
+  toolchain-verify-parity gate keeps both honest. **Do not touch the
+  kernel floor.**
+
+## BLOCKED EXTERNAL (unchanged)
+
+1. `ETEllis/Memory-Manifold` repository access — blocks Phases E–H. The
+   interface contract v1.0.3 is the binding surface; the cdc_store sealed
+   transaction + replay-digest model is the intended persistence core.
+2. `ETEllis/GIST` access + the Superposition source bundle — blocks
+   Phase K and GIST Track M.
+3. A macOS host — the required `macos-14` CI lane is the Swift compiler
+   of record for `ui/macos/CDCStudio`.
+4. **PC6 stays HARD-PAUSED.** Nothing in this lane may resume it.
 
 ## Hard rules in force (unchanged)
 
@@ -88,4 +117,5 @@ paths until recorded removal gates. Unreadable/non-regular sources are
 CDC_ERR_IO; diagnostics never truncate. Balanced ternary stays typed;
 merged pass totals forbidden; durable mutation behind commit semantics;
 single writer per worktree; interface versions change only by new digest;
-no identifier reuse. No public claim rests on an interim digest.
+no identifier reuse. No public claim rests on an interim digest. Always
+run `./scripts/regen_provenance.sh` and re-stage before committing.

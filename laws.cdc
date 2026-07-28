@@ -14,6 +14,8 @@ invariant local-confluence statement="disjoint commits commute"
 invariant flow-additivity statement="flow composes over duration"
 invariant normalforms statement="localized committed modules are stable values"
 invariant universal-closure statement="a lifted frame closes only after two turns with declared holonomy and enacts its computed record"
+invariant durable-latch-or-hold statement="durable mutation happens only under an accepted balance barrier; a held decision writes nothing"
+invariant replay-identity statement="replay identity depends on the sealed history, not on the log layout that carries it"
 
 witness law-balanced-center invariant=balanced-ternary-carrier claim="balanced trit carrier sums to equilibrium"
 witness law-balanced-enumeration invariant=balanced-ternary-carrier claim="all 3^6 committed walks stay in carrier"
@@ -38,6 +40,8 @@ witness law-trace-order invariant=trace-order-locality claim="smooth phase motio
 witness law-existence-spectrum invariant=existence-viability claim="passive through self-referential frames remain viable"
 witness law-normalforms invariant=normalforms claim="localized closures are stable normal forms"
 witness law-universal-closure invariant=universal-closure claim="one turn inverts the lifted sheet and two turns restore it"
+witness law-durable-latch invariant=durable-latch-or-hold claim="a violated prefix balance holds the append and leaves the sealed bytes unchanged"
+witness law-replay-under-compaction invariant=replay-identity claim="compaction preserves replay identity while the raw-bytes attest legitimately changes"
 
 expect law gate-abelian
 expect law interfere-monoid
@@ -53,3 +57,5 @@ expect law flow-additivity
 expect law trace-order-locality
 expect law normalforms
 expect law universal-closure
+expect law durable-latch-or-hold
+expect law replay-identity
