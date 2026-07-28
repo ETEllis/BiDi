@@ -1,0 +1,50 @@
+# C3-AUTH evidence — authenticated local RFTC control plane
+date: 2026-07-28
+decision: D36
+abi: 1.4
+wire: RF3W v1
+
+## Claim
+
+The local RFTC admission boundary authenticates a canonical shared-key
+envelope, enforces causal order and scoped authority, reserves bounded
+capacity, and invokes an all-or-nothing application commit exactly once under
+concurrent duplicate admission.
+
+This is shared-key keyed-BLAKE3 authentication. It is not Ed25519, mTLS,
+public-key identity, non-repudiation, a deployed network session, recursive
+logical-cell execution, cross-host reconciliation, full C3, or Q-level
+evidence.
+
+## Required verification
+
+./scripts/verify_rftc.sh rapid
+./scripts/verify.sh --require-formal
+
+Both commands completed successfully on the staged D36 source before branch
+promotion. The maximal gate included the complete native, macOS CDC Studio,
+RFTC, sanitizer, ThreadSanitizer, persistence, crash, mutation, concurrency,
+reproducibility, lifecycle, install, WASM, Lean, Coq, and paper lanes.
+
+## Permanent counterexamples
+
+- official keyed BLAKE3 vectors plus the existing unkeyed vector corpus
+- wrong key, recipient, subject, frame, action, horizon, quorum, and expiry
+- zero proposal digest, revoked/stale lease, replayed nonce, forged authority
+  ticket
+- partition, sequence gap, wrong causal parent, regressed logical clock,
+  duplicate envelope
+- truncated, trailing, malformed, and signed-header-tampered wire
+- deterministic mutation of every byte in the canonical process-test envelope
+- precommit resource exhaustion with no application mutation
+- failed application commit remaining retryable
+- simultaneous duplicate admission committing exactly once
+- ASan/UBSan and ThreadSanitizer execution
+
+## Composition boundary
+
+runtime/cdc_supervisor.c is the only supported composed admission path.
+Remote input never supplies a trusted approval count. Requested authority
+action and horizon are authenticated envelope fields. The supervisor derives
+the authority request from authenticated content and advances authority and
+causal state only after the application callback reports a complete commit.

@@ -1,16 +1,17 @@
 # RESUME_HERE — BiDi/CDC lane: C3 execution baton
 
-Updated 2026-07-28. **The post-PR6 mainline is green and C3 language ingress
-is complete; distributed C3 semantics are active work.** Read in order:
+Updated 2026-07-28. **The post-PR7 mainline is green; C3 language ingress is
+merged and the authenticated local control-plane ABI is implemented on the
+active branch. Recursive/distributed C3 semantics remain active work.** Read in order:
 `CDC_TOOLCHAIN_PLAN.md` (with
 Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
-`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D35).
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D36).
 
 ## Current head (2026-07-28)
 
-- `main` = `7b78cc5` — **PR #6 merged** after both exact-head CI lanes passed.
-- Work branch `codex/c3-language-abi` carries D35 and the first C3 increment.
+- `main` = `4005a7b` — **PR #7 merged** after both exact-head CI lanes passed.
+- Work branch `codex/c3-authority-transport` carries D36 and ABI 1.4.
 - The completed post-merge arc is indexed by its decision record: BLAKE3 + product
   surfaces + store protocol (D13–D14), persistence as a language form
   (D15), the 2026-07-28 review repair — store generations, real
@@ -23,7 +24,8 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
   coordination (D29), the second review and Darwin reproducibility repairs
   (D30–D32), the frozen bootloader-oracle decision (D33), and the
    separately classified RFTC logical-cell crucible (D34), and the
-   six-form/R1-R6 C3 language ingress (D35).
+   six-form/R1-R6 C3 language ingress (D35), and the authenticated
+   authority/transport supervisor boundary (D36).
 - Full `./scripts/verify.sh` green locally at this head, including the
   Phase I gate section and the sanitized Phase I sweep.
 - The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
@@ -32,7 +34,7 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 
 ## COMPLETE in this repository (all hard-gated in `./scripts/verify.sh`)
 
-1. **Canonical frontend + ABI** (grammar 1, ABI 1.3), differential oracle,
+1. **Canonical frontend + ABI** (grammar 1, ABI 1.4), differential oracle,
    adversarial/allocator/sanitizer sweeps (D5, D7, D13, D17).
 2. **Unified `cdc` driver**: verify/run/test/build/install/x + legacy verb
    passthrough, byte-identical to the standalone binaries.
@@ -79,19 +81,27 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 9. **RFTC C3 language ingress**: `frame`, `reduce`, `complex`, `topology`,
    `authority`, and `transport` parse through the canonical native frontend
    and frozen oracle under the explicit R1-R6 registry allocation; malformed
-   and unknown forms fail closed (D35). Runtime semantics remain queued below.
+   and unknown forms fail closed (D35). PR #7 merged this ingress.
+10. **C3 authenticated local control plane**: canonical MAC-bound wire
+    envelopes, scoped/versioned authority leases, nonce/replay defense,
+    partitions and causal ordering, and a serialized exactly-once supervisor
+    admission surface are implemented behind ABI 1.4 (D36). The maximal
+    formal gate includes cross-process wire, capacity failure, forged ticket,
+    concurrent duplicate, every-byte wire mutation, sanitizer, and
+    ThreadSanitizer counterexamples.
 
 ## QUEUED, with recorded reasons (not blockers, not claims)
 
-- **RFTC integrated C3 semantics** — compile the accepted six forms into
-  bounded dynamic frame/topology state, authenticated transport,
-  scope/horizon/expiry/nonce/revocation authority, quorum/partition handling,
-  recursive logical cells, and bound operator surfaces. The R1-R6 allocation
-  and grammar ingress are complete under D35.
-- **Ed25519 keyed authentication + external anchor** — integrity tags are
-  unkeyed (corruption detection, not forgery resistance); whole-file
-  generation rollback is detectable only against an externally retained
-  anchor. Stated in D16; queued behind CT5-adjacent key management.
+- **RFTC remaining C3 semantics** — connect the accepted `frame` / `reduce` /
+  `complex` / `topology` declarations to bounded dynamic state; build recursive
+  logical cells, scheduler integration, cross-host reconciliation, and bound
+  operator surfaces. R1-R6 ingress is merged under D35 and the authenticated
+  local authority/transport supervisor is implemented under D36.
+- **Ed25519 identity, key rotation, network session authentication, and
+  external anchor** — D36 adds shared-key keyed-BLAKE3 authenticity to RFTC
+  envelopes; it does not provide public-key identity, non-repudiation, mTLS,
+  or whole-file rollback protection against an adversary controlling both the
+  store and retained anchor. These remain CT5-adjacent key-management work.
 - **CT5: sealed capability environment + hostile-package
   counterexamples** — until these pass, `cdc x` is TRUSTED-LOCAL-ONLY
   (no network, no registries, no archives; verification is drift/tamper
@@ -119,7 +129,7 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 ## BLOCKED EXTERNAL (unchanged)
 
 1. `ETEllis/Memory-Manifold` repository access — blocks Phases E–H. The
-   interface contract v1.0.3 is the binding surface; the cdc_store sealed
+   interface contract v1.3.0 is the binding surface; the cdc_store sealed
    transaction + replay-digest model is the intended persistence core.
 2. `ETEllis/GIST` access + the Superposition source bundle — blocks
    Phase K and GIST Track M.

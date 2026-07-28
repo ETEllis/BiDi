@@ -2,6 +2,47 @@
 
 Format: decision id, date, decision, rationale, consequences. Append-only.
 
+## D36 — 2026-07-28 — C3 authority and transport close through one serialized supervisor
+
+RFTC transport uses a canonical, length-delimited `RF3W` v1 envelope. The
+sender, recipient, frame, key and lease identifiers, message type, requested
+authority action, horizon, sequence, logical clock, nonce, causal parent,
+payload length, payload digest, and payload are all covered by a
+domain-separated keyed BLAKE3 MAC. A second unkeyed digest identifies the
+complete authenticated envelope. Decode rejects truncation, trailing bytes,
+embedded-NUL identifiers, unknown structure, and over-limit payloads.
+
+This is deliberately named **shared-key authentication**, not Ed25519,
+public-key identity, mTLS, or non-repudiation. Key rotation, external identity,
+and network session establishment remain separate later gates. Quorum approval
+counts are accepted only as locally verified supervisor input; they are never
+taken from a remote envelope.
+
+Authority leases bind a subject, frame, one or more permitted actions, horizon
+range, validity interval, quorum, revision, revocation state, nonce, and
+proposal digest. Checks are side-effect free and produce a ticket; ticket
+consumption revalidates every binding and rejects replay, tampering, expiry,
+revocation, or stale revisions.
+
+The ABI 1.4 `cdc_supervisor` is the only composed admission boundary. Under one
+mutex it authenticates and causally orders the envelope, derives the authority
+request from the authenticated action/horizon/payload, checks locally verified
+quorum evidence, reserves all control-plane capacity, invokes one all-or-
+nothing application commit callback, then consumes the authority nonce and
+causal cursor. Holds and rejects call no mutation. Concurrent admission of the
+same envelope commits exactly once; a failed callback leaves the envelope
+retryable; resource exhaustion holds before the callback.
+
+The RFTC gate covers official keyed-BLAKE3 vectors, wrong key/recipient/
+subject/frame/horizon/action/quorum/expiry, zero digest, replay and duplicate
+nonces, causal gaps, parents, and logical-clock regression, partition holds,
+forged authority tickets, canonical
+cross-process wire round trips, malformed/tampered wire bytes, simultaneous
+admission, allocation limits, ASan/UBSan, and ThreadSanitizer. This closes the
+authenticated local C3 control-plane ABI; it does not claim a deployed network,
+public-key identity, recursive logical cells, full cross-host reconciliation,
+C3 as a whole, or any Q-level evidence.
+
 ## D1 — 2026-07-22 — Amendment adopted as binding over the toolchain plan
 
 The CDC Toolchain + Memory Manifold Full-Build Amendment (2026-07-22) is

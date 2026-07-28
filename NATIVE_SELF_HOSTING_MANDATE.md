@@ -191,7 +191,11 @@ The C3 RFTC forms (`frame`, `reduce`, `complex`, `topology`, `authority`,
 collects their identifiers and attributes for differential parity; it owns no
 distributed semantics. Those semantics must enter through the native ABI and
 the one guarded execution path before any CLI, daemon, SDK, or UI can claim
-them.
+them. D36 closes the first such path at ABI 1.4: keyed canonical transport,
+scoped authority, and causal admission compose only through the opaque
+serialized supervisor. Frame/topology execution, recursive cells, deployed
+network sessions, and cross-host reconciliation remain outside that closed
+increment.
 
 **GATE 5 CLOSED on the runtime dependency (2026-07-28, operator decision
 Option A, D33).** The language verifies and runs entirely natively: both

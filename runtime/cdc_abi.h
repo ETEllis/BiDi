@@ -32,7 +32,7 @@
  *   the process or prints. Every function returns cdc_status; out-values are
  *   NULL/0 on failure.
  *
- * Availability at ABI 1.1
+ * Availability through ABI 1.4
  *   Parse, diagnostics, canonical bytes, result serialization, registry
  *   loading, and contract verification (cdc_runtime_load +
  *   cdc_runtime_verify — the bootloader-parity report) are fully
@@ -43,13 +43,20 @@
  */
 
 #define CDC_ABI_VERSION_MAJOR 1
-#define CDC_ABI_VERSION_MINOR 3
+#define CDC_ABI_VERSION_MINOR 4
 
-/* ABI 1.3 adds typed effect receipts (cdc_receipt.h), the structured
+/* ABI 1.3 added typed effect receipts (cdc_receipt.h), the structured
  * record of one executed effect. Consumers that need an outcome read a
  * receipt instead of matching the human report line; the two channels are
- * rendered from one struct and their agreement is gated. */
-#include "cdc_receipt.h" 
+ * rendered from one struct and their agreement is gated.
+ *
+ * ABI 1.4 adds the RFTC C3 authenticated control plane. cdc_supervisor.h is
+ * the stable opaque boundary: keyed canonical transport, scoped authority,
+ * causal admission, and an all-or-nothing commit callback are serialized
+ * behind one supervisor. It is a shared-key integrity/authenticity boundary,
+ * not a public-key signature or mTLS claim. */
+#include "cdc_receipt.h"
+#include "cdc_supervisor.h"
 
 typedef enum {
     CDC_OK = 0,

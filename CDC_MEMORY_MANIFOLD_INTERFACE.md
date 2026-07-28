@@ -1,6 +1,6 @@
 # CDC / Memory Manifold Interface Contract
 
-**interface-version:** 1.2.0
+**interface-version:** 1.3.0
 **status:** binding cross-repository contract (digest-pinned per release)
 **change protocol:** single-writer — the BiDi/CDC lane publishes new versions;
 the Memory Manifold and Superposition lanes consume by committed digest.
@@ -16,9 +16,9 @@ before its Phase E work begins.
 
 | surface | current | next planned | owner |
 |---|---|---|---|
-| interface-version | 1.2.0 | — | BiDi/CDC repo |
+| interface-version | 1.3.0 | — | BiDi/CDC repo |
 | grammar-version | 1 (canonical lexer/parser/AST frontend, `runtime/cdc_lexer.c` + `cdc_parser.c`; acceptance byte-compatible with grammar 0, proven by the CT1 differential; grammar 0 remains the oracle until its recorded removal gate) | extensions only by version bump | BiDi/CDC repo |
-| abi-version | 1.3 (`runtime/cdc_abi.h`: parse, diagnostics, canonical bytes, result serialization, registry load, contract verify at bootloader parity, statement introspection, typed receipts; execute declared, fails closed with CDC_ERR_STATE) | 1.4 (RFTC C3 execution surface) | BiDi/CDC repo |
+| abi-version | 1.4 (`runtime/cdc_abi.h`: prior 1.3 surface plus the opaque RFTC supervisor API for keyed canonical transport, scoped authority, causal admission, and serialized all-or-nothing commit) | 1.5 (recursive logical cells and supervised scheduler) | BiDi/CDC repo |
 | evidence-format-version | 1 (this document §6) | — | BiDi/CDC repo |
 | mm-schema-version | 0 (names reserved, §4; no implementation) | 1 (Phase E, in the Memory Manifold repo) | Memory Manifold repo |
 
@@ -34,7 +34,7 @@ Uniqueness is absolute; identifiers are never silently reused.
 | H1–H5 | task frameworks: transition, procedural, episodic, deliberative, loop | live |
 | H6–H11 | toolchain frameworks: manifest, runner, test, install, build, package-runner | reserved (toolchain plan) |
 | H12–H17 | Memory Manifold: substrate, traversal, curvature, re-embedding, consolidation, service boundary | reserved (amendment §4.1) |
-| R1–R6 | RFTC: frame, reduce, complex, topology, authority, transport | live language ingress (D35); distributed C3 semantics in progress |
+| R1–R6 | RFTC: frame, reduce, complex, topology, authority, transport | language ingress live (D35); authenticated authority/transport ABI live (D36); recursive cells and cross-host reconciliation in progress |
 | U1 | universal operator | live |
 
 ## 3. Semantic contract (normative, implementation-neutral)

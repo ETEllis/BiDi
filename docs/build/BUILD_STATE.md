@@ -7,8 +7,8 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 ## Current source identity
 
 - repository: `ETEllis/BiDi-Coherence-Delta-Calculus` (GitHub remote)
-- main: `7b78cc564f10a245f043840fae04eafefb2538fa` (PR #6 merge);
-  active branch: `codex/c3-language-abi`
+- main: `4005a7b4922c2810d7af3ef0c5439a635f4786aa` (PR #7 merge);
+  active branch: `codex/c3-authority-transport`
 - baseline at Phase A freeze: `origin/main` = `8cfe48fdb71e53af78411471869c064e6c650c63`;
   work-branch HEAD entering Phase A = `99747e0a63ad14ad243934c122da73ec94a57940`
   (adds `CDC_TOOLCHAIN_PLAN.md`)
@@ -19,6 +19,25 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   and `evidence/gates/CT0/sha256-manifest.txt` (interim SHA-256, see D2)
 
 ## Last completed phase and gate
+
+- **PR #7 MERGED — C3 six-form language ingress (2026-07-28).** Exact head
+  `cdcf14ca1c691839b3fa56283b333b73cddeedf2` passed the full native/formal/
+  paper lane and CDC Studio macOS lane; merge commit `4005a7b`. The active
+  D36 branch layers the authenticated C3 control plane on that merged source.
+
+- **C3 authenticated control-plane ABI implemented and full local gate green;
+  PR promotion pending (2026-07-28, D36).** ABI 1.4 exports keyed canonical
+  transport, scoped authority leases, replay/nonce and causal-order defense,
+  and one opaque serialized supervisor admission boundary. Requested action
+  and horizon are MAC-bound rather than supplied out of band. The maximal
+  `./scripts/verify.sh --require-formal` gate passes official keyed BLAKE3
+  vectors, malformed and tampered wire,
+  an actual fork/socket cross-process round trip, partitions, causal gaps,
+  wrong recipient/subject/frame/horizon/action/quorum/expiry, forged tickets,
+  resource exhaustion before mutation, retry after commit failure, exactly-once
+  simultaneous admission, ASan/UBSan, and ThreadSanitizer. This is shared-key
+  authenticity, not Ed25519/mTLS or non-repudiation; recursive cells,
+  reconciliation, and full C3 remain open.
 
 - **PR #6 MERGED — C1-C2 RFTC converged on the post-PR5 mainline
   (2026-07-28).** Exact head `f73a12c` passed the full native/formal/paper
@@ -35,8 +54,8 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   reservation untouched. `rftc.cdc` declares the canonical boundary, and
   the RFTC gate proves all six forms parse with their attributes while
   identifier-free forms and unknown quantum-shaped aliases reject with typed
-  diagnostics. This is the language ingress, not completion of authenticated
-  transport, distributed authority, recursive cells, or C3 as a whole.
+  diagnostics. PR #7 merged this ingress; D36 now implements the authenticated
+  authority/transport ABI, while recursive cells and C3 as a whole remain open.
 
 - **PR #4 MERGED; bootloader Option A executed (2026-07-28, D33).** The
   operator approved pinned head `6784ab5` after independent macOS

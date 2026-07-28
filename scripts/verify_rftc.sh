@@ -31,6 +31,34 @@ echo "== RFTC: six-form grammar and fail-closed counterexamples =="
   -o "$out_dir/cdc_rftc_language_test"
 "$out_dir/cdc_rftc_language_test"
 
+echo "== RFTC: keyed BLAKE3 authentication primitive =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_rftc_crypto_test.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_rftc_crypto_test"
+"$out_dir/cdc_rftc_crypto_test"
+
+echo "== RFTC: authenticated transport and scoped authority =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_control_plane_test.c \
+  runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_control_plane_test"
+"$out_dir/cdc_control_plane_test"
+
+echo "== RFTC: serialized supervisor admission =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_supervisor_test.c \
+  runtime/cdc_supervisor.c runtime/cdc_authority.c runtime/cdc_transport.c \
+  runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_supervisor_test"
+"$out_dir/cdc_supervisor_test"
+
+echo "== RFTC: canonical cross-process envelope =="
+"$compiler" "${common_flags[@]}" -Werror -O2 \
+  experiments/rftc/cdc_transport_process_test.c \
+  runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_transport_process_test"
+"$out_dir/cdc_transport_process_test"
+
 echo "== RFTC: sealed event-recovery API =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_store_replay_api_test.c \
@@ -130,6 +158,45 @@ jq -e '.verdict == "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM"' \
   runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
   -o "$out_dir/cdc_store_replay_api_test_sanitized"
 "$out_dir/cdc_store_replay_api_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_rftc_crypto_test.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_rftc_crypto_test_sanitized"
+"$out_dir/cdc_rftc_crypto_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_control_plane_test.c \
+  runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_control_plane_test_sanitized"
+"$out_dir/cdc_control_plane_test_sanitized"
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_supervisor_test.c \
+  runtime/cdc_supervisor.c runtime/cdc_authority.c runtime/cdc_transport.c \
+  runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_supervisor_test_sanitized"
+"$out_dir/cdc_supervisor_test_sanitized"
+
+if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
+  experiments/rftc/cdc_supervisor_test.c \
+  runtime/cdc_supervisor.c runtime/cdc_authority.c runtime/cdc_transport.c \
+  runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_supervisor_test_tsan" 2>/dev/null; then
+  "$out_dir/cdc_supervisor_test_tsan"
+  echo "RFTC supervisor concurrency PASS under ThreadSanitizer"
+else
+  echo "RFTC supervisor ThreadSanitizer unavailable; lane skipped (recorded)"
+fi
+
+"$compiler" "${common_flags[@]}" -Werror -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  experiments/rftc/cdc_transport_process_test.c \
+  runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
+  -o "$out_dir/cdc_transport_process_test_sanitized"
+"$out_dir/cdc_transport_process_test_sanitized"
 
 cp "$out_dir/verdict-a.json" "$out_dir/verdict.json"
 cp "$out_dir/metrics-a.csv" "$out_dir/metrics.csv"
