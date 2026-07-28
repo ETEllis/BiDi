@@ -96,6 +96,15 @@ int cdc_transport_envelope_set_payload(cdc_transport_envelope *envelope,
 int cdc_transport_envelope_sign(
     cdc_transport_envelope *envelope,
     const uint8_t key[CDC_TRANSPORT_TAG_SIZE]);
+
+/* Stateless payload/MAC/identity verification for durable envelope replay.
+ * This authenticates one canonical envelope but does not apply peer schema,
+ * recipient, partition, sequence, parent, or logical-clock policy. */
+cdc_transport_verdict
+cdc_transport_envelope_verify_auth(
+    const cdc_transport_envelope *envelope,
+    const uint8_t key[CDC_TRANSPORT_TAG_SIZE]);
+
 int cdc_transport_envelope_encode(const cdc_transport_envelope *envelope,
                                   uint8_t **out_bytes, size_t *out_length);
 /* `out` must be initialized and empty. Decode owns any payload it installs. */

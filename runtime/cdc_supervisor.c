@@ -12,6 +12,11 @@ struct cdc_supervisor {
     uint8_t key[CDC_TRANSPORT_TAG_SIZE];
 };
 
+typedef struct {
+    cdc_supervisor_commit_fn commit;
+    void *context;
+} commit_adapter_context;
+
 static int transport_is_hold(cdc_transport_verdict verdict) {
     return verdict >= CDC_TRANSPORT_HOLD_PARTITION &&
            verdict <= CDC_TRANSPORT_HOLD_LIMIT;
@@ -48,6 +53,15 @@ static void fill_receipt(cdc_supervisor_receipt *receipt,
            sizeof(receipt->proposal_digest));
     memcpy(receipt->envelope_digest, envelope->envelope_digest,
            sizeof(receipt->envelope_digest));
+}
+
+static cdc_supervisor_application_verdict
+adapt_commit(const cdc_transport_envelope *envelope,
+             const cdc_supervisor_receipt *receipt, void *opaque) {
+    commit_adapter_context *adapter = opaque;
+    return adapter->commit(envelope, receipt, adapter->context)
+               ? CDC_SUPERVISOR_APPLICATION_ACCEPT
+               : CDC_SUPERVISOR_APPLICATION_HOLD;
 }
 
 cdc_supervisor *
@@ -129,19 +143,20 @@ void cdc_supervisor_set_partitioned(cdc_supervisor *supervisor,
 }
 
 cdc_supervisor_verdict
-cdc_supervisor_admit(cdc_supervisor *supervisor,
-                     const cdc_transport_envelope *envelope, uint64_t now,
-                     uint32_t verified_approvals,
-                     cdc_supervisor_commit_fn commit, void *context,
-                     cdc_supervisor_receipt *receipt) {
+cdc_supervisor_admit_ex(cdc_supervisor *supervisor,
+                        const cdc_transport_envelope *envelope, uint64_t now,
+                        uint32_t verified_approvals,
+                        cdc_supervisor_apply_fn apply, void *context,
+                        cdc_supervisor_receipt *receipt) {
     cdc_transport_ticket transport_ticket;
     cdc_authority_request request;
     cdc_authority_ticket authority_ticket;
     cdc_transport_verdict transport_verdict;
     cdc_authority_verdict authority_verdict;
+    cdc_supervisor_application_verdict application_verdict;
     cdc_supervisor_verdict verdict;
 
-    if (!supervisor || !envelope || !commit || !receipt) {
+    if (!supervisor || !envelope || !apply || !receipt) {
         if (receipt) {
             memset(receipt, 0, sizeof(*receipt));
             receipt->verdict = CDC_SUPERVISOR_REJECT_INTERNAL;
@@ -213,8 +228,15 @@ cdc_supervisor_admit(cdc_supervisor *supervisor,
     }
 
     receipt->verdict = CDC_SUPERVISOR_ACCEPT;
-    if (!commit(envelope, receipt, context)) {
+    application_verdict = apply(envelope, receipt, context);
+    receipt->application_verdict = application_verdict;
+    if (application_verdict == CDC_SUPERVISOR_APPLICATION_HOLD) {
         verdict = CDC_SUPERVISOR_HOLD_COMMIT;
+        goto done;
+    }
+    if (application_verdict != CDC_SUPERVISOR_APPLICATION_ACCEPT &&
+        application_verdict != CDC_SUPERVISOR_APPLICATION_REJECT) {
+        verdict = CDC_SUPERVISOR_REJECT_INTERNAL;
         goto done;
     }
 
@@ -233,7 +255,9 @@ cdc_supervisor_admit(cdc_supervisor *supervisor,
         verdict = CDC_SUPERVISOR_REJECT_INTERNAL;
         goto done;
     }
-    verdict = CDC_SUPERVISOR_ACCEPT;
+    verdict = application_verdict == CDC_SUPERVISOR_APPLICATION_ACCEPT
+                  ? CDC_SUPERVISOR_ACCEPT
+                  : CDC_SUPERVISOR_REJECT_APPLICATION;
 
 done:
     receipt->verdict = verdict;
@@ -241,14 +265,46 @@ done:
     return verdict;
 }
 
+cdc_supervisor_verdict
+cdc_supervisor_admit(cdc_supervisor *supervisor,
+                     const cdc_transport_envelope *envelope, uint64_t now,
+                     uint32_t verified_approvals,
+                     cdc_supervisor_commit_fn commit, void *context,
+                     cdc_supervisor_receipt *receipt) {
+    commit_adapter_context adapter;
+    if (!commit) {
+        if (receipt) {
+            memset(receipt, 0, sizeof(*receipt));
+            receipt->verdict = CDC_SUPERVISOR_REJECT_INTERNAL;
+        }
+        return CDC_SUPERVISOR_REJECT_INTERNAL;
+    }
+    adapter.commit = commit;
+    adapter.context = context;
+    return cdc_supervisor_admit_ex(supervisor, envelope, now,
+                                   verified_approvals, adapt_commit,
+                                   &adapter, receipt);
+}
+
 const char *cdc_supervisor_verdict_name(cdc_supervisor_verdict verdict) {
     static const char *const NAMES[] = {
         "accept",          "hold-transport", "hold-authority",
         "hold-commit",     "reject-transport", "reject-authority",
-        "reject-internal",
+        "reject-internal", "reject-application",
     };
     if ((size_t)verdict >= sizeof(NAMES) / sizeof(NAMES[0])) {
         return "reject-unknown";
+    }
+    return NAMES[verdict];
+}
+
+const char *cdc_supervisor_application_verdict_name(
+    cdc_supervisor_application_verdict verdict) {
+    static const char *const NAMES[] = {
+        "not-run", "accept", "hold", "reject",
+    };
+    if ((size_t)verdict >= sizeof(NAMES) / sizeof(NAMES[0])) {
+        return "unknown";
     }
     return NAMES[verdict];
 }

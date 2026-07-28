@@ -16,8 +16,16 @@ typedef enum {
     CDC_SUPERVISOR_HOLD_COMMIT,
     CDC_SUPERVISOR_REJECT_TRANSPORT,
     CDC_SUPERVISOR_REJECT_AUTHORITY,
-    CDC_SUPERVISOR_REJECT_INTERNAL
+    CDC_SUPERVISOR_REJECT_INTERNAL,
+    CDC_SUPERVISOR_REJECT_APPLICATION
 } cdc_supervisor_verdict;
+
+typedef enum {
+    CDC_SUPERVISOR_APPLICATION_NOT_RUN = 0,
+    CDC_SUPERVISOR_APPLICATION_ACCEPT,
+    CDC_SUPERVISOR_APPLICATION_HOLD,
+    CDC_SUPERVISOR_APPLICATION_REJECT
+} cdc_supervisor_application_verdict;
 
 typedef struct {
     uint32_t schema_version;
@@ -34,6 +42,7 @@ typedef struct {
     cdc_supervisor_verdict verdict;
     cdc_transport_verdict transport_verdict;
     cdc_authority_verdict authority_verdict;
+    cdc_supervisor_application_verdict application_verdict;
     char sender[CDC_TRANSPORT_ID_MAX + 1];
     char frame[CDC_TRANSPORT_ID_MAX + 1];
     char lease_id[CDC_TRANSPORT_ID_MAX + 1];
@@ -59,6 +68,18 @@ typedef int (*cdc_supervisor_commit_fn)(
     const cdc_transport_envelope *envelope,
     const cdc_supervisor_receipt *receipt, void *context);
 
+/*
+ * Typed application admission. ACCEPT may commit an all-or-nothing mutation.
+ * HOLD must leave application state unchanged and keeps the authority nonce
+ * and causal cursor retryable. REJECT must also leave application state
+ * unchanged, but terminally consumes the already-reserved nonce and causal
+ * position so authenticated malformed input cannot poison its stream.
+ */
+typedef cdc_supervisor_application_verdict
+(*cdc_supervisor_apply_fn)(const cdc_transport_envelope *envelope,
+                           const cdc_supervisor_receipt *receipt,
+                           void *context);
+
 cdc_supervisor *
 cdc_supervisor_create(const cdc_supervisor_config *config);
 void cdc_supervisor_destroy(cdc_supervisor *supervisor);
@@ -83,6 +104,15 @@ cdc_supervisor_admit(cdc_supervisor *supervisor,
                      cdc_supervisor_commit_fn commit, void *context,
                      cdc_supervisor_receipt *receipt);
 
+cdc_supervisor_verdict
+cdc_supervisor_admit_ex(cdc_supervisor *supervisor,
+                        const cdc_transport_envelope *envelope, uint64_t now,
+                        uint32_t verified_approvals,
+                        cdc_supervisor_apply_fn apply, void *context,
+                        cdc_supervisor_receipt *receipt);
+
 const char *cdc_supervisor_verdict_name(cdc_supervisor_verdict verdict);
+const char *cdc_supervisor_application_verdict_name(
+    cdc_supervisor_application_verdict verdict);
 
 #endif

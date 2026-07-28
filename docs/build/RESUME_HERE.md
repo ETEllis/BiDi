@@ -1,17 +1,19 @@
 # RESUME_HERE — BiDi/CDC lane: C3 execution baton
 
-Updated 2026-07-28. **The post-PR7 mainline is green; C3 language ingress is
-merged and the authenticated local control-plane ABI is implemented on the
-active branch. Recursive/distributed C3 semantics remain active work.** Read in order:
+Updated 2026-07-28. **PR #8 is merged. ABI 1.5 local recursive execution and
+authenticated exact-history restart are implemented on the active branch and
+the rapid/sanitizer/concurrency and maximal formal gates are green. PR
+promotion, exact-head CI, and actual cross-host reconciliation remain active
+work.** Read in order:
 `CDC_TOOLCHAIN_PLAN.md` (with
 Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 2026-07-23 adversarial review) → `CDC_MEMORY_MANIFOLD_INTERFACE.md` →
-`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D36).
+`docs/build/BUILD_STATE.md` → `docs/build/DECISIONS.md` (D1–D39).
 
 ## Current head (2026-07-28)
 
-- `main` = `4005a7b` — **PR #7 merged** after both exact-head CI lanes passed.
-- Work branch `codex/c3-authority-transport` carries D36 and ABI 1.4.
+- `main` = `79a508a` — **PR #8 merged** after both exact-head CI lanes passed.
+- Work branch `codex/c3-recursive-cells` carries D37-D38 and ABI 1.5.
 - The completed post-merge arc is indexed by its decision record: BLAKE3 + product
   surfaces + store protocol (D13–D14), persistence as a language form
   (D15), the 2026-07-28 review repair — store generations, real
@@ -25,16 +27,21 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
   (D30–D32), the frozen bootloader-oracle decision (D33), and the
    separately classified RFTC logical-cell crucible (D34), and the
    six-form/R1-R6 C3 language ingress (D35), and the authenticated
-   authority/transport supervisor boundary (D36).
-- Full `./scripts/verify.sh` green locally at this head, including the
-  Phase I gate section and the sanitized Phase I sweep.
+   authority/transport supervisor boundary (D36), and the sealed recursive
+   scheduler plus authenticated restart journal (D37), the atomic
+   content-bound frame-epoch/outcome-record repair (D38), and the expanded
+   multiscale Relational Closure end-state/claim dependency graph (D39).
+- `./scripts/verify_rftc.sh` is green on the active D38 source, including
+  release, ASan/UBSan, and ThreadSanitizer lanes. Full
+  `./scripts/verify.sh --require-formal` is green after staging every new
+  source/evidence file and regenerating the head-bound provenance manifest.
 - The 2026-07-28 REQUEST CHANGES review pinned `1ea1ddd`; that head was
   never merged and every finding is repaired with permanent
   counterexamples (D16 records the withdrawn claims).
 
 ## COMPLETE in this repository (all hard-gated in `./scripts/verify.sh`)
 
-1. **Canonical frontend + ABI** (grammar 1, ABI 1.4), differential oracle,
+1. **Canonical frontend + ABI** (grammar 1, ABI 1.5), differential oracle,
    adversarial/allocator/sanitizer sweeps (D5, D7, D13, D17).
 2. **Unified `cdc` driver**: verify/run/test/build/install/x + legacy verb
    passthrough, byte-identical to the standalone binaries.
@@ -89,14 +96,29 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
     formal gate includes cross-process wire, capacity failure, forged ticket,
     concurrent duplicate, every-byte wire mutation, sanitizer, and
     ThreadSanitizer counterexamples.
+11. **C3 local recursive execution and restart**: immutable canonical frame
+    seals, strict topology and witnessed sector/frame transitions,
+    provenance-preserving cells, canonical sealed-forest scheduling, `CDCP`
+    observation/witness payloads, typed terminal application rejection, and
+    complete signed-envelope journaling/replay are implemented behind ABI 1.5
+    (D37-D38). Frame epochs are atomic and predecessor-bound; composite
+    receipts bind child identity; imported state is canonically revalidated;
+    replay reapplies the configured peer policy; stale commands remain
+    retryable; and terminal outcomes are durable. Release, ASan/UBSan, and
+    ThreadSanitizer rapid lanes are green.
+12. **Expanded end-state and claim graph**: the microscopic/quantum,
+    distributed mesh, horizon-foundry, cosmological-atlas, biological
+    observer/AI, and product/release lanes are frozen under one operator and
+    separate C/QS/QH/R/Q/H/B/G evidence gates (D39). These are build and
+    falsification obligations, not current scientific claims.
 
 ## QUEUED, with recorded reasons (not blockers, not claims)
 
-- **RFTC remaining C3 semantics** — connect the accepted `frame` / `reduce` /
-  `complex` / `topology` declarations to bounded dynamic state; build recursive
-  logical cells, scheduler integration, cross-host reconciliation, and bound
-  operator surfaces. R1-R6 ingress is merged under D35 and the authenticated
-  local authority/transport supervisor is implemented under D36.
+- **RFTC multi-host C3 completion** — the bounded local execution kernel and
+  durable restart boundary exist under D37. Next bind it to a real
+  network-session driver, mixed-version/partition harness, cross-host
+  reconciliation receipts, and operator surfaces. Until that evidence exists,
+  artifacts may say "C3-capable local kernel" but not claim C3.
 - **Ed25519 identity, key rotation, network session authentication, and
   external anchor** — D36 adds shared-key keyed-BLAKE3 authenticity to RFTC
   envelopes; it does not provide public-key identity, non-repudiation, mTLS,

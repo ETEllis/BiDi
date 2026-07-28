@@ -223,6 +223,32 @@ int cdc_transport_envelope_sign(
     return compute_identity(envelope, envelope->envelope_digest);
 }
 
+cdc_transport_verdict
+cdc_transport_envelope_verify_auth(
+    const cdc_transport_envelope *envelope,
+    const uint8_t key[CDC_TRANSPORT_TAG_SIZE]) {
+    uint8_t digest[CDC_TRANSPORT_TAG_SIZE];
+    uint8_t mac[CDC_TRANSPORT_TAG_SIZE];
+    uint8_t identity[CDC_TRANSPORT_TAG_SIZE];
+    if (!envelope || !key || !envelope_structurally_valid(envelope)) {
+        return CDC_TRANSPORT_REJECT_ARGUMENT;
+    }
+    payload_digest(envelope, digest);
+    if (!constant_equal(digest, envelope->payload_digest, sizeof(digest))) {
+        return CDC_TRANSPORT_REJECT_PAYLOAD;
+    }
+    if (!compute_mac(envelope, key, mac) ||
+        !constant_equal(mac, envelope->mac, sizeof(mac))) {
+        return CDC_TRANSPORT_REJECT_AUTH;
+    }
+    if (!compute_identity(envelope, identity) ||
+        !constant_equal(identity, envelope->envelope_digest,
+                        sizeof(identity))) {
+        return CDC_TRANSPORT_REJECT_IDENTITY;
+    }
+    return CDC_TRANSPORT_ACCEPT;
+}
+
 static int size_add(size_t *total, size_t amount) {
     if (amount > SIZE_MAX - *total) {
         return 0;
@@ -351,7 +377,8 @@ static int take_u16(wire_reader *reader, uint16_t *out) {
     if (!take_bytes(reader, bytes, sizeof(bytes))) {
         return 0;
     }
-    *out = ((uint16_t)bytes[0] << 8) | bytes[1];
+    *out = (uint16_t)(((uint16_t)bytes[0] << 8) |
+                      (uint16_t)bytes[1]);
     return 1;
 }
 

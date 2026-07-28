@@ -51,7 +51,15 @@ observer-independent ontology.
 5. runs the entire smoke profile under AddressSanitizer and
    UndefinedBehaviorSanitizer;
 6. validates the evidence schema, seven PASS results, and explicit claim
-   exclusions.
+   exclusions;
+7. separately gates the ABI 1.5 C3 kernel: canonical frames and topology,
+   atomic predecessor-bound configuration epochs, content-bound recursive
+   receipts, recursive scheduling, canonical command wire, typed supervision,
+   durable outcome-preserving authenticated restart under live peer policy,
+   wrong-peer/wrong-key/corruption zero-mutation behavior, concurrent
+   publication/witness/drain and duplicate admission, storage-crash retry, and
+   compacted-history refusal under release, ASan/UBSan, and ThreadSanitizer
+   builds.
 
 Profiles are intentionally nested:
 
@@ -70,3 +78,8 @@ Profiles are intentionally nested:
 The full system remains blocked from a quantum claim unless it is connected to
 a genuine nonclassical physical substrate and passes an independently designed,
 loophole-aware witness. That work is a separate experimental lane.
+
+The ABI 1.5 tests also do not promote the runtime to C3 by themselves. They
+establish a **C3-capable local durable kernel**. A C3 artifact requires an
+actual multi-host session with authenticated cross-host receipts, partition
+behavior, and deterministic reconciliation replay.

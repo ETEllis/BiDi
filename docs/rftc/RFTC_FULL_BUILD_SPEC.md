@@ -1,8 +1,8 @@
 # Reference-Frame Topological Coherence — Full Build Specification
 
-Status: **C1-C2 runtime core and C3 six-form language ingress merged;
-authenticated local authority/transport supervisor implemented under D36;
-recursive execution and cross-host reconciliation remain gated next**
+Status: **C1-C2 runtime core and C3 language/control-plane merged; ABI 1.5
+local durable recursive execution kernel implemented under D37-D38; actual
+multi-host session, cross-host reconciliation, and C3 evidence remain gated**
 
 ## 1. End state
 
@@ -140,7 +140,11 @@ transport lab-mesh
 | `cdc_topology` | oriented complexes, winding, sector transitions | ambiguous orientation or boundary rejects |
 | `cdc_authority` | bounded versioned leases, subject/frame/action/horizon scope, local quorum input, expiry/revocation, nonce and forged-ticket defense | missing, wrong-scope, expired, revoked, replayed, or stale authority rejects |
 | `cdc_transport` | canonical versioned envelope, MAC-bound action/horizon/payload, recipient/key/schema checks, deduplication and causal order | partitions, duplicates, gaps, and parent mismatch hold; tamper/replay rejects |
-| `cdc_supervisor` | one mutex-owned authenticate → authority → reserve → all-or-nothing commit → consume/accept transaction | every precondition failure is pre-mutation; concurrent duplicate commits once |
+| `cdc_supervisor` | one mutex-owned authenticate → authority → reserve → typed application verdict → consume/accept transaction | holds remain exactly retryable; terminal semantic rejects consume poison positions without application mutation; concurrent duplicate commits once |
+| `cdc_cell` | reduce one sealed frame into a provenance-bound logical-cell state and canonically revalidate exported/imported state | old clocks, version regression, unwitnessed topology/frame transitions, and state-digest/lineage tampering reject |
+| `cdc_scheduler` | freeze a bounded cell forest, atomically migrate predecessor-bound configuration epochs, and process canonical observation/witness order through recursive barriers | pre-seal publication, graph mutation, child rebinding, mixed predecessor lineage, receipt tampering, conflicting duplicates, incomplete child epochs, and capacity overflow fail closed |
+| `cdc_scheduler_wire` | canonical bounded `CDCP` v1 observation/witness encoding | noncanonical phase aliases, reserved bits, truncation, trailing bytes, malformed evidence, and oversized payloads reject |
+| `cdc_scheduler_journal` | seal canonical outcome plus complete signed envelope and reconstruct fresh schedulers from exact authenticated history under the configured peer policy | storage failure holds without authority consumption; wrong peer policy/key/corruption mutate no scheduler; terminal poison remains causal without app mutation; compacted history is non-executable and refused |
 | existing store | append, snapshot, recovery, digest, replay | current fail-closed semantics retained |
 | existing bridge/council | cross-cell routing and guarded collective decision | no direct state mutation |
 | existing universal operator | lifted closure and enacted-coordinate agreement | remains derived, not foundational |
@@ -148,10 +152,11 @@ transport lab-mesh
 | `cdc_shared_record` | fragment publication and quorum recovery through sealed store history | missing quorum, duplicate fragments, conflict, corruption, or compacted payload loss reject |
 | `cdc_barrier` | shared balanced-ternary prefix-admissibility kernel | invalid carrier or negative prefix rejects |
 
-Control-plane collections are bounded dynamic allocations carrying explicit
-limits. Their public operations are exported through ABI 1.4 before a network
-service or UI may depend on them. Frame/topology and recursive-cell collections
-remain the next implementation lane.
+Control-plane, frame, cell, scheduler, and replay collections are bounded
+dynamic allocations carrying explicit limits. Their public operations are
+exported through ABI 1.5 before a network service or UI may depend on them.
+Network-session identity and actual cross-host reconciliation remain separate
+composition gates.
 
 ## 5. Data contracts
 
@@ -186,11 +191,33 @@ recordCoordinate, decisionCoordinate, enactedCoordinate?,
 previousStateDigest, resultingStateDigest?, signature, receiptVersion
 ```
 
-### Replay envelope
+### Scheduler command and replay envelope
 
-All records use length-delimited, versioned envelopes with an algorithm-tagged
-digest, previous-record digest, writer identity, logical clock, and CRC before
-the semantic payload. Unknown versions hold rather than downgrade.
+Scheduler commands use canonical bounded `CDCP` v1 payloads. Durable ingress
+stores canonical `CDJR` v1 `ACCEPT`/`REJECT` outcomes wrapping the complete
+canonical `RF3W` authenticated envelope, including sender, recipient, frame,
+lease, action, horizon, causal parent, payload digest, MAC, and envelope
+identity. Restart reconstructs the configured peer and rechecks every policy
+and authentication field rather than trusting the store's unkeyed integrity
+digest. Unknown or noncanonical versions fail closed; exact recovery refuses a
+compacted store because its discarded event bytes cannot be reconstructed from
+the retained commitment.
+
+### Configuration epoch receipt
+
+```text
+cellId, kind, canonicalCellStructureDigest,
+sourceConfigurationDigest, previousLogicalCellState
+```
+
+The structure digest binds the oriented ring and, for a composite, the child
+cell identifier assigned to each oriented member. The embedded state is
+canonically revalidated before import. Every receipt binds the configuration
+digest of the sealed scheduler that exported it. A new unsealed scheduler
+imports one atomic batch only when every source digest equals the declared
+predecessor, then seals a new configuration. Same-frame carry-forward requires
+exact structure. A changed cell advances exactly one frame version and
+requires a `FRAME_CHANGE` witness before its next commit.
 
 ## 6. Distributed lifecycle
 
@@ -224,17 +251,51 @@ Every artifact and UI surface carries one of these machine-readable levels:
 | C2 | topologically classified logical cells | oriented boundary, invariant preservation, phase-slip transition |
 | C3 | distributed BiDi logical-cell runtime | authenticated receipts, partitions, recovery, cross-host replay |
 | C4 | useful classical computational advantage | matched workload benchmarks against accepted baselines |
+| QS0/QS1 | typed quantum-simulator semantics and independent simulator validation | quantum ABI, reference oracles, mutation/fuzz/resource evidence |
+| QH0 | authentic real-hardware execution receipt | provider identity, job/result/calibration provenance |
+| R0 | uniquely derived closure probability measure | formal axioms, uniqueness, alternatives and countermodels |
 | Q0 | nonclassical physical witness | loophole-aware physical experiment, independent analysis |
 | Q1 | quantum computational advantage | accepted task and classical-resource comparison |
+| H0 | executable boundary record-sufficiency mechanism | Models C/D with hidden-global-access controls |
+| B0 | black-hole closure foundry reproduces declared information behavior | gravitational model, conservation, emergent turnover, independent audit |
+| G0 | emergent geometry/gravity prediction | gauge-invariant observable, accepted-limit recovery, preregistered new prediction |
 
 The seven-witness executable crucible targets C1-C2. Its per-event
 admissibility witness uses the same barrier as native and persistent commits,
 then observes durable store and typed-receipt effects. Its distributed-record
 witness closes and reopens independent fragment stores and recovers only
 through their integrity-checked sealed payloads. Parser forms and the
-authenticated local control-plane ABI are implemented; actual network session
-transport, public-key identity, recursive cells, and cross-host reconciliation
-remain in the C3 build. No software stage can self-promote to Q0 or Q1.
+authenticated local control plane, recursive cells, scheduler, and exact
+restart journal are implemented. That is a **C3-capable local kernel**, not C3
+evidence: actual network-session transport, public-key identity, and
+cross-host reconciliation receipts remain in the C3 build. No software stage
+can self-promote to Q0 or Q1.
+
+## 7.1 Constitutive research extensions
+
+The runtime semantics are the frozen substrate interface for six separately
+gated research programs:
+
+- [`COSMOLOGICAL_RECORD_CLOSURE.md`](COSMOLOGICAL_RECORD_CLOSURE.md) —
+  constitutive self-simulation, moving relational center, boundary
+  accountability, X dynamic, Models A-D, and H0/B0/G0;
+- [`HORIZON_FOUNDRY_SPEC.md`](HORIZON_FOUNDRY_SPEC.md) — typed foundry,
+  capacity, provenance, emission, backreaction, and Page-like turnover;
+- [`BORN_CLOSURE_DERIVATION.md`](BORN_CLOSURE_DERIVATION.md) — R0 axioms,
+  alternative measures, proof obligations, and anti-target-coding controls;
+- [`QUANTUM_CLASSICAL_DISSOLUTION_CRUCIBLE.md`](QUANTUM_CLASSICAL_DISSOLUTION_CRUCIBLE.md)
+  — interference, contextuality, Bell, no-cloning, and resource accounting;
+- [`COSMOLOGICAL_HORIZON_ATLAS_SPEC.md`](COSMOLOGICAL_HORIZON_ATLAS_SPEC.md)
+  — overlap consistency, causal translation, closure capacity, relational
+  dissipation, and record holonomy;
+- [`BIOLOGICAL_TRANSDUCTIVE_OBSERVER_SPEC.md`](BIOLOGICAL_TRANSDUCTIVE_OBSERVER_SPEC.md)
+  — organism-boundary transduction, discrete/continuous recursion, active
+  inference, valence, self-model, and separately gated consciousness claims.
+
+These documents extend the end state. They do not change the authority of the
+current C1-C2/C3-capable evidence. Their ordered implementation and parallel
+baton rules are frozen in
+[`RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md`](RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md).
 
 ## 8. Full verification matrix
 
@@ -286,11 +347,12 @@ remain in the C3 build. No software stage can self-promote to Q0 or Q1.
 2. **Local semantics:** `frame` / `reduce` / `complex` / `topology` parser,
    AST, reducer, logical cell, topology.
 3. **Durable truth:** versioned state/receipt replay and crash recovery.
-4. **Authority:** H16 leases, quorum, revocation, adversarial suite.
+4. **Authority:** R5 leases, quorum, revocation, adversarial suite.
 5. **ABI completion:** every operation callable and fail-closed in-process.
-6. **Distribution:** `transport` authenticated transport, partition semantics,
-   reconciliation, mixed-version operation.
-7. **Recursive cells:** nesting, bridge/council integration, universal closure.
+6. **Recursive cells:** nesting, canonical scheduling, provenance propagation,
+   witnessed topology transition, and restart reconstruction.
+7. **Distribution:** `transport` network-session transport, partition
+   semantics, reconciliation, mixed-version operation, and cross-host replay.
 8. **Operator surfaces:** web/macOS binding to actual records.
 9. **Production crucible:** scale, soak, fault injection, security review,
    independent replay, artifact provenance.
@@ -308,8 +370,8 @@ build/rftc/rftc_crucible --profile rapid
 open experiments/rftc/ui/index.html
 ```
 
-Then ask an independent model to review `CRUCIBLE_CONTRACT.md`,
-`verdict.json`, and this specification for:
+Then review `CRUCIBLE_CONTRACT.md`, `verdict.json`, the ABI 1.5 runtime, and
+[`VERIFICATION_OBLIGATION_MATRIX.md`](VERIFICATION_OBLIGATION_MATRIX.md) for:
 
 1. a counterexample that passes a witness without the claimed mechanism;
 2. a threshold tuned to the implementation instead of the hypothesis;
@@ -317,5 +379,6 @@ Then ask an independent model to review `CRUCIBLE_CONTRACT.md`,
 4. a missing authority, replay, or partition invariant;
 5. any statement that crosses from C0-C3 into Q0-Q1 without physical evidence.
 
-Only a clean rapid run plus resolved independent objections opens integrated
-six-form implementation.
+Only a clean rapid run plus resolved independent objections opens multi-host
+distribution and the later quantum-execution ABI. Local mechanism completion
+never promotes its own scientific claim.
