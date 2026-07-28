@@ -46,6 +46,25 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D32 — 2026-07-28 — The signature's identifier is the basename, so share the basename
+
+The macOS lane's second full run moved the repro divergence from byte
+1289 (the LC_UUID, excluded in D31) to byte 195187 — the tail of the
+binary, which on Apple silicon is the ad-hoc code signature the linker
+appends to every executable. The signature's identifier string defaults
+to the OUTPUT BASENAME: `repro_a` and `repro_b` therefore carried
+different identifiers and different signature blobs over identical code.
+
+The repair strengthens the comparison instead of narrowing it: both
+rounds now emit the SAME basename (`cdc_repro`) into different round
+directories, so the identifiers match and the byte-compare COVERS the
+ad-hoc signature — the D31 claim ("the signature computed over them" is
+compared) is now actually true rather than accidentally false. The gate
+also gained divergence diagnostics: on any future mismatch it prints the
+first differing byte, the total differing count, and hex context from
+both binaries, so the next platform surprise names itself in the CI log
+instead of being reasoned about from a byte offset.
+
 ## D31 — 2026-07-28 — The linker's UUID is not the build's content
 
 The new macOS full-suite lane earned its keep on its first run: every

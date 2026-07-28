@@ -1010,17 +1010,21 @@ fi
 echo "corpus identity tracks source content (probe restored)"
 
 # Reproducible native binaries: the same sources, built twice, byte-identical.
-# On Darwin, Apple's linker mints a per-link LC_UUID — identification
-# metadata the inputs do not determine, and the ONLY byte that differed
-# when the macOS lane first ran this gate (D31). It is excluded there so
-# the comparison covers everything the sources DO determine: code, data,
-# layout, and the ad-hoc signature computed over them. The exclusion is
-# stated here, not hidden in a weaker comparison.
+# Two Darwin lessons, each caught by the macOS lane's own first runs and
+# each recorded rather than papered over (D31, D32):
+#   1. Apple's linker mints a per-link LC_UUID — identification metadata
+#      the inputs do not determine. Excluded on Darwin, visibly.
+#   2. The ad-hoc code signature's identifier string defaults to the
+#      OUTPUT BASENAME, so `repro_a` vs `repro_b` differed in the
+#      signature blob alone. Both rounds therefore produce the SAME
+#      basename in different directories, which lets the byte-compare
+#      COVER the signature instead of excluding it.
 REPRO_LDFLAGS=""
 if [ "$(uname)" = "Darwin" ]; then
   REPRO_LDFLAGS="-Wl,-no_uuid"
 fi
-rm -f build/repro_a build/repro_b
+rm -rf build/repro_round_a build/repro_round_b
+mkdir -p build/repro_round_a build/repro_round_b
 for ROUND in a b; do
   # shellcheck disable=SC2086
   cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread $REPRO_LDFLAGS \
@@ -1046,10 +1050,26 @@ for ROUND in a b; do
     runtime/cdc_digest.c \
     runtime/cdc_blake3.c \
     -lm \
-    -o "build/repro_${ROUND}"
+    -o "build/repro_round_${ROUND}/cdc_repro"
 done
-cmp build/repro_a build/repro_b
-./build/cdc_frontend_check digest-file build/repro_a > build/repro_digest.txt
+if ! cmp build/repro_round_a/cdc_repro build/repro_round_b/cdc_repro; then
+  # Name the divergence precisely so the next platform surprise reads
+  # from the log instead of being guessed at: first differing byte, the
+  # total count, and hex context from both binaries.
+  DIVERGE_AT=$(cmp -l build/repro_round_a/cdc_repro \
+    build/repro_round_b/cdc_repro | awk 'NR==1 {print $1}')
+  cmp -l build/repro_round_a/cdc_repro build/repro_round_b/cdc_repro \
+    | awk -v first="$DIVERGE_AT" \
+      'END {print "repro divergence: first byte " first ", differing bytes " NR}' >&2
+  DUMP_FROM=$((DIVERGE_AT > 64 ? DIVERGE_AT - 64 : 0))
+  dd if=build/repro_round_a/cdc_repro bs=1 skip="$DUMP_FROM" count=160 \
+    2>/dev/null | od -A d -t x1 >&2
+  dd if=build/repro_round_b/cdc_repro bs=1 skip="$DUMP_FROM" count=160 \
+    2>/dev/null | od -A d -t x1 >&2
+  exit 1
+fi
+./build/cdc_frontend_check digest-file build/repro_round_a/cdc_repro \
+  > build/repro_digest.txt
 echo "reproducible build ok ($(awk '{print $1}' build/repro_digest.txt))"
 # Honest boundary: this is same-machine, same-compiler reproducibility. It
 # proves the build embeds no timestamp, path, or nondeterministic ordering.
