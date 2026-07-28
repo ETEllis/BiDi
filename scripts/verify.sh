@@ -154,6 +154,9 @@ echo
 run_step ./scripts/verify_ui.sh
 
 echo
+run_step ./scripts/verify_rftc.sh
+
+echo
 echo "== Native .cdc contract and witness suite =="
 python3 cdc_boot.py
 

@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.omx/
 
 # Local build outputs (repository root only; docs/build/ is tracked)
 /dist/

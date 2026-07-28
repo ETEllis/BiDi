@@ -1327,6 +1327,166 @@ cdc_store_status cdc_store_replay(cdc_store *store, char *out,
     return CDC_STORE_OK;
 }
 
+/* Second half of exact recovery. scan_log() has already authenticated the
+ * entire file and fixed valid_bytes at its last SEAL while the shared store
+ * lock is held. This pass re-checks framing, payload digests, sequences, and
+ * transaction seals as it supplies the retained payload bytes. */
+static cdc_store_status visit_sealed_prefix(
+    const char *path, long valid_bytes, uint64_t expected_events,
+    uint64_t expected_transactions, cdc_store_event_visitor visitor,
+    void *context) {
+    FILE *fp;
+    uint8_t head[HEADER_SIZE + HEAD_BODY];
+    long offset = (long)sizeof(head);
+    uint64_t event_sequence = 1;
+    uint64_t transaction_sequence = 1;
+    uint64_t visited = 0;
+    uint64_t sealed = 0;
+    cdc_digest_ctx txn_ctx;
+    int txn_open = 0;
+    cdc_store_status status = CDC_STORE_OK;
+
+    fp = fopen(path, "rb");
+    if (!fp) {
+        return CDC_STORE_EIO;
+    }
+    if (fread(head, 1, sizeof(head), fp) != sizeof(head)) {
+        status = ferror(fp) ? CDC_STORE_EIO : CDC_STORE_ECORRUPT;
+        goto done;
+    }
+    while (offset < valid_bytes) {
+        uint8_t header[HEADER_SIZE];
+        uint8_t tag[CDC_DIGEST_SIZE];
+        uint8_t type;
+        uint64_t sequence;
+        uint32_t payload_len;
+
+        if (valid_bytes - offset < HEADER_SIZE ||
+            fread(header, 1, sizeof(header), fp) != sizeof(header)) {
+            status = ferror(fp) ? CDC_STORE_EIO : CDC_STORE_ECORRUPT;
+            goto done;
+        }
+        cdc_digest(header, FRAMING_SIZE, tag);
+        if (memcmp(header, MAGIC, sizeof(MAGIC)) != 0 ||
+            memcmp(tag, header + OFF_TAG, CDC_DIGEST_SIZE) != 0) {
+            status = CDC_STORE_ECORRUPT;
+            goto done;
+        }
+        type = header[4];
+        sequence = get_u64(header + 5);
+        payload_len = get_u32(header + 13);
+        if (payload_len > (uint32_t)CDC_STORE_MAX_RECORD) {
+            status = CDC_STORE_ECORRUPT;
+            goto done;
+        }
+        if (type == 'D') {
+            uint8_t *payload;
+            uint8_t digest[CDC_DIGEST_SIZE];
+
+            if (sequence != event_sequence ||
+                (long)payload_len > valid_bytes - offset - HEADER_SIZE) {
+                status = CDC_STORE_ECORRUPT;
+                goto done;
+            }
+            payload = malloc(payload_len ? payload_len : 1);
+            if (!payload) {
+                status = CDC_STORE_EMEM;
+                goto done;
+            }
+            if (payload_len > 0 &&
+                fread(payload, 1, payload_len, fp) != payload_len) {
+                status = ferror(fp) ? CDC_STORE_EIO : CDC_STORE_ECORRUPT;
+                free(payload);
+                goto done;
+            }
+            cdc_digest(payload, payload_len, digest);
+            if (memcmp(digest, header + OFF_DIGEST, CDC_DIGEST_SIZE) != 0) {
+                free(payload);
+                status = CDC_STORE_ECORRUPT;
+                goto done;
+            }
+            if (!txn_open) {
+                cdc_digest_init(&txn_ctx);
+                txn_open = 1;
+            }
+            cdc_digest_update(&txn_ctx, header + OFF_DIGEST,
+                              CDC_DIGEST_SIZE);
+            status = visitor(context, event_sequence, transaction_sequence,
+                             payload, payload_len);
+            free(payload);
+            if (status != CDC_STORE_OK) {
+                goto done;
+            }
+            event_sequence++;
+            visited++;
+            offset += HEADER_SIZE + (long)payload_len;
+        } else if (type == 'S') {
+            uint8_t seal_expected[CDC_DIGEST_SIZE];
+
+            if (payload_len != 0 || sequence != transaction_sequence ||
+                !txn_open) {
+                status = CDC_STORE_ECORRUPT;
+                goto done;
+            }
+            cdc_digest_final(&txn_ctx, seal_expected);
+            txn_open = 0;
+            if (memcmp(seal_expected, header + OFF_DIGEST,
+                       CDC_DIGEST_SIZE) != 0) {
+                status = CDC_STORE_ECORRUPT;
+                goto done;
+            }
+            transaction_sequence++;
+            sealed++;
+            offset += HEADER_SIZE;
+        } else {
+            status = CDC_STORE_ECORRUPT;
+            goto done;
+        }
+    }
+    if (offset != valid_bytes || txn_open || visited != expected_events ||
+        sealed != expected_transactions) {
+        status = CDC_STORE_ECORRUPT;
+    }
+
+done:
+    fclose(fp);
+    return status;
+}
+
+cdc_store_status cdc_store_visit_events(cdc_store *store,
+                                        cdc_store_event_visitor visitor,
+                                        void *context) {
+    scan_result scan;
+    cdc_store_status status;
+
+    if (!store || !visitor) {
+        return CDC_STORE_EARG;
+    }
+    status = store_lock(store);
+    if (status != CDC_STORE_OK) {
+        return status;
+    }
+    status = scan_log(store->log_path, &scan);
+    if (status != CDC_STORE_OK) {
+        store_unlock(store);
+        return status;
+    }
+    if (scan.state == SCAN_CORRUPT || !scan.has_head) {
+        store_unlock(store);
+        return CDC_STORE_ECORRUPT;
+    }
+    /* A compaction HEAD retains counts and replay identity, not payload
+     * bytes. Exact recovery must refuse instead of silently omitting them. */
+    if (scan.base_events != 0 || scan.base_sealed != 0) {
+        store_unlock(store);
+        return CDC_STORE_EUNSUPPORTED;
+    }
+    status = visit_sealed_prefix(store->log_path, scan.valid_bytes,
+                                 scan.events, scan.sealed, visitor, context);
+    store_unlock(store);
+    return status;
+}
+
 cdc_store_status cdc_store_attest(cdc_store *store, char *out,
                                   size_t out_size) {
     FILE *fp;

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "cdc_ast.h"
+#include "cdc_barrier.h"
 #include "cdc_diagnostic.h"
 #include "cdc_digest.h"
 #include "cdc_parser.h"
@@ -1305,8 +1306,8 @@ static void execute_commit(Runtime *rt, Step *step, CommitResult *result) {
     int cell_indexes[MAX_CELLS];
     char cell_trits[MAX_CELLS];
     int trit_count = 0;
-    int balance = 0;
-    int admissible = 1;
+    cdc_barrier_result barrier;
+    int admissible;
     const char *status;
     const char *reason;
     memset(result, 0, sizeof(*result));
@@ -1320,19 +1321,10 @@ static void execute_commit(Runtime *rt, Step *step, CommitResult *result) {
     for (int i = 0; i < rt->cell_count; i++) {
         Cell *cell = &rt->cells[i];
         char trit;
-        int value;
         if (strcmp(cell->module, module->name) != 0) {
             continue;
         }
         trit = trit_from_theta(cell->theta, field->deadband);
-        value = trit_value(trit);
-        if (balance + value < 0) {
-            admissible = 0;
-        }
-        balance += value;
-        if (balance < 0) {
-            admissible = 0;
-        }
         if (trit_count + 1 >= (int)sizeof(trits)) {
             fail("commit trit vector too long");
         }
@@ -1344,6 +1336,10 @@ static void execute_commit(Runtime *rt, Step *step, CommitResult *result) {
     if (trit_count == 0) {
         fail("commit module has no cells");
     }
+    if (!cdc_barrier_evaluate(trits, &barrier)) {
+        fail("commit barrier rejected its internal carrier");
+    }
+    admissible = barrier.admissible;
     status = admissible ? "accepted" : "held";
     reason = admissible ? "none" : "balance-violation";
     if (admissible) {

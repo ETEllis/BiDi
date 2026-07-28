@@ -34,6 +34,22 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
   ignored. Next: Memory Manifold (E–H) and GIST/Superposition (K)
   integration lanes, opened by the operator. PC6 stays hard-paused.
 
+- **RFTC classical logical-cell crucible (2026-07-28, D34).**
+  A C99 executable tests the missing layer between continuous phase flow
+  and guarded commit through five separately gated witnesses:
+  synchronization onset, oriented winding-sector preservation, hidden
+  microstate granularity, bidirectional macro/micro recovery, and an
+  explicit causal cut. Identical smoke runs byte-match in JSON and CSV;
+  an alternate seed produces a distinct passing record; the same lane
+  passes ASan/UBSan. The 256-seed rapid and 4,096-seed stress profiles
+  pass all five witnesses on the operator host. The evidence surface is
+  self-contained, byte-bound to the tracked smoke verdict, accepts fresh
+  runtime verdicts, rejects malformed evidence, and passes narrow-screen
+  validation. The full six-form architecture, authority/transport
+  boundaries, claim ladder, and production stress matrix are frozen under
+  `docs/rftc/`; integrated implementation is the next gated lane, not a
+  completed claim.
+
 - **Second review round repaired (2026-07-28, D30).** Four findings at
   `810f1f6`, each confirmed against the reviewer's own probes and gated:
   (1) BSD `wc` padding failed the suite on a real Mac while both CI lanes

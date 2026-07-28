@@ -91,6 +91,32 @@ Editable install:
 pip install -e .
 ```
 
+### Reference-frame topological coherence crucible
+
+The repository includes a deliberately classical rapid crucible for the
+logical-cell layer between phase flow and guarded commit. It tests five
+independent mechanisms: synchronization onset, preservation of an oriented
+winding sector, distinct microstates behind one macroscopic boundary,
+bidirectional macro/micro recovery, and a causal cut that rejects ordinary
+cluster communication as evidence of nonclassicality.
+
+```bash
+./scripts/verify_rftc.sh
+build/rftc/rftc_crucible --profile rapid \
+  --json build/rftc/verdict-rapid.json \
+  --csv build/rftc/metrics-rapid.csv
+```
+
+Open [`experiments/rftc/ui/index.html`](experiments/rftc/ui/index.html) for the
+self-contained evidence surface. The exact witness contract is in
+[`experiments/rftc/CRUCIBLE_CONTRACT.md`](experiments/rftc/CRUCIBLE_CONTRACT.md);
+the production architecture, authority model, distributed lifecycle, claim
+ladder, stress matrix, and gated execution sequence are in
+[`docs/rftc/RFTC_FULL_BUILD_SPEC.md`](docs/rftc/RFTC_FULL_BUILD_SPEC.md). The
+field-computation, physics, neuroscience, systems, and polymath convergence is
+captured in
+[`docs/rftc/SPECIALIST_SYNTHESIS.md`](docs/rftc/SPECIALIST_SYNTHESIS.md).
+
 ## Core Architecture
 
 ```mermaid

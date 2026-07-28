@@ -46,6 +46,34 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D34 — 2026-07-28 — RFTC is a classical logical-cell lane with a hard causal cut
+
+The reference-frame topological-coherence proposal enters this repository as
+an executable classical field-computation lane. Its first irreversible design
+choice is the missing representational layer between phase-bearing nodes and
+the existing guarded commit: a logical cell reduces an immutable microstate
+snapshot to `R`, `Psi`, dispersion, an oriented boundary/winding sector, and a
+hidden-class digest, then permits an authorized constraint to flow downward.
+
+The initial crucible carries five independently failing witnesses:
+synchronization onset against zero coupling, winding preservation against
+destroyed adjacency and forced phase slip, distinct microstate digests behind
+one macro boundary, BiDi recovery against local-only recovery, and a causal
+cut in which a communicating CHSH implementation can reach `S=4` but is
+explicitly invalid. All five must pass; there is no composite score.
+
+The result is never labeled quantum superposition, entanglement, Bell
+nonlocality, or quantum advantage. A digital cluster has communication and a
+shared causal history; those are exactly the resources a nonclassical witness
+must exclude. The full architecture therefore separates the classical C0-C4
+claim ladder from the physical Q0-Q1 lane.
+
+The six proposed language forms are `frame`, `reduce`, `complex`, `topology`,
+`authority`, and `transport`. They receive no capability identifiers in this
+decision: D3 already reserves H12-H17 for Memory Manifold, so RFTC identifiers
+require a future explicit registry amendment. The crucible may open integrated
+implementation; it may not silently mutate the capability namespace.
+
 ## D33 — 2026-07-28 — Bootloader Option A executed: frozen CI-only oracle
 
 The operator chose Option A from

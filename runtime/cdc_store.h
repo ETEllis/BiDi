@@ -38,7 +38,7 @@
  * - Sequence numbers are monotonic and verified (DATA: global event
  *   ordinal; SEAL: transaction ordinal). Each SEAL digest is recomputed
  *   from its transaction's DATA digests and must match.
- * - open/verify/replay/attest share one typed scan; none can bypass
+ * - open/verify/replay/visit/attest share one typed scan; none can bypass
  *   integrity state. replay/attest operate on the sealed prefix only and
  *   refuse corrupt logs.
  * - Every record carries its payload digest (canonical BLAKE3; the
@@ -102,7 +102,7 @@ typedef enum {
                                    fail closed, log NEVER mutated */
     CDC_STORE_ECRASH = 5,       /* injected failure fired (test harness) */
     CDC_STORE_ESTATE = 6,
-    CDC_STORE_EUNSUPPORTED = 7, /* reserved; no verb uses it now */
+    CDC_STORE_EUNSUPPORTED = 7, /* exact payload recovery after compaction */
     CDC_STORE_EUNSEALED = 8,    /* verify: valid but unsealed/torn tail
                                    present (recoverable by open) */
 } cdc_store_status;
@@ -155,6 +155,32 @@ cdc_store_status cdc_store_rollback(cdc_store *store);
  * compacting, the events are gone and only this identity survives. */
 cdc_store_status cdc_store_replay(cdc_store *store, char *out,
                                   size_t out_size);
+
+/* Exact event recovery. The visitor is called once for every payload in
+ * global event-sequence order, with the 1-based transaction sequence that
+ * sealed it. The payload pointer is valid only for the duration of the
+ * callback. Return CDC_STORE_OK to continue; any other callback status
+ * stops recovery and is returned unchanged.
+ *
+ * This operation holds the store's shared critical section, validates the
+ * complete log through the same typed scan used by open/verify/replay, and
+ * establishes the sealed byte boundary before invoking the first callback.
+ * Therefore a corrupt committed prefix invokes no callbacks, and a valid
+ * or physically torn unsealed tail is never visited. The callback must not
+ * call any cdc_store function for this store (including close or reset).
+ *
+ * Compaction deliberately discards historical payload bytes while retaining
+ * their replay commitment. If any compacted base events exist, exact recovery
+ * is impossible and this function returns CDC_STORE_EUNSUPPORTED without
+ * invoking the visitor; it never presents a post-compaction suffix as the
+ * complete history. */
+typedef cdc_store_status (*cdc_store_event_visitor)(
+    void *context, uint64_t event_sequence, uint64_t transaction_sequence,
+    const void *payload, size_t payload_size);
+
+cdc_store_status cdc_store_visit_events(cdc_store *store,
+                                        cdc_store_event_visitor visitor,
+                                        void *context);
 
 /* Attest: digest of the raw sealed log bytes (evidence identity). */
 cdc_store_status cdc_store_attest(cdc_store *store, char *out,

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>BiDi RFTC Crucible</title>
+  <style>
+    :root {
+      --ink: #f3efe7;
+      --muted: #9da5a3;
+      --ground: #080a0b;
+      --panel: rgba(20, 24, 24, .84);
+      --line: rgba(255, 255, 255, .09);
+      --cyan: #78f0d1;
+      --amber: #f2b85b;
+      --rose: #ff7f83;
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 12%, rgba(120, 240, 209, .12), transparent 30rem),
+        radial-gradient(circle at 92% 16%, rgba(242, 184, 91, .10), transparent 28rem),
+        var(--ground);
+      font-family: "Avenir Next", Avenir, "Gill Sans", sans-serif;
+      letter-spacing: -.015em;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 54px 0 72px; }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; }
+    .eyebrow { color: var(--cyan); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; }
+    h1 {
+      margin: 9px 0 10px;
+      font-family: "Bodoni 72", Didot, "Iowan Old Style", serif;
+      font-size: clamp(2.4rem, 7vw, 6.2rem);
+      line-height: .86;
+      font-weight: 500;
+      letter-spacing: -.055em;
+    }
+    .lede { max-width: 680px; margin: 0; color: var(--muted); font-size: 1.05rem; line-height: 1.55; }
+    .stamp {
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.035);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .stamp strong { color: var(--ink); }
+    .summary {
+      margin-top: 44px;
+      padding: 26px;
+      display: grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap: 24px;
+      background: linear-gradient(135deg, rgba(120,240,209,.09), rgba(255,255,255,.025));
+      border: 1px solid rgba(120,240,209,.2);
+      border-radius: var(--radius);
+    }
+    .verdict { font-size: clamp(1.65rem, 3.3vw, 3rem); line-height: 1.04; }
+    .verdict span { color: var(--cyan); }
+    .scope { color: var(--muted); line-height: 1.55; }
+    .scope strong { display: block; color: var(--amber); margin-bottom: 5px; }
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
+    article {
+      min-height: 248px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      backdrop-filter: blur(14px);
+    }
+    .index { color: var(--muted); font-variant-numeric: tabular-nums; }
+    article h2 { margin: 16px 0 8px; font-size: 1.08rem; font-weight: 570; }
+    .status { color: var(--cyan); font-size: .78rem; letter-spacing: .12em; }
+    .metric { margin-top: 25px; font-size: 2rem; font-variant-numeric: tabular-nums; }
+    .metric-label { color: var(--muted); font-size: .74rem; line-height: 1.35; }
+    .controls {
+      margin-top: 28px;
+      padding-top: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-top: 1px solid var(--line);
+    }
+    label {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 11px 15px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.035);
+    }
+    input[type=file] { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+    .provenance { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+    .fail { color: var(--rose) !important; }
+    footer { margin-top: 36px; color: #747c7a; font-size: .78rem; line-height: 1.55; }
+    @media (max-width: 950px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 650px) {
+      main { padding-top: 32px; }
+      header, .summary { grid-template-columns: 1fr; }
+      .stamp { justify-self: start; }
+      .grid { grid-template-columns: 1fr; }
+      .controls { align-items: flex-start; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      article { transition: border-color .2s ease, transform .2s ease; }
+      article:hover { transform: translateY(-3px); border-color: rgba(120,240,209,.32); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">BiDi / Reference-Frame Topological Coherence</div>
+        <h1>Crucible,<br>not theatre.</h1>
+        <p class="lede">Seven independent witnesses test whether distributed phase flow can close as a stable, recoverable logical cell—and stop exactly where the evidence stops.</p>
+      </div>
+      <div class="stamp"><strong id="profile">smoke</strong> · <span id="seeds">24</span> seeds</div>
+    </header>
+
+    <section class="summary" aria-live="polite">
+      <div class="verdict" id="verdict">Foundational classical mechanism: <span>PASS</span></div>
+      <div class="scope">
+        <strong>Claim boundary</strong>
+        Topological field computation is in scope. Quantum superposition,
+        entanglement, Bell nonlocality, and quantum advantage are not.
+      </div>
+    </section>
+
+    <section class="grid" id="experiments" aria-label="RFTC experiment results"></section>
+
+    <div class="controls">
+      <label for="result-file">Load a fresh verdict
+        <input id="result-file" type="file" accept=".json,application/json">
+      </label>
+      <div class="provenance" id="provenance">schema rftc-crucible/v2 · seed 5928518606219378689</div>
+    </div>
+
+    <footer>
+      This surface renders the evidence record; it does not execute or override
+      runtime decisions. A failed witness blocks the integrated build.
+    </footer>
+  </main>
+
+  <script type="application/json" id="rftc-data">
+{
+  "schema": "rftc-crucible/v2",
+  "classification": "CLASSICAL_REFERENCE_FRAME_TOPOLOGICAL_COHERENCE",
+  "profile": "smoke",
+  "seed": "5928518606219378689",
+  "seeds": 24,
+  "nodeCount": 32,
+  "experiments": [
+    {"id":"synchronization-onset","status":"PASS","uncoupledR":0.159426161,"coupledR":0.994210920,"separation":0.834784760,"criticalCoupling":0.900000000,"precriticalR":0.693661783,"criticalR":0.952422954,"maxRegression":0.000000000,"thresholds":{"uncoupledMax":0.35,"coupledMin":0.80,"separationMin":0.50,"criticalR":0.80,"maxRegression":0.03}},
+    {"id":"topological-sector","status":"PASS","moderatePreservation":1.000000000,"shuffledPreservation":0.166666667,"meanSlipThreshold":2.964878067,"thresholds":{"moderateMin":0.99,"shuffledMax":0.60,"slipMin":2.5,"slipMax":3.8}},
+    {"id":"hidden-granularity","status":"PASS","macroMatchRate":1.000000000,"digestDifferenceRate":1.000000000,"frameVersionDifferenceRate":1.000000000,"claim":"distinct microstates share one macro boundary"},
+    {"id":"bidi-recovery","status":"PASS","bidiRecoverySteps":26.708333333,"localRecoverySteps":404.708333333,"improvement":0.934005971,"thresholds":{"improvementMin":0.30}},
+    {"id":"causal-cut","status":"PASS","classicalS":2.000000000,"communicatingS":4.000000000,"classicalValid":true,"communicatingValid":false,"claim":"a communicating digital cluster cannot certify nonclassicality"},
+    {"id":"packet-threshold","status":"PASS","subthresholdTotalInput":384.000000000,"superthresholdTotalInput":40.000000000,"subthresholdCommitRate":0.000000000,"lowFluxCommitRate":1.000000000,"highFluxCommitRate":1.000000000,"committedCountRatio":4.000000000,"meanExcessDelta":0.000000000,"buggyAccumulatorWouldCommit":true,"receiptParity":true,"claim":"aggregate drive cannot replace per-event admissibility"},
+    {"id":"record-redundancy","status":"PASS","singleFragmentRecovery":0.000000000,"quorumRecovery":1.000000000,"quorumGain":1.000000000,"scrambledRecovery":0.000000000,"centralOnlyRecovery":0.000000000,"centralOnlyRefused":true,"sealedFragmentStores":5,"claim":"shared facts require independently recoverable fragments"}
+  ],
+  "verdict": "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM",
+  "claims": {
+    "allowed": ["classical collective order parameter","classical topological sector","many-to-one reference-frame coarse graining","bidirectional macro-micro control advantage","typed per-event threshold contract","redundant classical record recovery"],
+    "notAllowed": ["quantum superposition","entanglement","Bell nonlocality","quantum computational advantage"]
+  }
+}
+  </script>
+  <script>
+    const names = {
+      "synchronization-onset": ["Synchronization onset", "coupled R", e => e.coupledR],
+      "topological-sector": ["Topological sector", "preserved", e => e.moderatePreservation],
+      "hidden-granularity": ["Hidden granularity", "macro match", e => e.macroMatchRate],
+      "bidi-recovery": ["BiDi recovery", "improvement", e => e.improvement],
+      "causal-cut": ["Causal cut", "valid classical S", e => e.classicalS],
+      "packet-threshold": ["Packet threshold", "commit ratio", e => e.committedCountRatio],
+      "record-redundancy": ["Record redundancy", "quorum recovery", e => e.quorumRecovery]
+    };
+    const fmt = (id, value) => {
+      if (id === "bidi-recovery" || id === "record-redundancy") {
+        return `${(value * 100).toFixed(1)}%`;
+      }
+      return Number(value).toFixed(3);
+    };
+    function render(data) {
+      if (data.schema !== "rftc-crucible/v2" || !Array.isArray(data.experiments)) {
+        throw new Error("Unsupported or malformed RFTC evidence");
+      }
+      const pass = data.verdict === "PASS_FOUNDATIONAL_CLASSICAL_MECHANISM";
+      document.querySelector("#profile").textContent = data.profile;
+      document.querySelector("#seeds").textContent = data.seeds;
+      document.querySelector("#verdict").innerHTML =
+        `Foundational classical mechanism: <span class="${pass ? "" : "fail"}">${pass ? "PASS" : "FAIL"}</span>`;
+      document.querySelector("#provenance").textContent =
+        `schema ${data.schema} · seed ${data.seed}`;
+      document.querySelector("#experiments").innerHTML = data.experiments.map((e, i) => {
+        const [title, label, value] = names[e.id] || [e.id, "metric", () => 0];
+        const failed = e.status !== "PASS";
+        return `<article>
+          <div><div class="index">0${i + 1}</div><h2>${title}</h2>
+          <div class="status ${failed ? "fail" : ""}">${e.status}</div></div>
+          <div><div class="metric">${fmt(e.id, value(e))}</div>
+          <div class="metric-label">${label}</div></div>
+        </article>`;
+      }).join("");
+    }
+    const initial = JSON.parse(document.querySelector("#rftc-data").textContent);
+    render(initial);
+    document.querySelector("#result-file").addEventListener("change", async event => {
+      const [file] = event.target.files;
+      if (!file) return;
+      try { render(JSON.parse(await file.text())); }
+      catch (error) {
+        document.querySelector("#verdict").innerHTML =
+          `Evidence rejected: <span class="fail">${error.message}</span>`;
+      }
+    });
+  </script>
+</body>
+</html>
