@@ -486,13 +486,13 @@ test "$RECEIPT_COUNT" = "11"
 # say what the prose says.
 PROSE_COUNT=$(grep -c "^persist=" build/receipts_prose.txt)
 test "$PROSE_COUNT" = "$RECEIPT_COUNT"
-grep -q "kind=persist job=journal-hold op=append outcome=0 reason=balance-violation declared-hold=1 trits=-+0 balance=violated durable=0 replay-stable=1" \
+grep -q "kind=persist job=journal-hold op=append outcome=0 reason=balance-violation declared-hold=1 trits=-+0 balance=violated witness=persistence-hold-native closure=blake3:.* durable=0 replay-stable=1" \
   build/receipts.txt
-grep -q "kind=persist job=journal-latch op=append outcome=+1 reason=none declared-hold=0 trits=0+- balance=admissible durable=1 replay-stable=0" \
+grep -q "kind=persist job=journal-latch op=append outcome=+1 reason=none declared-hold=0 trits=0+- balance=admissible witness=persistence-gate-native closure=blake3:.* durable=1 replay-stable=0" \
   build/receipts.txt
 # Compaction is the record that proves durable and replay are independent
 # observations, and it carries the generation the transition produced.
-grep -q "kind=persist job=journal-compact op=compact outcome=+1 reason=none declared-hold=0 durable=1 replay-stable=1 sealed=1 events=1 generation=1" \
+grep -q "kind=persist job=journal-compact op=compact outcome=+1 reason=none declared-hold=0 witness=persistence-compact-native closure=blake3:.* durable=1 replay-stable=1 sealed=1 events=1 generation=1" \
   build/receipts.txt
 grep -q "kind=persist job=contended-stale op=append outcome=0 reason=fence-violation" \
   build/receipts.txt
@@ -774,6 +774,19 @@ if grep -qE " (pass|true|false) " build/test_vectors.txt; then
   echo "execution vectors used a binary decision vocabulary" >&2
   exit 1
 fi
+# Closure witnesses (interface section 7, sixth field). An executed effect
+# and the claim declared about it are different things; the closure digest
+# is the link, so a consumer can check that what ran is what the source
+# said would run. Jobs with no witness binding render "-" — honest, not a
+# placeholder that would read as evidence.
+WITNESSED=$(awk '$6 != "-"' build/test_vectors.txt | wc -l)
+UNWITNESSED=$(awk '$6 == "-"' build/test_vectors.txt | wc -l)
+test "$WITNESSED" = "36"
+test "$UNWITNESSED" = "1"
+# The single unwitnessed effect is the rival writer in the compare-and-set
+# counterexample: a deliberately unbound helper job, not a dropped witness.
+awk '$6 == "-"' build/test_vectors.txt | grep -q "rival-latch"
+echo "closure witnesses ok bound=${WITNESSED} unbound=${UNWITNESSED} (rival-latch, by design)"
 echo "execution vector export ok records=${EXEC_VECTORS} commit=19 hold=8 nest=10 fail=0"
 
 echo

@@ -1,3 +1,4 @@
+#include "cdc_digest.h"
 #include "cdc_receipt.h"
 #include "cdc_source.h"
 #include "cdc_store.h"
@@ -28,6 +29,7 @@
 #define MAX_BRIDGES 32
 #define MAX_COUNTERS 32
 #define MAX_UNIVERSALS 8
+#define MAX_WITNESSES 64
 #define MAX_STORES 8
 #define MAX_PERSIST_JOBS 32
 #define LINE_MAX_BYTES 1024
@@ -311,6 +313,19 @@ typedef struct {
     int has_expect_events;
 } PersistJob;
 
+/* A witness binding: the declared claim about one executed job. The
+ * runtime does not evaluate witnesses — the contract checker owns that —
+ * but it must be able to NAME the witness an effect discharges, so the
+ * effect and the claim can be compared rather than assumed to match. */
+typedef struct {
+    char id[64];
+    char job[64];
+    char link[24];  /* the attribute that binds it: reducer, persistence, ... */
+    char text[LINE_MAX_BYTES]; /* canonical statement, digested into the
+                                * receipt; truncation would silently yield a
+                                * WRONG digest, so it is refused instead */
+} WitnessDecl;
+
 typedef struct {
     Field fields[MAX_FIELDS];
     Module modules[MAX_MODULES];
@@ -329,6 +344,7 @@ typedef struct {
     SurfaceBridgeJob bridges[MAX_BRIDGES];
     CounterJob counters[MAX_COUNTERS];
     UniversalJob universals[MAX_UNIVERSALS];
+    WitnessDecl witnesses[MAX_WITNESSES];
     StoreDecl stores[MAX_STORES];
     PersistJob persists[MAX_PERSIST_JOBS];
     int field_count;
@@ -350,6 +366,7 @@ typedef struct {
     int universal_count;
     int store_count;
     int persist_count;
+    int witness_count;
 } Runtime;
 
 static void fail(const char *message) {
@@ -931,6 +948,71 @@ static int step_declares_hold(const Step *step) {
            strcmp(step->expect_status, "held") == 0;
 }
 
+/* The job-link attributes a witness may carry, in the bootloader's
+ * declaration order. Exactly one must be present for the binding to be
+ * executable; a witness with none is a claim about something else and is
+ * simply not bound here. */
+static const char *const WITNESS_LINKS[] = {
+    "reducer", "guard",   "trace",     "measure", "policy",
+    "bridge",  "counter", "compile",   "interpret", "council",
+    "evolution", "universal", "store",  "persistence",
+};
+
+static void add_witness(Runtime *rt, const char *line) {
+    WitnessDecl *witness;
+    size_t i;
+    int links = 0;
+    if (rt->witness_count >= MAX_WITNESSES) {
+        return; /* the contract checker owns completeness; this is a cache */
+    }
+    witness = &rt->witnesses[rt->witness_count];
+    memset(witness, 0, sizeof(*witness));
+    cdc_first_token_after(line, "witness ", witness->id, sizeof(witness->id));
+    for (i = 0; i < sizeof(WITNESS_LINKS) / sizeof(WITNESS_LINKS[0]); i++) {
+        char value[64];
+        if (cdc_read_attr(line, WITNESS_LINKS[i], value, sizeof(value))) {
+            snprintf(witness->job, sizeof(witness->job), "%s", value);
+            snprintf(witness->link, sizeof(witness->link), "%s",
+                     WITNESS_LINKS[i]);
+            links++;
+        }
+    }
+    if (links != 1 || witness->id[0] == '\0' || witness->job[0] == '\0') {
+        return; /* not an executable binding */
+    }
+    {
+        int written = snprintf(witness->text, sizeof(witness->text), "%s",
+                               line);
+        if (written < 0 || (size_t)written >= sizeof(witness->text)) {
+            fail("witness statement too long to digest without truncation");
+        }
+    }
+    rt->witness_count++;
+}
+
+/* The witness bound to `job`, or NULL. */
+static const WitnessDecl *find_witness(Runtime *rt, const char *job) {
+    for (int i = 0; i < rt->witness_count; i++) {
+        if (strcmp(rt->witnesses[i].job, job) == 0) {
+            return &rt->witnesses[i];
+        }
+    }
+    return NULL;
+}
+
+/* Attaches the closure witness for `job` to a receipt, if one is declared. */
+static void attach_closure(Runtime *rt, cdc_receipt *receipt,
+                           const char *job) {
+    const WitnessDecl *witness = find_witness(rt, job);
+    uint8_t digest[CDC_DIGEST_SIZE];
+    if (!witness) {
+        return;
+    }
+    snprintf(receipt->witness, sizeof(receipt->witness), "%s", witness->id);
+    cdc_digest(witness->text, strlen(witness->text), digest);
+    cdc_digest_hex(digest, receipt->closure, sizeof(receipt->closure));
+}
+
 static void add_store(Runtime *rt, const char *line) {
     StoreDecl *store;
     char mode[16];
@@ -1037,6 +1119,8 @@ static void parse_source(Runtime *rt, const char *path) {
             add_store(rt, line);
         } else if (cdc_starts_with(line, "persist ")) {
             add_persist(rt, line);
+        } else if (cdc_starts_with(line, "witness ")) {
+            add_witness(rt, line);
         }
     }
     fclose(fp);
@@ -1210,6 +1294,7 @@ static void run_commit(Runtime *rt, Step *step) {
     receipt.declared_hold = step_declares_hold(step);
     snprintf(receipt.trits, sizeof(receipt.trits), "%s", result.trits);
     snprintf(receipt.balance, sizeof(receipt.balance), "%s", result.balance);
+    attach_closure(rt, &receipt, result.id);
     emit_receipt(&receipt);
     printf("commit=%s module=%s trits=%s balance=%s status=%s reason=%s\n",
            result.id, result.module, result.trits, result.balance, result.status, result.reason);
@@ -1287,6 +1372,7 @@ static void run_nest(Runtime *rt, Step *step) {
      * path, and saying so explicitly keeps the ternary honest. */
     receipt.outcome = CDC_OUTCOME_ACCEPTED;
     snprintf(receipt.reason, sizeof(receipt.reason), "none");
+    attach_closure(rt, &receipt, result.id);
     emit_receipt(&receipt);
     printf("nest=%s parent=%s child=%s up=%.6f parent-belief=%.6f child-prior=%.6f\n",
            result.id, result.parent, result.child, result.up, result.parent_belief, result.child_prior);
@@ -2126,6 +2212,7 @@ static void run_persistence(Runtime *rt, const char *path) {
                 snprintf(receipt.balance, sizeof(receipt.balance), "%s",
                          decision.balance);
             }
+            attach_closure(rt, &receipt, job->id);
             emit_receipt(&receipt);
         }
         if (is_append) {
@@ -2472,6 +2559,7 @@ static void run_universal(Runtime *rt, const char *path) {
             snprintf(receipt.reason, sizeof(receipt.reason), "%s", res.reason);
             receipt.declared_hold = job->expect_status[0] &&
                                     strcmp(job->expect_status, "held") == 0;
+            attach_closure(rt, &receipt, job->id);
             emit_receipt(&receipt);
         }
         printf("universal=%s frame=%s receptive=%s radiant=%s holonomy=%s half-projection=%s half-sheet=%s full-projection=%s full-sheet=%s winding=%d record=%s decision=%s enacted=%s status=%s reason=%s\n",

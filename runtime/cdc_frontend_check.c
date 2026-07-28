@@ -1309,6 +1309,9 @@ static int cmd_receipt_check(void) {
     out.sealed = 7;
     out.events = 21;
     out.generation = 3;
+    snprintf(out.witness, sizeof(out.witness), "persistence-hold-native");
+    snprintf(out.closure, sizeof(out.closure),
+             "blake3:0000000000000000000000000000000000000000000000000000000000000001");
     if (cdc_receipt_emit(stream, &out) != 1) {
         fprintf(stderr, "receipt-check FAIL: emit\n");
         failures++;
@@ -1324,6 +1327,23 @@ static int cmd_receipt_check(void) {
         if (cdc_receipt_emit(stream, &empty) != -1) {
             fprintf(stderr,
                     "receipt-check FAIL: outcome-less receipt was emitted\n");
+            failures++;
+        }
+    }
+    /* A witness named without its digest is not a link, and is refused:
+     * "this effect discharges W" is only evidence if W is identified. */
+    {
+        cdc_receipt dangling;
+        cdc_receipt_init(&dangling);
+        snprintf(dangling.kind, sizeof(dangling.kind), "commit");
+        snprintf(dangling.job, sizeof(dangling.job), "c1");
+        dangling.outcome = CDC_OUTCOME_ACCEPTED;
+        snprintf(dangling.reason, sizeof(dangling.reason), "none");
+        snprintf(dangling.witness, sizeof(dangling.witness), "w1");
+        if (cdc_receipt_emit(stream, &dangling) != -1) {
+            fprintf(stderr,
+                    "receipt-check FAIL: witness without a closure digest "
+                    "was emitted\n");
             failures++;
         }
     }
@@ -1364,7 +1384,9 @@ static int cmd_receipt_check(void) {
         back.durable != out.durable ||
         back.replay_stable != out.replay_stable ||
         back.sealed != out.sealed || back.events != out.events ||
-        back.generation != out.generation) {
+        back.generation != out.generation ||
+        strcmp(back.witness, out.witness) != 0 ||
+        strcmp(back.closure, out.closure) != 0) {
         fprintf(stderr, "receipt-check FAIL: round trip lost a field\n");
         failures++;
     }
@@ -1411,7 +1433,7 @@ static int cmd_receipt_check(void) {
         return 1;
     }
     printf("receipt-check ok round-trip=1 closed-vocabulary=1 "
-           "malformed-fail-closed=7\n");
+           "closure-link=1 malformed-fail-closed=7\n");
     return 0;
 }
 

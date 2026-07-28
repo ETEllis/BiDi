@@ -114,10 +114,12 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    intact at every stop point, determinism gated over prose/receipts/
    vectors, and the unified `cdc` binary now instrumented and required to
    agree with the plain build field-for-field.
-   Remaining: closure witnesses carried on the receipt — the parity
-   vector's sixth field renders "-" until that lands, so filling it is what
-   completes the section-7 record. Then CT0 completion: reproducible native
-   binaries plus the manifest digest embedded in every verdict line.
+   Closure witnesses landed too (D20): receipts carry
+   `witness=<id> closure=<digest>` and the vector carries it through, so
+   the section-7 record is complete — every field holds an honest value or
+   an explicit "-".
+   Remaining for CT2/CT3: CT0 completion — reproducible native binaries
+   plus the manifest digest embedded in every verdict line.
 3. **Deletion gates (this repo, after 2).** Migrate native/bridge runtime
    internals to the grammar-1 frontend (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`

@@ -46,6 +46,39 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D20 — 2026-07-28 — Closure witnesses complete the section-7 record
+
+The parity vector's sixth field rendered "-" everywhere, because nothing
+linked an executed effect to the claim declared about it. Those are
+different things: the runtime knows what happened, the source says what was
+supposed to happen, and until they are joined a reader has to take the
+correspondence on trust.
+
+A receipt now carries `witness=<id> closure=<digest>` — the witness bound
+to that job and a digest of its canonical statement — and the execution
+vector carries the digest through. The runtime does not EVALUATE witnesses;
+the contract checker owns that. It only needs to name the one an effect
+discharges, so the effect and the claim can be compared rather than
+assumed to match.
+
+Three details worth pinning:
+
+- **A witness named without its digest is refused at emit.** "This effect
+  discharges W" is only evidence if W is identified; a dangling name would
+  look like a link while carrying nothing.
+- **Truncation is refused, not tolerated.** The witness statement is
+  digested, so a silently truncated statement would yield a confidently
+  WRONG digest. The buffer matches the line limit and over-long statements
+  fail loudly.
+- **Unbound jobs render "-" and the gate names them.** 36 of 37 execution
+  vectors carry a closure witness; the one that does not is `rival-latch`,
+  the deliberately unbound helper in the compare-and-set counterexample.
+  The gate asserts that identity, so a future regression that silently
+  drops witnesses cannot hide behind the same count.
+
+This completes the section-7 record: every field now carries an honest
+value or an explicit "-", and no column is reserved-but-empty.
+
 ## D19 — 2026-07-28 — Lifecycle contract, and what determinism excludes
 
 An executor that cannot be bounded or stopped is not embeddable. `cdc run`

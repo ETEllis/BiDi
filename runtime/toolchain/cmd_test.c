@@ -186,8 +186,9 @@ static int classify_receipts(const char *path, const cdc_program *program,
             if (cdc_vector_render(&vector_chain, identifier,
                                   cdc_receipt_decision(&receipt),
                                   receipt.trits[0] ? receipt.trits : NULL,
-                                  line, len, NULL, record,
-                                  sizeof(record)) < 0) {
+                                  line, len,
+                                  receipt.closure[0] ? receipt.closure : NULL,
+                                  record, sizeof(record)) < 0) {
                 fprintf(stderr,
                         "cdc test: FAIL %s (%s): vector record too long\n",
                         file, mode);

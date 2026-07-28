@@ -106,6 +106,11 @@ int cdc_receipt_emit(void *stream, const cdc_receipt *receipt) {
     if (receipt->balance[0] && !is_token(receipt->balance)) {
         return -1;
     }
+    if (receipt->witness[0] &&
+        (!is_token(receipt->witness) || !is_token(receipt->closure) ||
+         receipt->closure[0] == '\0')) {
+        return -1; /* a witness without its digest is not a link */
+    }
     if (receipt->outcome == CDC_OUTCOME_NONE) {
         return -1; /* a receipt records an outcome; absence is not one */
     }
@@ -123,6 +128,10 @@ int cdc_receipt_emit(void *stream, const cdc_receipt *receipt) {
     }
     if (receipt->balance[0]) {
         fprintf(fp, " balance=%s", receipt->balance);
+    }
+    if (receipt->witness[0]) {
+        fprintf(fp, " witness=%s closure=%s", receipt->witness,
+                receipt->closure);
     }
     if (receipt->durable != CDC_RECEIPT_NA) {
         fprintf(fp, " durable=%d", receipt->durable ? 1 : 0);
@@ -232,6 +241,8 @@ int cdc_receipt_parse(const char *line, cdc_receipt *receipt) {
     field(line, "op", receipt->op, sizeof(receipt->op));
     field(line, "trits", receipt->trits, sizeof(receipt->trits));
     field(line, "balance", receipt->balance, sizeof(receipt->balance));
+    field(line, "witness", receipt->witness, sizeof(receipt->witness));
+    field(line, "closure", receipt->closure, sizeof(receipt->closure));
     if (int_field(line, "durable", &value) == 1) {
         receipt->durable = (int)value;
     }

@@ -74,6 +74,15 @@ typedef struct {
     /* Barrier detail (commit and persist op=append). */
     char trits[128];  /* sized to the runtime's CommitResult */
     char balance[32]; /* admissible | violated | "" */
+
+    /* Closure witness: the declared witness this effect discharges, and a
+     * digest of its canonical statement. An executed effect and the claim
+     * made about it are different things; this is the link between them, so
+     * a consumer can check that what ran is what the source said would run.
+     * Empty when the job carries no witness binding — which is honest, not
+     * a gap to be filled with a placeholder. */
+    char witness[64];
+    char closure[96];
 } cdc_receipt;
 
 /* Zeroes the receipt and sets every non-applicable field to CDC_RECEIPT_NA
