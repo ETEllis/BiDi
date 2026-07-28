@@ -46,17 +46,20 @@
  * - Commit path: write(all records) -> fflush -> fsync(log fd) ->
  *   fsync(directory fd). The injectable failure hook aborts at each
  *   boundary to prove recovery (cdc_store_set_fail_after).
- * - Writers are serialized ACROSS PROCESSES by an fcntl write lock on
- *   `lock.cdcstore`, held across re-scan + append + fsync(file) +
- *   fsync(dir), and across the whole compaction transition (2026-07-28
- *   review, finding 2). Before that lock existed, commit checked the
- *   sealed count and then appended, so two writers could both pass the
- *   check before either wrote — a check-then-act race that a sequential
- *   test cannot enter. Scope, precisely: fcntl locks serialize PROCESSES;
- *   two handles onto one directory inside a single process do not block
- *   each other, and there the fence token is the mechanism. Both paths
- *   compare against on-disk state under the same lock, so the outcome is
- *   the same.
+ * - Writers are serialized across processes AND across handles within
+ *   one process (D16, then D29). The critical section — held across
+ *   re-scan + append + fsync(file) + fsync(dir), across the whole
+ *   compaction transition, across open recovery, and across reset — is
+ *   a process-local mutex plus an fcntl write lock on `lock.cdcstore`.
+ *   All handles in one process that name the same store (by the lock
+ *   file's device+inode) share ONE reference-counted coordination
+ *   object carrying ONE fcntl descriptor: the mutex excludes
+ *   same-process handles (fcntl alone cannot — the kernel merges a
+ *   process's locks), and the shared descriptor lives until the LAST
+ *   handle closes, because closing ANY descriptor a process holds on
+ *   the lock file would drop EVERY lock the process holds on it. The
+ *   fence token is a STALENESS check on top of that mutual exclusion,
+ *   not a substitute for it.
  * - A writer that armed a fence and lost the compare-and-set has a SPENT
  *   handle: its cached counters are stale, so it must be reopened rather
  *   than reused.

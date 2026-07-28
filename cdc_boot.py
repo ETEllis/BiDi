@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-cdc_boot: minimal Python bootloader for native .cdc contracts.
+cdc_boot: FROZEN CI-only differential oracle (operator decision Option A, D33).
+
+This file is no longer a production dependency: both runtimes and the
+contract evaluator are native C, and the language runs with no Python
+host. It is kept — frozen — because it is the project's last INDEPENDENT
+implementation of collect-and-verify, and the parity gates in
+scripts/verify.sh diff the native evaluator against it on every run. No
+new features may be added here; it changes only if the contract grammar
+itself changes, and any such change must land in the same commit as the
+native mirror. It is exempt BY NAME from the python-files floor
+(kernel.cdc expects 0 counted python files; see PYTHON_FILE_EXEMPT_ORACLES).
 
 This file is intentionally small. It does not implement the calculus reducer,
 the semantic registry, or the witness suite in Python. Those live in .cdc files.
@@ -221,8 +231,25 @@ def parse_file(state: BootState, path: Path) -> None:
             raise SyntaxError(f"{source}: unknown directive {cmd!r}")
 
 
+# FROZEN CI-ONLY DIFFERENTIAL ORACLE (operator decision, Option A, D33).
+# This file is exempt BY NAME from the python-files floor: the floor now
+# claims the LANGUAGE's execution surface carries no Python, and this
+# oracle is a test fixture that happens to be written in it. No new
+# features may be added here — its value is exactly that it does not
+# change while the native evaluator does. `bootloader minimal` still
+# enumerates it, so a second Python file remains a contract violation.
+PYTHON_FILE_EXEMPT_ORACLES = ("cdc_boot.py",)
+
+
 def python_files(state: BootState) -> list[Path]:
     return sorted(p for p in state.root.glob("*.py") if p.is_file())
+
+
+def counted_python_files(state: BootState) -> tuple[list[Path], list[Path]]:
+    files = python_files(state)
+    counted = [p for p in files if p.name not in PYTHON_FILE_EXEMPT_ORACLES]
+    exempt = [p for p in files if p.name in PYTHON_FILE_EXEMPT_ORACLES]
+    return counted, exempt
 
 
 def witnesses_for(state: BootState, key: str, field: str) -> list[str]:
@@ -449,8 +476,12 @@ def eval_expect(state: BootState, args: list[str]) -> tuple[bool, str]:
 
     if head == "python-files":
         op, want = args[1], int(args[2])
-        files = python_files(state)
-        return compare(len(files), op, want), f"python-files {op} {want} (got {len(files)}: {[p.name for p in files]})"
+        counted, exempt = counted_python_files(state)
+        return compare(len(counted), op, want), (
+            f"python-files {op} {want} (got {len(counted)}: "
+            f"{[p.name for p in counted]}; exempt oracle: "
+            f"{[p.name for p in exempt]})"
+        )
 
     if head == "bootloader":
         if args[1:] == ["minimal", "==", "true"]:

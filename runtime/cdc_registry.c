@@ -945,6 +945,9 @@ static int eval_expect(cdc_registry *registry, const cdc_stmt *stmt,
 
     if (strcmp(head, "python-files") == 0 && argc >= 3) {
         strlist files = {0};
+        strlist counted = {0};
+        strlist exempt = {0};
+        size_t n;
         long want;
         int pass;
         const char *op = expect_arg(stmt, 1);
@@ -955,12 +958,32 @@ static int eval_expect(cdc_registry *registry, const cdc_stmt *stmt,
             strlist_free(&files);
             return 0;
         }
+        /* Frozen CI-only oracle exemption (Option A, D33): cdc_boot.py is
+         * exempt BY NAME — the floor claims the language's execution
+         * surface, and the oracle is a test fixture. The exemption is
+         * rendered, never silent, and `bootloader minimal` still sees the
+         * raw enumeration. Mirrors cdc_boot.py exactly (parity gate). */
+        for (n = 0; n < files.count; n++) {
+            strlist *side = strcmp(files.items[n], "cdc_boot.py") == 0
+                                ? &exempt
+                                : &counted;
+            if (!strlist_push(side, files.items[n])) {
+                strlist_free(&files);
+                strlist_free(&counted);
+                strlist_free(&exempt);
+                return 0;
+            }
+        }
         fprintf(mem, "python-files %s %ld (got %zu: ", op, want,
-                files.count);
-        repr_list(mem, files.items, files.count);
+                counted.count);
+        repr_list(mem, counted.items, counted.count);
+        fputs("; exempt oracle: ", mem);
+        repr_list(mem, exempt.items, exempt.count);
         fputc(')', mem);
-        pass = compare_counts((long)files.count, op, want);
+        pass = compare_counts((long)counted.count, op, want);
         strlist_free(&files);
+        strlist_free(&counted);
+        strlist_free(&exempt);
         return pass;
     }
 

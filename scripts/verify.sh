@@ -88,7 +88,7 @@ from pathlib import Path
 
 py = sorted(p.name for p in Path(".").glob("*.py"))
 assert py == ["cdc_boot.py"], py
-print("python host boundary: ok (cdc_boot.py only)")
+print("python host boundary: ok (cdc_boot.py only — frozen CI-only oracle, Option A/D33)")
 PY
 
 echo

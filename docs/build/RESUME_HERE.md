@@ -89,14 +89,17 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
 - **Fuzzing beyond the deterministic corpus** — queued for CT1 full
   closure.
 
-## AWAITING EDWARD (one decision; nothing proceeds without it)
+## DECIDED BY EDWARD (2026-07-28)
 
-- **`cdc_boot.py` deletion** — `docs/build/BOOTLOADER_DELETION_PROPOSAL.md`
-  lays out freeze (A) / replace-then-delete (B) / delete-now (C) with the
-  exact `kernel.cdc` gate diff. Until he chooses, the status quo IS
-  option A: the bootloader stays, `python-files == 1` stays, and the
-  toolchain-verify-parity gate keeps both honest. **Do not touch the
-  kernel floor.**
+- **Bootloader: Option A executed (D33).** `cdc_boot.py` is FROZEN as a
+  CI-only differential oracle; the kernel floor is `python-files == 0`
+  with the oracle exempt by name (rendered in every report);
+  `bootloader minimal` still pins the raw file set to exactly
+  `[cdc_boot.py]`; Gate 5 is closed on the runtime dependency. Deleting
+  the oracle later requires a NEW operator decision.
+- **PR #4 approved and MERGED** at pinned head `6784ab5` (merge commit
+  `2947673`); both CI lanes green, independent macOS verification by the
+  operator.
 
 ## BLOCKED EXTERNAL (unchanged)
 

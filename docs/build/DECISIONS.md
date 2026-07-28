@@ -46,6 +46,42 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D33 — 2026-07-28 — Bootloader Option A executed: frozen CI-only oracle
+
+The operator chose Option A from
+`docs/build/BOOTLOADER_DELETION_PROPOSAL.md`: "freeze it as a CI-only
+differential oracle. Do not delete a valuable independent reference
+until native coverage renders it genuinely redundant." Executed exactly
+as proposed:
+
+- **The kernel floor is renegotiated, with operator approval**:
+  `expect python-files == 1` -> `expect python-files == 0`, where the
+  count now excludes `PYTHON_FILE_EXEMPT_ORACLES` — a BY-NAME exemption
+  for `cdc_boot.py` alone, rendered in the report line (`exempt oracle:
+  ['cdc_boot.py']`), never silent. Both evaluators changed in lockstep
+  (the parity gate proves them byte-identical every run).
+- **`expect bootloader minimal == true` still enumerates the RAW file
+  set** and still requires exactly `[cdc_boot.py]`, so a second Python
+  file anywhere in the root remains a contract violation — the
+  exemption cannot widen.
+- **The freeze is written into the oracle itself**: a header banner
+  declares it frozen, CI-only, and feature-forbidden; its value is
+  exactly that it does not change while the native evaluator does. The
+  one honest exception is recorded here: the freeze's first and last
+  change is the exemption mechanism that implements it, landed in this
+  commit alongside the native mirror.
+- **Gate 5 is recorded CLOSED on the runtime dependency** in
+  `NATIVE_SELF_HOSTING_MANDATE.md`: no Python executes on any
+  production path; "zero Python files" was a proxy for that property,
+  the proxy drifted from the property, and Option A realigns them
+  without trading away the last independent check.
+
+The three differentials the oracle anchors (contract-report parity,
+frontend-dump differential, rejection parity) continue to run on every
+verify, unchanged. Deleting the oracle later requires a NEW operator
+decision, presumably after an Option-B-style independent replacement
+exists.
+
 ## D32 — 2026-07-28 — The signature's identifier is the basename, so share the basename
 
 The macOS lane's second full run moved the repro divergence from byte

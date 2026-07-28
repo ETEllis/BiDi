@@ -186,6 +186,21 @@ They carry no persistence semantics and are covered by the existing
 produce a byte-identical report to the bootloader on every run, so these
 entries retire with `cdc_boot.py` itself under this gate.
 
+**GATE 5 CLOSED on the runtime dependency (2026-07-28, operator decision
+Option A, D33).** The language verifies and runs entirely natively: both
+runtimes, the contract evaluator, the test runner, the fused executor,
+and the Phase I toolchain are C consuming `.cdc` source, and no Python
+executes on any production path. `cdc_boot.py` is NOT deleted: it is
+FROZEN as a CI-only differential oracle — the project's last independent
+implementation of collect-and-verify — exempt BY NAME from the
+`python-files` floor, which now expects 0 counted files. `expect
+bootloader minimal == true` still enumerates the raw file set, so a
+second Python file remains a contract violation. The mandate's stated
+end state ("zero Python") was a proxy for "the language does not need a
+host to run"; the property is achieved, the proxy is realigned, and the
+independent reference survives until native coverage renders it
+genuinely redundant — a judgement reserved to the operator.
+
 The **frontend-differential-dump** gate has been split, and the reason is
 recorded in DECISIONS D26. It originally named the legacy line scanner and
 `cdc_boot.py --dump` for deletion together. The scanner is now deleted: both
