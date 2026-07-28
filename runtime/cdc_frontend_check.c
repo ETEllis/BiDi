@@ -1155,6 +1155,33 @@ static int cmd_store_kill(const char *base) {
 
 /* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
 
+/* Opens a store and reports its state, so a shell gate can assert that a
+ * run stopped by the lifecycle contract left durable state intact rather
+ * than half-applied. */
+static int cmd_store_inspect(const char *dir) {
+    cdc_store *store = NULL;
+    int recovered = 0;
+    char replay[96];
+    cdc_store_status status = cdc_store_open(dir, &store, &recovered);
+    if (status != CDC_STORE_OK) {
+        printf("store-inspect open=%s\n", cdc_store_status_name(status));
+        return 1;
+    }
+    if (cdc_store_replay(store, replay, sizeof(replay)) != CDC_STORE_OK) {
+        printf("store-inspect open=ok replay=failed\n");
+        cdc_store_close(store);
+        return 1;
+    }
+    printf("store-inspect open=ok recovered=%d sealed=%llu events=%llu "
+           "generation=%llu verify=%s replay=%s\n",
+           recovered, (unsigned long long)cdc_store_sealed_count(store),
+           (unsigned long long)cdc_store_event_count(store),
+           (unsigned long long)cdc_store_generation(store),
+           cdc_store_status_name(cdc_store_verify(store)), replay);
+    cdc_store_close(store);
+    return 0;
+}
+
 /* ---- parity vectors from the oracle report (interface section 7) -----
  *
  * The bootloader is the oracle for contract checks. It cannot produce
@@ -2571,6 +2598,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-kill") == 0 && argc >= 3) {
         return cmd_store_kill(argv[2]);
+    }
+    if (strcmp(argv[1], "store-inspect") == 0 && argc >= 3) {
+        return cmd_store_inspect(argv[2]);
     }
     if (strcmp(argv[1], "vectors-from-report") == 0 && argc >= 3) {
         return cmd_vectors_from_report(argv[2]);

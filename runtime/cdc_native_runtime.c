@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <signal.h>
 
 #define MAX_FIELDS 16
 #define MAX_MODULES 64
@@ -766,6 +767,111 @@ static void add_counter(Runtime *rt, const char *line) {
     counter->expect_value = cdc_read_int_attr(line, "expect-value", counter->value);
 }
 
+/* ---- lifecycle contract (gate CT3) -----------------------------------
+ *
+ * An executor that cannot be bounded or stopped is not embeddable: a host
+ * needs to cap the work a source may do, and to stop a run without being
+ * left holding a half-applied effect.
+ *
+ * Both are enforced at EFFECT BOUNDARIES — between whole effects, never
+ * inside one. That placement is the whole guarantee: an effect either runs
+ * completely or does not begin. For durable effects it is what makes a
+ * stopped run safe, because the store's staged-but-uncommitted transaction
+ * is exactly "nothing happened".
+ *
+ * A stop is a HOLD, not a failure. `budget-exhausted` and `cancelled` are
+ * typed hold reasons in the same vocabulary as `balance-violation`: the
+ * work did not happen, and the run says so in the carrier's own terms
+ * rather than dying. Exit code 4 distinguishes a lifecycle stop from a
+ * violated expectation (1).
+ *
+ * Configuration arrives by environment, not argv, so the legacy CLIs keep
+ * byte-identical argument handling and the unified driver's passthrough
+ * parity gate is untouched:
+ *   CDC_MAX_EFFECTS   bound on executed effects (0 = unbounded)
+ *   CDC_CANCEL_AFTER  test hook: request cancellation after N effects
+ *   CDC_DETERMINISTIC declare the run must consult no nondeterministic
+ *                     source it can avoid
+ */
+#define CDC_EXIT_LIFECYCLE_STOP 4
+
+static volatile sig_atomic_t cancel_requested;
+static long lifecycle_max_effects;
+static long lifecycle_cancel_after;
+static long lifecycle_effects_done;
+static int lifecycle_deterministic;
+static int lifecycle_ready;
+static const char *lifecycle_stop_reason;
+
+static void on_cancel_signal(int signum) {
+    (void)signum;
+    cancel_requested = 1; /* only an assignment: async-signal-safe */
+}
+
+static long env_long(const char *name, long fallback) {
+    const char *value = getenv(name);
+    char *end;
+    long parsed;
+    if (!value || value[0] == '\0') {
+        return fallback;
+    }
+    parsed = strtol(value, &end, 10);
+    if (*end != '\0' || parsed < 0) {
+        fail("lifecycle: environment value must be a nonnegative integer");
+    }
+    return parsed;
+}
+
+static void lifecycle_init(void) {
+    if (lifecycle_ready) {
+        return;
+    }
+    lifecycle_ready = 1;
+    lifecycle_max_effects = env_long("CDC_MAX_EFFECTS", 0);
+    lifecycle_cancel_after = env_long("CDC_CANCEL_AFTER", 0);
+    lifecycle_deterministic = getenv("CDC_DETERMINISTIC") != NULL &&
+                              getenv("CDC_DETERMINISTIC")[0] != '\0';
+    signal(SIGINT, on_cancel_signal);
+    signal(SIGTERM, on_cancel_signal);
+}
+
+/* Called immediately BEFORE each effect. Returns a typed hold reason when
+ * the run must stop, or NULL to proceed. The effect that would have run
+ * has not started, so nothing it would have done is half-done. */
+static const char *lifecycle_gate(void) {
+    lifecycle_init();
+    if (cancel_requested) {
+        return "cancelled";
+    }
+    if (lifecycle_cancel_after > 0 &&
+        lifecycle_effects_done >= lifecycle_cancel_after) {
+        /* Test hook: the same boundary the real signal is observed at, so
+         * the counterexample is deterministic. It proves the BOUNDARY
+         * semantics; that the handler itself runs is proven separately by
+         * delivering a real signal. */
+        cancel_requested = 1;
+        return "cancelled";
+    }
+    if (lifecycle_max_effects > 0 &&
+        lifecycle_effects_done >= lifecycle_max_effects) {
+        return "budget-exhausted";
+    }
+    return NULL;
+}
+
+static void lifecycle_count(void) { lifecycle_effects_done++; }
+
+/* Reports the stop once, in the carrier's vocabulary, and exits with the
+ * lifecycle code. Anything already committed stays committed — a stop
+ * rewinds nothing, it only declines to continue. */
+static void lifecycle_stop(const char *kind, const char *job,
+                           const char *reason);
+
+int cdc_native_deterministic(void) {
+    lifecycle_init();
+    return lifecycle_deterministic;
+}
+
 /* ---- typed effect receipts (gate CT3) -------------------------------- *
  *
  * Every effect below renders BOTH its report line and its receipt from the
@@ -797,6 +903,24 @@ static void emit_receipt(const cdc_receipt *receipt) {
          * cause, so it fails loudly rather than being dropped. */
         fail("effect receipt rejected: ill-formed record");
     }
+}
+
+static void lifecycle_stop(const char *kind, const char *job,
+                           const char *reason) {
+    cdc_receipt receipt;
+    cdc_receipt_init(&receipt);
+    snprintf(receipt.kind, sizeof(receipt.kind), "lifecycle");
+    snprintf(receipt.job, sizeof(receipt.job), "%s", job && job[0] ? job : "-");
+    snprintf(receipt.op, sizeof(receipt.op), "%s", kind);
+    receipt.outcome = CDC_OUTCOME_HELD;
+    snprintf(receipt.reason, sizeof(receipt.reason), "%s", reason);
+    receipt.declared_hold = 0;
+    emit_receipt(&receipt);
+    lifecycle_stop_reason = reason;
+    printf("lifecycle=stop kind=%s job=%s status=held reason=%s effects=%ld\n",
+           kind, job && job[0] ? job : "-", reason, lifecycle_effects_done);
+    fflush(stdout);
+    exit(CDC_EXIT_LIFECYCLE_STOP);
 }
 
 /* Did the declaring statement carry expect-status=held? This is read from
@@ -1177,6 +1301,10 @@ static void run_steps(Runtime *rt, const char *path) {
     }
     for (int i = 0; i < rt->step_count; i++) {
         Step *step = &rt->steps[i];
+        const char *stop = lifecycle_gate();
+        if (stop) {
+            lifecycle_stop("reducer", step->id, stop);
+        }
         if (step->kind == STEP_FLOW) {
             run_flow(rt, step);
             flow_count++;
@@ -1187,6 +1315,7 @@ static void run_steps(Runtime *rt, const char *path) {
             run_nest(rt, step);
             nest_count++;
         }
+        lifecycle_count();
     }
     if (flow_count == 0 || commit_count == 0 || nest_count == 0) {
         fail("native reducer source must exercise flow, commit, and nest");
@@ -1912,6 +2041,19 @@ static void run_persistence(Runtime *rt, const char *path) {
         if (!decl) {
             fail("persist references unknown store");
         }
+        {
+            /* Checked BEFORE the barrier runs and before anything is
+             * staged, so a stopped run cannot leave a durable effect
+             * half-applied: the store sees no transaction at all. */
+            const char *stop = lifecycle_gate();
+            if (stop) {
+                for (int c = 0; c < rt->store_count; c++) {
+                    cdc_store_close(rt->stores[c].handle);
+                    rt->stores[c].handle = NULL;
+                }
+                lifecycle_stop("persist", job->id, stop);
+            }
+        }
         memset(&decision, 0, sizeof(decision));
         persist_state(decl, before_replay, sizeof(before_replay),
                       before_attest, sizeof(before_attest));
@@ -2004,6 +2146,7 @@ static void run_persistence(Runtime *rt, const char *path) {
         } else {
             held++;
         }
+        lifecycle_count();
     }
     for (int i = 0; i < rt->store_count; i++) {
         cdc_store_close(rt->stores[i].handle);

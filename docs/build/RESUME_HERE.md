@@ -104,16 +104,20 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    commit decision (D15, amendment D.6 + A10). Remaining Phase-D-adjacent
    work has moved into step 2: typed effect receipts and closure witnesses
    through the ABI.
-2. **CT2/CT3 closure (this repo).** Typed effect receipts are DONE (D17,
-   ABI 1.3): outcomes are structured records, `cdc test` classifies from
-   fields rather than prose, and receipt/prose parity is gated. Remaining:
-   closure witnesses carried on the same receipt (the vector's sixth
-   field is reserved and empty until then). Per-check ordered vector export
-   is DONE (D18). Remaining
-   (interface §7 format) from cdc test and cdc verify; lifecycle/
-   cancellation/budget contract for cdc run; full-binary sanitizer sweep;
-   then CT0 completion: reproducible-build check + manifest digest
-   embedded in every verdict line.
+2. **CT2/CT3 closure (this repo).** Landed: typed effect receipts (D17,
+   ABI 1.3) — outcomes are structured records, `cdc test` classifies from
+   fields rather than prose, receipt/prose parity gated; ordered per-check
+   parity vectors (D18) from `cdc verify --vectors` and
+   `cdc test --vectors`, with ordering made load-bearing by the chained
+   trace digest; lifecycle contract and whole-binary sanitizer sweep (D19)
+   — budgets and cancellation at effect boundaries with the store proven
+   intact at every stop point, determinism gated over prose/receipts/
+   vectors, and the unified `cdc` binary now instrumented and required to
+   agree with the plain build field-for-field.
+   Remaining: closure witnesses carried on the receipt — the parity
+   vector's sixth field renders "-" until that lands, so filling it is what
+   completes the section-7 record. Then CT0 completion: reproducible native
+   binaries plus the manifest digest embedded in every verdict line.
 3. **Deletion gates (this repo, after 2).** Migrate native/bridge runtime
    internals to the grammar-1 frontend (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`

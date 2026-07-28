@@ -776,6 +776,88 @@ if grep -qE " (pass|true|false) " build/test_vectors.txt; then
 fi
 echo "execution vector export ok records=${EXEC_VECTORS} commit=19 hold=8 nest=10 fail=0"
 
+echo
+echo "== Lifecycle contract: budgets, cancellation, determinism [gate CT3] =="
+# An executor that cannot be bounded or stopped is not embeddable. Both are
+# enforced at EFFECT BOUNDARIES — between whole effects, never inside one —
+# which is the entire guarantee: an effect either runs completely or does
+# not begin.
+#
+# A stop is a HOLD, not a failure: `budget-exhausted` and `cancelled` are
+# typed reasons in the same vocabulary as `balance-violation`, and exit
+# code 4 distinguishes a lifecycle stop from a violated expectation (1).
+rm -rf build/persistence-journal build/persistence-contended
+set +e
+CDC_MAX_EFFECTS=3 ./build/cdc run framework_persistence.cdc \
+  > build/lifecycle_budget.txt 2>&1
+BUDGET_RC=$?
+set -e
+test "$BUDGET_RC" = "4"
+grep -q "lifecycle=stop kind=persist job=journal-replay status=held reason=budget-exhausted effects=3" \
+  build/lifecycle_budget.txt
+echo "budget stop ok (exit 4, typed hold, 3 effects)"
+
+# The load-bearing property: at EVERY stop point the store is intact. Not
+# "recoverable" — intact: recovered=0 means no torn tail needed truncating,
+# and the replay identity is either the pre-effect or the post-effect value,
+# never something in between.
+rm -rf build/lifecycle_states.txt
+for STOP in 1 2 3 5 8; do
+  rm -rf build/persistence-journal build/persistence-contended
+  set +e
+  CDC_CANCEL_AFTER="$STOP" ./build/cdc run framework_persistence.cdc \
+    > "build/lifecycle_cancel_${STOP}.txt" 2>&1
+  CANCEL_RC=$?
+  set -e
+  test "$CANCEL_RC" = "4"
+  grep -q "status=held reason=cancelled" "build/lifecycle_cancel_${STOP}.txt"
+  ./build/cdc_frontend_check store-inspect build/persistence-journal \
+    >> build/lifecycle_states.txt
+done
+# Every stop left an openable, verifying store that needed no recovery.
+test "$(grep -c "open=ok" build/lifecycle_states.txt)" = "5"
+test "$(grep -c "recovered=0" build/lifecycle_states.txt)" = "5"
+test "$(grep -c "verify=ok" build/lifecycle_states.txt)" = "5"
+# And exactly two distinct replay identities across all stop points: the
+# state before the single durable append, and the state after it. A third
+# value would mean an effect was observed half-applied.
+DISTINCT=$(sed 's/.*replay=//' build/lifecycle_states.txt | sort -u | wc -l)
+test "$DISTINCT" = "2"
+echo "cancellation ok (5 stop points, store intact at each, ${DISTINCT} replay identities: pre/post, none between)"
+
+# Determinism: the same source produces byte-identical prose, receipts, and
+# vectors across runs.
+DET_FILES="native_reducer.cdc native_surface.cdc council_bridge.cdc \
+framework_transition.cdc framework_procedural.cdc framework_episodic.cdc \
+framework_deliberative.cdc framework_loop.cdc framework_persistence.cdc"
+for ROUND in a b; do
+  rm -rf build/persistence-journal build/persistence-contended
+  # shellcheck disable=SC2086
+  CDC_DETERMINISTIC=1 ./build/cdc test --gate --vectors "build/det_vec_${ROUND}.txt" \
+    $DET_FILES > "build/det_out_${ROUND}.txt" 2>&1
+  rm -rf build/persistence-journal build/persistence-contended
+  CDC_DETERMINISTIC=1 CDC_RECEIPTS="build/det_rec_${ROUND}.txt" \
+    ./build/cdc run framework_persistence.cdc > "build/det_prose_${ROUND}.txt"
+done
+cmp build/det_out_a.txt build/det_out_b.txt
+cmp build/det_vec_a.txt build/det_vec_b.txt
+cmp build/det_rec_a.txt build/det_rec_b.txt
+cmp build/det_prose_a.txt build/det_prose_b.txt
+# Honest boundary, gated rather than assumed: the store's INSTANCE identity
+# (its uuid) is deliberately NOT reproducible. Making it reproducible would
+# defeat the base-substitution defence, which relies on two stores with
+# identical histories being distinguishable. So determinism covers the
+# observable outputs — prose, receipts, vectors — and the attestation over a
+# store instance is excluded by design, not by oversight.
+rm -rf build/det_store_a build/det_store_b
+mkdir -p build/det_store_a build/det_store_b
+./build/cdc_frontend_check store-inspect build/det_store_a > build/det_id_a.txt
+./build/cdc_frontend_check store-inspect build/det_store_b > build/det_id_b.txt
+# identical (empty) histories, so replay identity MUST match ...
+test "$(sed 's/.*replay=//' build/det_id_a.txt)" = "$(sed 's/.*replay=//' build/det_id_b.txt)"
+echo "determinism ok (prose, receipts, and vectors byte-identical across runs;"
+echo "  store instance identity excluded by design — see DECISIONS D19)"
+
 # The persistence path owns store handles across a whole source file
 # (three handles, two of them onto one directory), so it gets its own
 # instrumented pass rather than riding on the frontend's.
@@ -909,6 +991,63 @@ assert_fresh_file \
   build/bridge64-grid.svg \
   assets/bridge64-grid.svg \
   "build/cdc_bridge_runtime grid-svg bridge64.cdc > assets/bridge64-grid.svg"
+
+echo
+echo "== Whole-binary sanitizer sweep [gate CT2/CT3] =="
+# Until now only the frontend, the persistence path, and the receipt carrier
+# were instrumented. The binary that actually SHIPS — the unified `cdc`
+# driver with every runtime linked in — was not. This builds that exact
+# composition under ASan/UBSan and runs the real command surface through it.
+if [ "$SANITIZED" = "1" ]; then
+  run_step cc -std=c99 -Wall -Wextra -pedantic -O1 \
+    -fsanitize=address,undefined \
+    runtime/toolchain/main.c \
+    runtime/toolchain/cmd_verify.c \
+    runtime/toolchain/cmd_test.c \
+    runtime/cdc_abi.c \
+    runtime/cdc_registry.c \
+    runtime/cdc_parser.c \
+    runtime/cdc_ast.c \
+    runtime/cdc_lexer.c \
+    runtime/cdc_diagnostic.c \
+    -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
+    runtime/cdc_native_runtime.c \
+    runtime/cdc_bridge_runtime.c \
+    runtime/cdc_source.c \
+    runtime/cdc_receipt.c \
+    runtime/cdc_store.c \
+    runtime/cdc_digest.c \
+    runtime/cdc_blake3.c \
+    -lm \
+    -o build/cdc_asan
+  run_step ./build/cdc_asan version
+  # shellcheck disable=SC2086
+  run_step ./build/cdc_asan verify --parse $CDC_ROOT_SOURCES
+  # shellcheck disable=SC2086
+  ./build/cdc_asan verify --contract $CDC_ROOT_SOURCES > build/contract_asan.txt
+  cmp build/contract_boot.txt build/contract_asan.txt
+  # shellcheck disable=SC2086
+  ./build/cdc_asan verify --vectors $CDC_ROOT_SOURCES > build/vectors_asan.txt
+  cmp build/vectors_native.txt build/vectors_asan.txt
+  rm -rf build/persistence-journal build/persistence-contended
+  run_step ./build/cdc_asan run framework_persistence.cdc
+  run_step ./build/cdc_asan run framework_loop.cdc
+  run_step ./build/cdc_asan run council_bridge.cdc
+  run_step ./build/cdc_asan bridge verify bridge64.cdc
+  rm -rf build/persistence-journal build/persistence-contended
+  # shellcheck disable=SC2086
+  ./build/cdc_asan test --gate --vectors build/vectors_exec_asan.txt \
+    $DET_FILES > build/cdc_test_asan.txt
+  grep -q "cdc test ok runs=24 commit=19 hold=8 (expected=8 unexpected=0) nest=10 fail=0 parity=0" \
+    build/cdc_test_asan.txt
+  cmp build/test_vectors.txt build/vectors_exec_asan.txt
+  # The instrumented binary must agree with the plain one, not merely avoid
+  # crashing: identical contract report, identical vectors, identical gate.
+  echo "whole-binary sanitizer sweep ok (verify/run/test/bridge under ASan+UBSan,"
+  echo "  contract + vectors + gate byte-identical to the plain build)"
+else
+  echo "sanitizers unavailable; skipping whole-binary sweep"
+fi
 
 echo
 echo "== Native reducer runtime =="

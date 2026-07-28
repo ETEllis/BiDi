@@ -46,6 +46,57 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D19 — 2026-07-28 — Lifecycle contract, and what determinism excludes
+
+An executor that cannot be bounded or stopped is not embeddable. `cdc run`
+now honours a budget (`CDC_MAX_EFFECTS`) and cancellation (SIGINT/SIGTERM,
+with `CDC_CANCEL_AFTER` as a deterministic test hook).
+
+**Both are enforced at EFFECT BOUNDARIES — between whole effects, never
+inside one.** That placement is the entire guarantee: an effect either runs
+completely or does not begin. For durable effects it is what makes a
+stopped run safe, because a staged-but-uncommitted store transaction is
+exactly "nothing happened".
+
+The gate measures that rather than asserting it. At five different stop
+points the store is opened externally and must report `open=ok`,
+`recovered=0`, and `verify=ok` — intact, not merely recoverable — and
+across all five stop points there must be exactly **two** distinct replay
+identities: the state before the single durable append and the state after
+it. A third value would mean an effect was observed half-applied.
+
+**A stop is a hold, not a failure.** `budget-exhausted` and `cancelled` are
+typed reasons in the same vocabulary as `balance-violation`; exit code 4
+distinguishes a lifecycle stop from a violated expectation (1). A run that
+was stopped says so in the carrier's own terms instead of dying.
+
+**Configuration arrives by environment, not argv.** The legacy CLIs keep
+byte-identical argument handling, so the unified driver's passthrough
+parity gate is untouched — the same reasoning that put receipts on their
+own channel in D17.
+
+**What determinism covers, and what it deliberately does not.** Prose,
+receipts, and vectors are byte-identical across runs, gated by running
+twice and comparing. The store's INSTANCE identity (its uuid) is NOT
+reproducible, and that is a design decision rather than an oversight:
+making it reproducible would defeat the base-substitution defence from D16,
+which relies on two stores with identical histories being distinguishable.
+Determinism therefore covers observable outputs; attestation over a store
+instance is excluded, and the gate states the exclusion where a reader will
+meet it.
+
+**Honest boundary on cancellation.** `CDC_CANCEL_AFTER` proves the boundary
+semantics deterministically, at the same point the real signal is observed.
+The handler itself is a single async-signal-safe assignment. End-to-end
+asynchronous delivery timing under load is not gated here; a flaky timing
+test would be worse evidence than saying so.
+
+The whole-binary sanitizer sweep landed with this: the unified `cdc` binary
+— the composition that actually ships — is now built under ASan/UBSan and
+must produce a contract report, parity vectors, and gate line
+byte-identical to the plain build. Previously only the frontend, the
+persistence path, and the receipt carrier were instrumented.
+
 ## D18 — 2026-07-28 — Ordered per-check parity vectors (interface section 7)
 
 Parity was compared as a byte-identical contract REPORT. That is real
