@@ -126,16 +126,25 @@ documents (2026-07-22 amendment; 2026-07-23 adversarial review) →
    (same machine, same compiler — cross-toolchain reproducibility is not
    claimed).
    **CT2/CT3 and CT0 are closed.** Next is step 3.
-3. **Deletion gates (this repo, after 2).** IN PROGRESS. Step 1 found and
-   fixed a live defect in the legacy reader (D22: `gain` read
+3. **Deletion gates (this repo, after 2).** IN PROGRESS.
+   Done so far: D22 fixed a live defect in the legacy reader (`gain` read
    `action-gain=9.0` as 9.0 — confidently wrong, never exercised by the
-   corpus) and pinned the migration precondition (D23: no runtime-consumed
-   attribute may be quoted, 101 consumed, 0 quoted, gated). What remains of
-   step 1 is mechanical: swap the `add_*` functions from raw lines to
-   `cdc_stmt` accessors. ORDER MATTERS — once the legacy scanner is gone,
-   `attr-parity` compares the frontend to itself and stops being an oracle,
-   leaving `cdc_boot.py --dump` as the only independent one. Retire the
-   scanner BEFORE the bootloader, not alongside it.
+   corpus); D23 pinned the migration precondition (no runtime-consumed
+   attribute may be quoted, 101 consumed, 0 quoted, gated); D24 migrated
+   the BRIDGE runtime (no fgets / cdc_starts_with / cdc_read_attr remain
+   in it, 14 of 16 invocations byte-identical against a pre-migration
+   build, the 2 differences being improved error paths with unchanged exit
+   codes).
+   What remains of step 1 is the SAME pattern applied to
+   `runtime/cdc_native_runtime.c`, which is larger: swap the `add_*`
+   functions from raw lines to `cdc_stmt` accessors, reusing the
+   `stmt_attr_copy` shim from the bridge migration so loop bodies stay
+   unchanged, and differential the result against a stashed-source build
+   rather than trusting inspection.
+   ORDER MATTERS — once the legacy scanner is gone, `attr-parity` compares
+   the frontend to itself and stops being an oracle, leaving
+   `cdc_boot.py --dump` as the only independent one. Retire the scanner
+   BEFORE the bootloader, not alongside it.
    Then migrate the remaining internals (byte-identical outputs; greps are
    the net) → delete legacy scanner + `cdc_boot.py --dump`
    (frontend-differential-dump gate) → after toolchain-verify-parity
