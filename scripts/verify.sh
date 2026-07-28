@@ -725,6 +725,8 @@ grep -q "compacted-attest store-diff=1 history-diff=1 attest-equal=0" \
   build/store_generation.txt
 grep -q "stale-generation-base activated=0" build/store_generation.txt
 grep -q "special-paths typed-eio=1 blocked=0" build/store_generation.txt
+grep -q "fresh-after-crash stale-base-removed=1 early-compact=state" \
+  build/store_generation.txt
 grep -q "store-generation ok atomic-transition=1 identity-bound=1 attest-covers-base=1" \
   build/store_generation.txt
 ./build/cdc_frontend_check store-race build/store_race | tee build/store_race.txt

@@ -46,6 +46,36 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D27 — 2026-07-28 — Backwards-pass fix: mode=fresh now survives a snapshot-crash
+
+A high-level review pass over the D14–D26 work found one real defect.
+`cdc_store_reset` — the mechanism behind `store ... mode=fresh` — still
+carried its pre-D16 artifact list: it deleted `snapshot.cdcstore`, a file
+that has not existed since the base moved into the log's HEAD record, and
+did NOT delete `base.pending`, the file that replaced it.
+
+Consequence, reproduced before fixing: crash between `snapshot` and
+`compact`, then run a `mode=fresh` source. The stale prepared base survives
+the reset; the fresh store has a new uuid; the source's early compact
+(declared `expect-reason=compact-uncovered`, i.e. ESTATE) instead hits the
+foreign-base identity check and returns ECORRUPT, which the persistence
+runtime rightly treats as fatal. A `mode=fresh` declaration that promises a
+known-empty state delivered a haunted one.
+
+Why every gate missed it: the green path consumes `base.pending` —
+`compact` unlinks it on activation — so no gate ever reached a reset with a
+stale base present. The kill matrix crashes INSIDE snapshot/compact, not
+between them followed by a reset. The gap was the seam between two suites.
+
+Fix: the artifact list is the store's actual artifacts — log,
+`log.cdcstore.next`, `base.pending`, `base.pending.tmp`. The lock file is
+deliberately kept: unlinking a file another process holds a lock on leaves
+that process serializing on an orphan while new openers lock a fresh file —
+two writers, each "holding the lock". Permanent counterexample
+`fresh-after-crash` in the store-generation suite: prepare a base, crash,
+reset, and the fresh store's early compact must hold on "nothing prepared",
+never ECORRUPT.
+
 ## D26 — 2026-07-28 — Legacy scanner deleted; `--dump` deliberately OUTLIVES it
 
 `cdc_source.c` loses the line scanner: `cdc_starts_with`, `cdc_trim`,

@@ -123,12 +123,13 @@ uint64_t cdc_store_event_count(const cdc_store *store);
  * never-compacted store; each activated compaction advances it by one. */
 uint64_t cdc_store_generation(const cdc_store *store);
 
-/* Removes exactly this store's own artifacts (the log and any prepared
- * base) from `dir`, leaving every other path in that directory untouched,
- * so a declared store can be opened from a known-empty state. Artifacts
- * that are absent are not an error; the directory itself is never
- * removed. This is the only deletion path in the store and it never
- * widens: the filenames are the ones cdc_store_open constructs. */
+/* Removes exactly this store's own artifacts — the log, any prepared base
+ * (base.pending), and the crash-window temp files — from `dir`, leaving
+ * every other path untouched, so a declared store can be opened from a
+ * known-empty state. The lock file is deliberately kept: unlinking a file
+ * another process holds a lock on would break serialization. Artifacts
+ * that are absent are not an error; the directory itself is never removed.
+ * This is the only deletion path in the store and it never widens. */
 cdc_store_status cdc_store_reset(const char *dir);
 
 /* Transaction: stage any number of event payloads, then commit (all

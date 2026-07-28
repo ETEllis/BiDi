@@ -33,9 +33,10 @@ cell arrears.a module=arrears theta=3.141592653589793 amplitude=1.0 omega=0.0
 cell arrears.b module=arrears theta=0.0 amplitude=1.0 omega=0.0
 cell arrears.c module=arrears theta=1.5707963267948966 amplitude=1.0 omega=0.0
 
-# The protocol store. mode=fresh removes exactly this store's own two
-# artifacts before opening, so the declared expectations below are absolute
-# rather than relative to whatever a previous run left behind.
+# The protocol store. mode=fresh removes exactly this store's own
+# artifacts (log, prepared base, crash-window temps) before opening, so the
+# declared expectations below are absolute rather than relative to whatever
+# a previous run -- or a previous CRASH -- left behind.
 store journal dir=build/persistence-journal mode=fresh
 
 # A second directory with TWO declared handles onto it: `contended` is the

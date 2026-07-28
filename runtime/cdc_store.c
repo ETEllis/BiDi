@@ -741,8 +741,20 @@ uint64_t cdc_store_event_count(const cdc_store *store) {
 cdc_store_status cdc_store_reset(const char *dir) {
     char path[640];
     size_t i;
+    /* The store's own artifacts as of the generation redesign (D16): the
+     * log, the prepared-but-unactivated base, and the crash-window temp
+     * files publish_log and snapshot may leave behind. This list drifted
+     * once already — it still named the pre-D16 "snapshot.cdcstore" and
+     * missed "base.pending", so a crash between snapshot and compact left
+     * a stale foreign base that survived a mode=fresh reset and turned the
+     * next early compact into ECORRUPT (D27). The lock file is deliberately
+     * NOT removed: unlinking a file another process holds a lock on would
+     * leave that process serializing on an orphan while new openers lock a
+     * fresh file — two writers, each "holding the lock". */
     static const char *const ARTIFACTS[] = {"log.cdcstore",
-                                            "snapshot.cdcstore"};
+                                            "log.cdcstore.next",
+                                            "base.pending",
+                                            "base.pending.tmp"};
 
     if (!dir) {
         return CDC_STORE_EARG;

@@ -1758,6 +1758,60 @@ static int cmd_store_generation(const char *base) {
         printf("store-generation special-paths typed-eio=1 blocked=0\n");
     }
 
+    /* 7. A crash BETWEEN snapshot and compact leaves a prepared base
+     *    behind; cdc_store_reset must remove it along with the log, so a
+     *    fresh store is genuinely fresh. Before D27 the reset's artifact
+     *    list still named the pre-D16 snapshot file and missed
+     *    base.pending, so the stale foreign base survived and turned the
+     *    fresh store's next early compact into ECORRUPT — a mode=fresh
+     *    declaration that did not deliver a known-empty state. */
+    {
+        char fdir[512], fpending[640];
+        cdc_store *f = NULL;
+        struct stat st;
+        snprintf(fdir, sizeof(fdir), "%s/gen-fresh", base);
+        snprintf(fpending, sizeof(fpending), "%s/base.pending", fdir);
+        if (!store_seed_dir(fdir, 2)) {
+            fprintf(stderr, "store-generation FAIL: seed fresh dir\n");
+            return 1;
+        }
+        if (cdc_store_open(fdir, &f, NULL) != CDC_STORE_OK ||
+            cdc_store_snapshot(f) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: prepare stale base\n");
+            return 1;
+        }
+        cdc_store_close(f); /* crash: base.pending is left behind */
+        f = NULL;
+        if (cdc_store_reset(fdir) != CDC_STORE_OK) {
+            fprintf(stderr, "store-generation FAIL: reset\n");
+            return 1;
+        }
+        if (stat(fpending, &st) == 0) {
+            fprintf(stderr,
+                    "store-generation FAIL: reset left a stale prepared "
+                    "base behind\n");
+            failures++;
+        }
+        if (cdc_store_open(fdir, &f, NULL) != CDC_STORE_OK || !f) {
+            fprintf(stderr, "store-generation FAIL: fresh reopen\n");
+            return 1;
+        }
+        if (!store_commit_txn(f, 1)) {
+            fprintf(stderr, "store-generation FAIL: fresh commit\n");
+            return 1;
+        }
+        /* an early compact on a fresh store holds on "nothing prepared" —
+         * never ECORRUPT from a base that should not exist */
+        if (cdc_store_compact(f) != CDC_STORE_ESTATE) {
+            fprintf(stderr,
+                    "store-generation FAIL: fresh store saw a stale base\n");
+            failures++;
+        }
+        cdc_store_close(f);
+        printf("store-generation fresh-after-crash stale-base-removed=1 "
+               "early-compact=state\n");
+    }
+
     if (failures) {
         return 1;
     }
