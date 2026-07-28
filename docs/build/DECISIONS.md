@@ -46,6 +46,45 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D24 — 2026-07-28 — Bridge runtime migrated off the legacy scanner
+
+`runtime/cdc_bridge_runtime.c` no longer reads source itself. Its three
+scan loops — bridge64 verification, generated-codebook verification, and
+coordinate jobs — used to `fgets` the file, trim the newline, test a LINE
+PREFIX, and pull attributes out of raw text. They now consume the same
+parsed statement stream every other consumer sees. No `fgets`, no
+`cdc_starts_with`, no `cdc_read_attr` remain in that file.
+
+**Verified by differential, not by inspection.** I built the pre-migration
+binary from stashed source and ran both across sixteen invocations: all ten
+verbs on real inputs, plus three error paths. Fourteen are byte-identical
+with identical exit codes. The two that differ are both error paths and
+both improved:
+
+- A missing file said `could not open bridge file`; it now names the path
+  and the typed reason.
+- A file containing an unknown directive was previously ACCEPTED by the
+  scanner, which skipped the line it did not recognise and then failed
+  downstream with `does not contain exactly 64 rows` — a misleading symptom
+  pointing at the wrong thing. It now fails at the cause:
+  `unknown directive 'frobnicate'`.
+
+Exit codes are unchanged in both cases, and neither string is gated. The
+second is the migration paying for itself: the legacy scanner silently
+tolerated malformed source and reported a consequence instead of a cause.
+
+**Two semantic differences, named rather than discovered later.** A prefix
+test like `cdc_starts_with(line, "witness bridge64-")` was sensitive to
+spacing, so `witness  bridge64-x` (two spaces) did not match; the statement
+form tests the directive and its first argument, so it now does. That is a
+correction, and the generated codebooks use single spaces, so nothing
+moves. Attribute lookup uses `cdc_stmt_attr_first`, which replicates the
+legacy first-occurrence rule exactly, and values agree because of the D23
+precondition.
+
+`runtime/cdc_native_runtime.c` is the remaining consumer. The pattern is
+proven; the scale is larger.
+
 ## D23 — 2026-07-28 — The grammar-1 migration precondition, pinned
 
 Migrating the runtimes onto the grammar-1 frontend is only

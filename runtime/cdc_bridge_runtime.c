@@ -1,3 +1,6 @@
+#include "cdc_ast.h"
+#include "cdc_diagnostic.h"
+#include "cdc_parser.h"
 #include "cdc_source.h"
 
 #include <stdio.h>
@@ -17,6 +20,74 @@ typedef struct {
 } BridgeRow;
 
 static const char DIGITS[] = "0123456789ABCDEF";
+
+/* ---- grammar-1 source access (deletion gate step 1) ------------------
+ *
+ * These loops used to read the file themselves: fgets, trim the newline,
+ * check a LINE PREFIX, then pull attributes out of the raw text. That is
+ * the legacy scanner, and it is the thing the deletion gate removes.
+ *
+ * They now consume the same parsed statement stream every other consumer
+ * sees. Two differences are worth naming rather than discovering later:
+ *
+ *  - A prefix test like `cdc_starts_with(line, "witness bridge64-")` was
+ *    sensitive to spacing; the statement form tests the DIRECTIVE and its
+ *    first ARGUMENT, so `witness  bridge64-x` (two spaces) now matches
+ *    where it previously did not. That is a correction, and the generated
+ *    codebooks use single spaces, so no output moves.
+ *  - Attribute lookup uses cdc_stmt_attr_first, which replicates the legacy
+ *    first-occurrence rule exactly (cdc_ast.h). Values agree because no
+ *    attribute these runtimes consume is ever quoted — the precondition
+ *    gated in scripts/verify.sh (D23).
+ */
+static void fail(const char *message);
+
+/* Parses `path` or fails closed with the parser's typed diagnostic. */
+static void load_unit(const char *path, cdc_unit *unit) {
+    cdc_diag_list diags;
+    cdc_diag_list_init(&diags);
+    cdc_unit_init(unit);
+    if (!cdc_unit_parse_file(path, unit, &diags) || diags.errors > 0) {
+        const char *detail = diags.count > 0 ? diags.items[0].message : "parse failed";
+        fprintf(stderr, "cdc-bridge-runtime: %s: %s\n", path, detail);
+        cdc_diag_list_free(&diags);
+        cdc_unit_free(unit);
+        exit(1);
+    }
+    cdc_diag_list_free(&diags);
+}
+
+/* A `witness <id>` statement whose id starts with `prefix`, or NULL. */
+static const char *witness_id_with_prefix(const cdc_stmt *stmt,
+                                          const char *prefix) {
+    const char *directive = cdc_stmt_directive(stmt);
+    const char *id;
+    if (!directive || strcmp(directive, "witness") != 0) {
+        return NULL;
+    }
+    id = cdc_stmt_arg(stmt, 0);
+    if (!id || strncmp(id, prefix, strlen(prefix)) != 0) {
+        return NULL;
+    }
+    return id;
+}
+
+/* Same contract as the legacy cdc_read_attr — returns 0 when absent, fails
+ * closed on overflow — but sourced from the parsed statement, so the loop
+ * bodies below are unchanged. */
+static int stmt_attr_copy(const cdc_stmt *stmt, const char *key, char *out,
+                          size_t out_size) {
+    const char *value = cdc_stmt_attr_first(stmt, key);
+    int written;
+    if (!value) {
+        return 0;
+    }
+    written = snprintf(out, out_size, "%s", value);
+    if (written < 0 || (size_t)written >= out_size) {
+        fail("attribute too long");
+    }
+    return 1;
+}
 
 static void fail(const char *message) {
     fprintf(stderr, "cdc-bridge-runtime: %s\n", message);
@@ -133,15 +204,13 @@ static void expected_triadic_n(int index, int arity, char out[4]) {
 }
 
 static void load_bridge64(const char *path, BridgeRow rows[BRIDGE64_ROWS]) {
-    FILE *fp = fopen(path, "r");
-    char line[LINE_MAX_BYTES];
+    cdc_unit unit;
+    size_t s;
     int dyadic_seen[BRIDGE64_ROWS] = {0};
     int triadic_seen[BRIDGE64_ROWS] = {0};
     int count = 0;
 
-    if (!fp) {
-        fail("could not open bridge file");
-    }
+    load_unit(path, &unit);
 
     for (int i = 0; i < BRIDGE64_ROWS; i++) {
         rows[i].seen = 0;
@@ -151,7 +220,9 @@ static void load_bridge64(const char *path, BridgeRow rows[BRIDGE64_ROWS]) {
         rows[i].triadic[0] = '\0';
     }
 
-    while (fgets(line, sizeof(line), fp)) {
+    for (s = 0; s < unit.count; s++) {
+        const cdc_stmt *stmt = &unit.stmts[s];
+        const char *id = witness_id_with_prefix(stmt, "bridge64-");
         char witness[64];
         char dyadic[16];
         char triadic[16];
@@ -162,15 +233,13 @@ static void load_bridge64(const char *path, BridgeRow rows[BRIDGE64_ROWS]) {
         char expected_t[4];
         char expected_d[7];
 
-        cdc_trim_newline(line);
-        if (!cdc_starts_with(line, "witness bridge64-")) {
+        if (!id) {
             continue;
         }
-
-        cdc_first_token_after(line, "witness ", witness, sizeof(witness));
-        if (!cdc_read_attr(line, "dyadic", dyadic, sizeof(dyadic)) ||
-            !cdc_read_attr(line, "triadic", triadic, sizeof(triadic)) ||
-            !cdc_read_attr(line, "index", index_text, sizeof(index_text))) {
+        snprintf(witness, sizeof(witness), "%s", id);
+        if (!stmt_attr_copy(stmt, "dyadic", dyadic, sizeof(dyadic)) ||
+            !stmt_attr_copy(stmt, "triadic", triadic, sizeof(triadic)) ||
+            !stmt_attr_copy(stmt, "index", index_text, sizeof(index_text))) {
             fail("bridge64 witness missing dyadic, triadic, or index attribute");
         }
 
@@ -208,7 +277,7 @@ static void load_bridge64(const char *path, BridgeRow rows[BRIDGE64_ROWS]) {
         triadic_seen[t_index] = 1;
         count++;
     }
-    fclose(fp);
+    cdc_unit_free(&unit);
 
     cdc_expect_int(count, BRIDGE64_ROWS, "bridge64 file does not contain exactly 64 rows");
     for (int i = 0; i < BRIDGE64_ROWS; i++) {
@@ -377,8 +446,8 @@ static void cmd_emit_codebook(const char *arity_text) {
 }
 
 static void cmd_verify_codebook(const char *path, const char *arity_text) {
-    FILE *fp = fopen(path, "r");
-    char line[LINE_MAX_BYTES];
+    cdc_unit unit;
+    size_t s;
     int arity;
     int base;
     int states;
@@ -386,9 +455,7 @@ static void cmd_verify_codebook(const char *path, const char *arity_text) {
     int *dyadic_seen;
     int *triadic_seen;
 
-    if (!fp) {
-        fail("could not open generated codebook file");
-    }
+    load_unit(path, &unit);
     parse_codebook_arity(arity_text, &arity, &base, &states);
     dyadic_seen = calloc((size_t)states, sizeof(int));
     triadic_seen = calloc((size_t)states, sizeof(int));
@@ -396,7 +463,8 @@ static void cmd_verify_codebook(const char *path, const char *arity_text) {
         fail("could not allocate generated codebook census");
     }
 
-    while (fgets(line, sizeof(line), fp)) {
+    for (s = 0; s < unit.count; s++) {
+        const cdc_stmt *stmt = &unit.stmts[s];
         char row[32];
         char dyadic[32];
         char triadic[32];
@@ -408,19 +476,20 @@ static void cmd_verify_codebook(const char *path, const char *arity_text) {
         int d_index;
         int t_index;
 
-        cdc_trim_newline(line);
-        if (!cdc_starts_with(line, "witness bridge")) {
+        if (!witness_id_with_prefix(stmt, "bridge")) {
             continue;
         }
-        if (!cdc_read_attr(line, "row", row, sizeof(row)) || strcmp(row, "codebook") != 0) {
+        if (!stmt_attr_copy(stmt, "row", row, sizeof(row)) ||
+            strcmp(row, "codebook") != 0) {
             continue;
         }
-        if (!cdc_read_attr(line, "arity", attr, sizeof(attr)) || atoi(attr) != arity) {
+        if (!stmt_attr_copy(stmt, "arity", attr, sizeof(attr)) ||
+            atoi(attr) != arity) {
             fail("generated codebook row has wrong arity");
         }
-        if (!cdc_read_attr(line, "dyadic", dyadic, sizeof(dyadic)) ||
-            !cdc_read_attr(line, "triadic", triadic, sizeof(triadic)) ||
-            !cdc_read_attr(line, "index", index_text, sizeof(index_text))) {
+        if (!stmt_attr_copy(stmt, "dyadic", dyadic, sizeof(dyadic)) ||
+            !stmt_attr_copy(stmt, "triadic", triadic, sizeof(triadic)) ||
+            !stmt_attr_copy(stmt, "index", index_text, sizeof(index_text))) {
             fail("generated codebook row missing dyadic, triadic, or index");
         }
         index = atoi(index_text);
@@ -446,7 +515,7 @@ static void cmd_verify_codebook(const char *path, const char *arity_text) {
         triadic_seen[t_index] = 1;
         count++;
     }
-    fclose(fp);
+    cdc_unit_free(&unit);
     cdc_expect_int(count, states, "generated codebook row count mismatch");
     for (int i = 0; i < states; i++) {
         if (!dyadic_seen[i] || !triadic_seen[i]) {
@@ -460,16 +529,16 @@ static void cmd_verify_codebook(const char *path, const char *arity_text) {
 
 static void cmd_run_jobs(const char *bridge_path, const char *jobs_path) {
     BridgeRow rows[BRIDGE64_ROWS];
-    FILE *fp = fopen(jobs_path, "r");
-    char line[LINE_MAX_BYTES];
+    cdc_unit unit;
+    size_t s;
     int count = 0;
 
-    if (!fp) {
-        fail("could not open bridge jobs file");
-    }
+    load_unit(jobs_path, &unit);
     load_bridge64(bridge_path, rows);
 
-    while (fgets(line, sizeof(line), fp)) {
+    for (s = 0; s < unit.count; s++) {
+        const cdc_stmt *stmt = &unit.stmts[s];
+        const char *id = witness_id_with_prefix(stmt, "");
         char witness[64];
         char trits[32];
         char expected_dyadic_attr[16];
@@ -479,21 +548,23 @@ static void cmd_run_jobs(const char *bridge_path, const char *jobs_path) {
         char actual_dyadic[7];
         int index;
 
-        cdc_trim_newline(line);
-        if (!cdc_starts_with(line, "witness ")) {
+        if (!id) {
             continue;
         }
-        if (!cdc_read_attr(line, "job", job, sizeof(job)) || strcmp(job, "bridge-coordinate") != 0) {
+        if (!stmt_attr_copy(stmt, "job", job, sizeof(job)) ||
+            strcmp(job, "bridge-coordinate") != 0) {
             continue;
         }
 
-        cdc_first_token_after(line, "witness ", witness, sizeof(witness));
-        if (!cdc_read_attr(line, "trits", trits, sizeof(trits)) ||
-            !cdc_read_attr(line, "expect-dyadic", expected_dyadic_attr, sizeof(expected_dyadic_attr)) ||
-            !cdc_read_attr(line, "expect-triadic", expected_triadic_attr, sizeof(expected_triadic_attr))) {
+        snprintf(witness, sizeof(witness), "%s", id);
+        if (!stmt_attr_copy(stmt, "trits", trits, sizeof(trits)) ||
+            !stmt_attr_copy(stmt, "expect-dyadic", expected_dyadic_attr,
+                            sizeof(expected_dyadic_attr)) ||
+            !stmt_attr_copy(stmt, "expect-triadic", expected_triadic_attr,
+                            sizeof(expected_triadic_attr))) {
             fail("bridge-coordinate job missing trits or expected coordinate");
         }
-        if (!cdc_read_attr(line, "window", window, sizeof(window))) {
+        if (!stmt_attr_copy(stmt, "window", window, sizeof(window))) {
             snprintf(window, sizeof(window), "%s", "trace");
         }
 
@@ -507,7 +578,7 @@ static void cmd_run_jobs(const char *bridge_path, const char *jobs_path) {
         count++;
     }
 
-    fclose(fp);
+    cdc_unit_free(&unit);
     if (count == 0) {
         fail("no bridge-coordinate jobs found");
     }

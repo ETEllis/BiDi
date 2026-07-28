@@ -448,6 +448,8 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   -o build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
+  runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
   -o build/cdc_bridge_runtime
 PASSTHROUGH_MODES=0
 while IFS= read -r MODE_ARGS; do
@@ -1071,6 +1073,10 @@ rm -f build/cdc_bridge_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 \
   runtime/cdc_bridge_runtime.c \
   runtime/cdc_source.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
   -o build/cdc_bridge_runtime
 run_step build/cdc_bridge_runtime verify bridge64.cdc
 
