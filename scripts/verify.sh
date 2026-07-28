@@ -462,12 +462,27 @@ rm -rf build/store_io
 mkdir -p build/store_io
 ./build/cdc_frontend_check store-io build/store_io | tee build/store_io.txt
 grep -q "store-io ok cases=3 controls=1" build/store_io.txt
+# Protocol completion: snapshot, compact, and compare-and-set fence. The
+# load-bearing claim is that compaction preserves the REPLAY identity (the
+# chained semantic digest) while the attest digest over raw bytes changes,
+# and that a stale writer's commit is refused without writing a byte. The
+# snapshot is swept byte-by-byte: a tampered base must never be trusted.
+rm -rf build/store_protocol
+mkdir -p build/store_protocol
+./build/cdc_frontend_check store-protocol build/store_protocol \
+  | tee build/store_protocol.txt
+grep -q "store-protocol snapshot sweep: 85/85 bytes fail closed" build/store_protocol.txt
+grep -q "store-protocol ok snapshot=1 compact=1 fence=1 replay-identity-preserved=1" \
+  build/store_protocol.txt
 if [ "$SANITIZED" = "1" ]; then
   rm -rf build/store_crash_asan build/store_corrupt_asan build/store_io_asan
   mkdir -p build/store_crash_asan build/store_corrupt_asan build/store_io_asan
   run_step ./build/cdc_frontend_check_asan store-crash build/store_crash_asan
   run_step ./build/cdc_frontend_check_asan store-corrupt build/store_corrupt_asan
   run_step ./build/cdc_frontend_check_asan store-io build/store_io_asan
+  rm -rf build/store_protocol_asan
+  mkdir -p build/store_protocol_asan
+  run_step ./build/cdc_frontend_check_asan store-protocol build/store_protocol_asan
 fi
 
 echo

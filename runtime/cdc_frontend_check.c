@@ -1008,20 +1008,208 @@ static int cmd_store_check(const char *base) {
         cdc_store_close(store);
         return 1;
     }
-    /* rollback leaves nothing; empty commit is a typed state error;
-     * declared-but-unlanded verbs fail closed. */
+    /* Rollback leaves nothing staged, so the following commit has no work
+     * and is a typed state error rather than an empty transaction. Fencing
+     * at the wrong seal is likewise a typed refusal. (snapshot/compact/
+     * fence behaviour proper is owned by the store-protocol suite.) */
     cdc_store_stage(store, "ghost", 5);
     cdc_store_rollback(store);
     if (cdc_store_commit(store) != CDC_STORE_ESTATE ||
-        cdc_store_snapshot(store) != CDC_STORE_EUNSUPPORTED ||
-        cdc_store_compact(store) != CDC_STORE_EUNSUPPORTED ||
-        cdc_store_fence(store, 2) != CDC_STORE_EUNSUPPORTED) {
+        cdc_store_fence(store, 99) != CDC_STORE_ESTATE) {
         fprintf(stderr, "store-check FAIL: typed statuses\n");
         cdc_store_close(store);
         return 1;
     }
     cdc_store_close(store);
     printf("store-check ok determinism=1 attest=%s\n", attest);
+    return 0;
+}
+
+static int read_file_bytes(const char *path, uint8_t **out, size_t *size);
+static int write_file_bytes(const char *path, const uint8_t *bytes,
+                            size_t size);
+
+static long file_size(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 ? (long)st.st_size : -1;
+}
+
+/* ---- snapshot / compact / fence (Phase D protocol completion) -------- */
+
+static int cmd_store_protocol(const char *base) {
+    char dir[512], log_path[600], snap_path[620];
+    cdc_store *store = NULL, *other = NULL;
+    char before[80], after[80], attest_before[80], attest_after[80];
+    uint8_t *snap_bytes = NULL;
+    size_t snap_size = 0;
+    long log_size_before, log_size_after;
+    int failures = 0;
+    int t;
+
+    snprintf(dir, sizeof(dir), "%s/protocol", base);
+    snprintf(log_path, sizeof(log_path), "%s/log.cdcstore", dir);
+    snprintf(snap_path, sizeof(snap_path), "%s/snapshot.cdcstore", dir);
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: open\n");
+        return 1;
+    }
+    for (t = 1; t <= 3; t++) {
+        if (!store_commit_txn(store, t)) {
+            fprintf(stderr, "store-protocol FAIL: seed txn %d\n", t);
+            return 1;
+        }
+    }
+    if (cdc_store_replay(store, before, sizeof(before)) != CDC_STORE_OK ||
+        cdc_store_attest(store, attest_before, sizeof(attest_before)) !=
+            CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: baseline digests\n");
+        return 1;
+    }
+    log_size_before = file_size(log_path);
+
+    /* compact without a snapshot must refuse rather than discard history */
+    if (cdc_store_compact(store) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-protocol FAIL: compact without snapshot\n");
+        failures++;
+    }
+    if (cdc_store_snapshot(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: snapshot\n");
+        return 1;
+    }
+    if (cdc_store_compact(store) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: compact\n");
+        return 1;
+    }
+    log_size_after = file_size(log_path);
+    if (cdc_store_replay(store, after, sizeof(after)) != CDC_STORE_OK ||
+        cdc_store_attest(store, attest_after, sizeof(attest_after)) !=
+            CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: post-compaction digests\n");
+        return 1;
+    }
+    /* THE claim: semantic identity survives the physical rewrite. */
+    if (strcmp(before, after) != 0) {
+        fprintf(stderr, "store-protocol FAIL: replay identity changed\n  %s\n  %s\n",
+                before, after);
+        failures++;
+    }
+    if (strcmp(attest_before, attest_after) == 0) {
+        fprintf(stderr, "store-protocol FAIL: attest digest should change\n");
+        failures++;
+    }
+    if (log_size_after >= log_size_before || log_size_after != 0) {
+        fprintf(stderr, "store-protocol FAIL: log not compacted (%ld -> %ld)\n",
+                log_size_before, log_size_after);
+        failures++;
+    }
+    if (cdc_store_sealed_count(store) != 3) {
+        fprintf(stderr, "store-protocol FAIL: sealed count lost by compaction\n");
+        failures++;
+    }
+    cdc_store_close(store);
+    store = NULL;
+
+    /* reopening must resume from the base and keep appending coherently */
+    if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+        cdc_store_sealed_count(store) != 3) {
+        fprintf(stderr, "store-protocol FAIL: reopen after compaction\n");
+        return 1;
+    }
+    {
+        char resumed[80];
+        if (cdc_store_replay(store, resumed, sizeof(resumed)) != CDC_STORE_OK ||
+            strcmp(resumed, before) != 0) {
+            fprintf(stderr, "store-protocol FAIL: replay identity after reopen\n");
+            failures++;
+        }
+    }
+    if (!store_commit_txn(store, 4) || cdc_store_sealed_count(store) != 4) {
+        fprintf(stderr, "store-protocol FAIL: append after compaction\n");
+        failures++;
+    }
+
+    /* fence: an armed writer whose view is stale must not commit */
+    if (cdc_store_fence(store, 4) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: fence at current seal\n");
+        failures++;
+    }
+    if (cdc_store_fence(store, 2) != CDC_STORE_ESTATE) {
+        fprintf(stderr, "store-protocol FAIL: stale fence accepted\n");
+        failures++;
+    }
+    if (cdc_store_open(dir, &other, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: second handle\n");
+        return 1;
+    }
+    /* both writers believe the log ends at seal 4 */
+    if (cdc_store_fence(store, 4) != CDC_STORE_OK ||
+        cdc_store_fence(other, 4) != CDC_STORE_OK) {
+        fprintf(stderr, "store-protocol FAIL: concurrent fences\n");
+        failures++;
+    }
+    if (!store_commit_txn(store, 5)) {
+        fprintf(stderr, "store-protocol FAIL: winner commit\n");
+        failures++;
+    }
+    {
+        /* the loser's fence is now stale: its commit must be refused and
+         * must leave the log byte-identical */
+        long size_before_loser = file_size(log_path);
+        char payload[32];
+        cdc_store_status status;
+        snprintf(payload, sizeof(payload), "stale-writer");
+        cdc_store_stage(other, payload, strlen(payload));
+        status = cdc_store_commit(other);
+        if (status != CDC_STORE_ESTATE) {
+            fprintf(stderr, "store-protocol FAIL: stale writer committed (%s)\n",
+                    cdc_store_status_name(status));
+            failures++;
+        }
+        if (file_size(log_path) != size_before_loser) {
+            fprintf(stderr, "store-protocol FAIL: stale commit wrote bytes\n");
+            failures++;
+        }
+    }
+    cdc_store_close(other);
+    cdc_store_close(store);
+    store = NULL;
+
+    /* a tampered snapshot must fail closed, never seed a wrong base */
+    if (!read_file_bytes(snap_path, &snap_bytes, &snap_size)) {
+        fprintf(stderr, "store-protocol FAIL: read snapshot\n");
+        return 1;
+    }
+    {
+        size_t offset;
+        int rejected = 0, checked = 0;
+        for (offset = 0; offset < snap_size; offset++) {
+            uint8_t original = snap_bytes[offset];
+            cdc_store *probe = NULL;
+            snap_bytes[offset] ^= 0xff;
+            write_file_bytes(snap_path, snap_bytes, snap_size);
+            if (cdc_store_open(dir, &probe, NULL) == CDC_STORE_ECORRUPT &&
+                probe == NULL) {
+                rejected++;
+            } else {
+                fprintf(stderr,
+                        "store-protocol FAIL: snapshot byte %zu accepted\n",
+                        offset);
+                cdc_store_close(probe);
+                failures++;
+            }
+            checked++;
+            snap_bytes[offset] = original;
+        }
+        write_file_bytes(snap_path, snap_bytes, snap_size);
+        printf("store-protocol snapshot sweep: %d/%d bytes fail closed\n",
+               rejected, checked);
+    }
+    free(snap_bytes);
+    if (failures) {
+        return 1;
+    }
+    printf("store-protocol ok snapshot=1 compact=1 fence=1 "
+           "replay-identity-preserved=1\n");
     return 0;
 }
 
@@ -1397,6 +1585,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "store-corrupt") == 0 && argc >= 3) {
         return cmd_store_corrupt(argv[2]);
+    }
+    if (strcmp(argv[1], "store-protocol") == 0 && argc >= 3) {
+        return cmd_store_protocol(argv[2]);
     }
     if (strcmp(argv[1], "store-io") == 0 && argc >= 3) {
         return cmd_store_io(argv[2]);

@@ -46,6 +46,31 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D14 — 2026-07-28 — Store protocol completion: resumable replay chain
+
+snapshot, compact, and compare-and-set fence are implemented, completing the
+generic store protocol. The replay digest changed from a one-pass fold to a
+RESUMABLE CHAIN (state_i = digest(state_{i-1} || record_digest_i)) so a
+snapshot can record a state the scan resumes from. This is what makes
+compaction honest: after compacting, the replay identity is byte-identical
+to the pre-compaction value while the attest digest over raw log bytes
+legitimately changes — semantic identity survives a physical rewrite, and
+the two digests answer different questions by design.
+
+Snapshots are authenticated exactly like log records (magic | version |
+sealed | events | state | tag over all of it), written temp -> fsync ->
+rename -> directory fsync. A tampered snapshot fails the OPEN rather than
+seeding a wrong base: all 85 snapshot bytes are swept individually and every
+one fails closed. Compaction refuses unless the snapshot covers the entire
+sealed prefix (sealed, events, and state all matching), so it can never
+discard a record the base does not account for.
+
+The fence is a real compare-and-set: arming pins the sealed count a writer
+believes it is extending, and commit re-reads the log and refuses with
+ESTATE if another writer moved it — proven by a two-handle stale-writer
+counterexample asserting the loser wrote zero bytes. This is the MM1
+stale-writer primitive.
+
 ## D13 — 2026-07-27 — BLAKE3 landed; D2 interim-digest gate CLOSED
 
 `runtime/cdc_blake3.{h,c}` vendors a portable, dependency-free BLAKE3
