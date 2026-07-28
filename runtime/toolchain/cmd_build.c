@@ -38,6 +38,7 @@
 
 #include "../cdc_abi.h"
 #include "../cdc_digest.h"
+#include "cdc_manifest.h"
 
 #define BUNDLE_NAME "cdc-bundle.cdc"
 #define MANIFEST_NAME "cdc-bundle.manifest"
@@ -198,18 +199,22 @@ static int read_all(const char *path, char **out, size_t *out_length) {
     return 1;
 }
 
-/* --check: re-derive every digest and compare against the manifest. */
+/* --check: strict-parse the manifest, then re-derive EVERYTHING it binds
+ * — per-source digests, corpus, artifact, statement and check counts —
+ * and compare. A header used to be "format only"; now every field is a
+ * claim this function verifies (second 2026-07-28 review, finding 3). */
 static int build_check(int file_count, char **files) {
     char manifest_path[1024];
     char bundle_path[1024];
     char *manifest = NULL;
     size_t manifest_length = 0;
-    const char *cursor;
+    static cdc_manifest parsed;
+    char parse_error[128];
     int mismatches = 0;
-    int sources_seen = 0;
-    int artifact_seen = 0, corpus_seen = 0;
     uint8_t digest[CDC_DIGEST_SIZE];
     char hex[96];
+    long statements = 0;
+    long checks = 0;
     int i;
 
     snprintf(manifest_path, sizeof(manifest_path), "%s/%s", build_dir(),
@@ -221,125 +226,142 @@ static int build_check(int file_count, char **files) {
                 manifest_path);
         return 1;
     }
-    cursor = manifest;
-    while (*cursor) {
-        char line[1200];
-        const char *end = strchr(cursor, '\n');
-        size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
-        if (length >= sizeof(line)) {
-            fprintf(stderr, "cdc build --check: manifest-malformed "
-                            "(overlong line)\n");
-            free(manifest);
-            return 1;
-        }
-        memcpy(line, cursor, length);
-        line[length] = '\0';
-        cursor += length + (end ? 1 : 0);
-
-        if (strncmp(line, "cdc-bundle ", 11) == 0) {
-            /* header carries versions and counts; format only */
-        } else if (strncmp(line, "source ", 7) == 0) {
-            char name[512], recorded[96];
-            if (sscanf(line, "source %511s %95s", name, recorded) != 2) {
-                fprintf(stderr,
-                        "cdc build --check: manifest-malformed (%s)\n", line);
-                free(manifest);
-                return 1;
-            }
-            sources_seen++;
-            for (i = 0; i < file_count; i++) {
-                if (strcmp(base_name(files[i]), name) == 0) {
-                    break;
-                }
-            }
-            if (i == file_count) {
-                fprintf(stderr,
-                        "cdc build --check: source-drift (%s is in the "
-                        "manifest but not in the given set)\n",
-                        name);
-                mismatches++;
-                continue;
-            }
-            if (!cdc_digest_file(files[i], digest)) {
-                fprintf(stderr,
-                        "cdc build --check: source-drift (%s unreadable)\n",
-                        name);
-                mismatches++;
-                continue;
-            }
-            cdc_digest_hex(digest, hex, sizeof(hex));
-            if (strcmp(hex, recorded) != 0) {
-                fprintf(stderr, "cdc build --check: source-drift (%s)\n",
-                        name);
-                mismatches++;
-            }
-        } else if (strncmp(line, "corpus ", 7) == 0) {
-            char recorded[96];
-            if (sscanf(line, "corpus %95s", recorded) != 1) {
-                fprintf(stderr,
-                        "cdc build --check: manifest-malformed (%s)\n", line);
-                free(manifest);
-                return 1;
-            }
-            corpus_seen = 1;
-            if (!cdc_digest_corpus((const char *const *)files,
-                                   (size_t)file_count, digest)) {
-                fprintf(stderr,
-                        "cdc build --check: source-drift (corpus "
-                        "unreadable)\n");
-                mismatches++;
-            } else {
-                cdc_digest_hex(digest, hex, sizeof(hex));
-                if (strcmp(hex, recorded) != 0) {
-                    fprintf(stderr,
-                            "cdc build --check: source-drift (corpus)\n");
-                    mismatches++;
-                }
-            }
-        } else if (strncmp(line, "artifact ", 9) == 0) {
-            char recorded[96];
-            if (sscanf(line, "artifact %95s", recorded) != 1) {
-                fprintf(stderr,
-                        "cdc build --check: manifest-malformed (%s)\n", line);
-                free(manifest);
-                return 1;
-            }
-            artifact_seen = 1;
-            if (!cdc_digest_file(bundle_path, digest)) {
-                fprintf(stderr,
-                        "cdc build --check: artifact-mismatch (bundle "
-                        "unreadable)\n");
-                mismatches++;
-            } else {
-                cdc_digest_hex(digest, hex, sizeof(hex));
-                if (strcmp(hex, recorded) != 0) {
-                    /* which side moved cannot be attributed from inside,
-                     * and is not pretended */
-                    fprintf(stderr,
-                            "cdc build --check: artifact-mismatch (bundle "
-                            "and manifest disagree)\n");
-                    mismatches++;
-                }
-            }
-        } else if (line[0] != '\0') {
-            fprintf(stderr, "cdc build --check: manifest-malformed (%s)\n",
-                    line);
-            free(manifest);
-            return 1;
-        }
+    if (!cdc_manifest_parse(manifest, manifest_length, CDC_MANIFEST_BUNDLE,
+                            cdc_abi_version(), NULL, &parsed, parse_error,
+                            sizeof(parse_error))) {
+        fprintf(stderr, "cdc build --check: manifest-malformed (%s)\n",
+                parse_error);
+        free(manifest);
+        return 1;
     }
     free(manifest);
-    if (!artifact_seen || !corpus_seen || sources_seen != file_count) {
+    if (parsed.files != file_count) {
         fprintf(stderr,
-                "cdc build --check: manifest-malformed (missing records: "
-                "sources=%d/%d corpus=%d artifact=%d)\n",
-                sources_seen, file_count, corpus_seen, artifact_seen);
+                "cdc build --check: manifest-malformed (files=%ld but %d "
+                "sources were given)\n",
+                parsed.files, file_count);
         return 1;
+    }
+
+    /* ---- per-source digests: record set == given set, byte for byte -- */
+    for (i = 0; i < parsed.record_count; i++) {
+        int j;
+        for (j = 0; j < file_count; j++) {
+            if (strcmp(base_name(files[j]), parsed.record_name[i]) == 0) {
+                break;
+            }
+        }
+        if (j == file_count) {
+            fprintf(stderr,
+                    "cdc build --check: source-drift (%s is in the "
+                    "manifest but not in the given set)\n",
+                    parsed.record_name[i]);
+            mismatches++;
+            continue;
+        }
+        if (!cdc_digest_file(files[j], digest)) {
+            fprintf(stderr,
+                    "cdc build --check: source-drift (%s unreadable)\n",
+                    parsed.record_name[i]);
+            mismatches++;
+            continue;
+        }
+        cdc_digest_hex(digest, hex, sizeof(hex));
+        if (strcmp(hex, parsed.record_digest[i]) != 0) {
+            fprintf(stderr, "cdc build --check: source-drift (%s)\n",
+                    parsed.record_name[i]);
+            mismatches++;
+        }
+    }
+
+    /* ---- corpus ------------------------------------------------------ */
+    if (!cdc_digest_corpus((const char *const *)files, (size_t)file_count,
+                           digest)) {
+        fprintf(stderr,
+                "cdc build --check: source-drift (corpus unreadable)\n");
+        mismatches++;
+    } else {
+        cdc_digest_hex(digest, hex, sizeof(hex));
+        if (strcmp(hex, parsed.corpus) != 0) {
+            fprintf(stderr, "cdc build --check: source-drift (corpus)\n");
+            mismatches++;
+        }
+    }
+
+    /* ---- artifact ---------------------------------------------------- */
+    if (!cdc_digest_file(bundle_path, digest)) {
+        fprintf(stderr, "cdc build --check: artifact-mismatch (bundle "
+                        "unreadable)\n");
+        mismatches++;
+    } else {
+        cdc_digest_hex(digest, hex, sizeof(hex));
+        if (strcmp(hex, parsed.artifact) != 0) {
+            /* which side moved cannot be attributed from inside, and is
+             * not pretended */
+            fprintf(stderr, "cdc build --check: artifact-mismatch (bundle "
+                            "and manifest disagree)\n");
+            mismatches++;
+        }
+    }
+
+    /* ---- statement and check counts: re-derived, never trusted ------- */
+    if (mismatches == 0) {
+        cdc_runtime *runtime = NULL;
+        cdc_result *vectors = NULL;
+        if (cdc_runtime_create(&runtime) != CDC_OK) {
+            fprintf(stderr, "cdc build --check: runtime creation failed\n");
+            return 1;
+        }
+        for (i = 0; i < file_count; i++) {
+            cdc_program *program = NULL;
+            cdc_status status =
+                cdc_program_parse(files[i], NULL, 0, &program);
+            if (status != CDC_OK || cdc_program_error_count(program) > 0) {
+                fprintf(stderr,
+                        "cdc build --check: source-drift (%s no longer "
+                        "parses)\n",
+                        base_name(files[i]));
+                cdc_program_destroy(program);
+                cdc_runtime_destroy(runtime);
+                return 1;
+            }
+            statements += (long)cdc_program_statement_count(program);
+            if (cdc_runtime_load(runtime, program) != CDC_OK) {
+                fprintf(stderr, "cdc build --check: load failed (%s)\n",
+                        base_name(files[i]));
+                cdc_program_destroy(program);
+                cdc_runtime_destroy(runtime);
+                return 1;
+            }
+        }
+        if (cdc_runtime_vectors(runtime, NULL, &vectors) != CDC_OK) {
+            fprintf(stderr, "cdc build --check: vector export failed\n");
+            cdc_runtime_destroy(runtime);
+            return 1;
+        }
+        checks = count_lines(cdc_result_text(vectors));
+        cdc_result_destroy(vectors);
+        cdc_runtime_destroy(runtime);
+        if (statements != parsed.statements) {
+            fprintf(stderr,
+                    "cdc build --check: manifest-malformed (statements=%ld "
+                    "but the sources carry %ld)\n",
+                    parsed.statements, statements);
+            return 1;
+        }
+        if (checks != parsed.checks) {
+            fprintf(stderr,
+                    "cdc build --check: manifest-malformed (checks=%ld but "
+                    "the sources carry %ld)\n",
+                    parsed.checks, checks);
+            return 1;
+        }
     }
     if (mismatches) {
         return 1;
     }
-    printf("cdc build check ok files=%d corpus=verified artifact=verified\n",
+    printf("cdc build check ok files=%d corpus=verified artifact=verified "
+           "counts=verified\n",
            file_count);
     return 0;
 }
@@ -534,6 +556,23 @@ int cdc_cmd_build(int argc, char **argv) {
         fprintf(final_mem, "corpus %s\n", corpus_hex);
         fprintf(final_mem, "artifact %s\n", artifact_hex);
         fclose(final_mem);
+        /* The emitter eats its own cooking: a manifest the strict parser
+         * refuses is never written wearing the real name. */
+        {
+            static cdc_manifest self_check;
+            char parse_error[128];
+            if (!cdc_manifest_parse(final_text, final_length,
+                                    CDC_MANIFEST_BUNDLE, abi, NULL,
+                                    &self_check, parse_error,
+                                    sizeof(parse_error))) {
+                fprintf(stderr,
+                        "cdc build: internal error — emitted manifest "
+                        "fails its own parser (%s)\n",
+                        parse_error);
+                free(final_text);
+                goto done;
+            }
+        }
         if (!write_atomic(build_dir(), BUNDLE_NAME, bundle, bundle_length) ||
             !write_atomic(build_dir(), MANIFEST_NAME, final_text,
                           final_length)) {

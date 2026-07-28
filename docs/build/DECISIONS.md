@@ -46,6 +46,78 @@ behavior exactly while the legacy path is the differential oracle, and must
 record it as a typed diagnostic candidate. Changing the behavior is a
 grammar-version bump, never a silent fix.
 
+## D30 — 2026-07-28 — Second review round at 810f1f6: four narrow repairs
+
+The reviewer accepted D29's mechanism, ran the suite on a real Mac, and
+independently broke Phase I twice. Four findings, four repairs, all
+verified against the reviewer's own probes before landing:
+
+**1. The complete suite failed on macOS, and CI could not see it.** BSD
+`wc` pads its output (`"      37"`), and `test "$(wc -l < f)" = "37"`
+compared it as a string; the Linux lane never runs BSD userland and the
+macOS lane compiled Swift only. Counts now come from `awk 'END {print
+NR}'` (bare number everywhere), the one `wc -c` is wrapped in arithmetic
+expansion, GNU-only `timeout` became perl's `alarm`+`exec` (present on
+both platforms), and the macOS CI lane now runs the FULL native suite —
+formal proofs stay Linux-only by design, and verify.sh already skips
+missing provers. The gate that failed at line 911 on a Mac now runs on a
+Mac in CI.
+
+**2. The coordination registry had one final close/open window.**
+`coord_release` unlinked the last object and RELEASED the registry lock
+before closing its descriptor. In that gap a new first opener registers a
+replacement and takes the process file lock through a NEW descriptor to
+the same file — which the stale close then drops (POSIX owns record locks
+by process+file, not by descriptor: the same edge D29 repaired, one level
+up). The descriptor now closes while the registry lock is still held, so
+no replacement can exist when it lands. The 1->0->1 lifecycle check holds
+the last release open at exactly that point (a one-shot test pause hook),
+proves a new opener and a foreign contender stay excluded, and the
+permanent `CDC_STORE_TEST_RELEASE_WINDOW` probe build reproduces the
+historical ordering — the check demonstrates the harm end to end (fresh
+lock silently dropped) against it, and only that check fails (1/6),
+which pins the defect's locality.
+
+**3. Manifest headers were decoration.** `grammar=999 abi=999.0` passed
+`--check`; a REMOVED header passed; an installed package whose header
+claimed `v=999 name=not-this-package files=999` executed. There is now
+ONE strict parser (`runtime/toolchain/cdc_manifest.{h,c}`) for both
+manifest formats, used by build, --check, install, and x: exactly one
+header at line 1, fixed field order, closed vocabulary, v/grammar/abi
+pinned to the toolchain, package name pinned to the requested package,
+files= equal to record cardinality, sorted package members, hex-validated
+digests, nothing after the trailer. Emitters parse their own output
+before writing it. `--check` now RE-DERIVES statement and check counts
+instead of trusting them. The sweep mutates or removes every header field
+(10 bundle + 6 package mutations, plus a malformed installed manifest at
+reinstall) permanently in verify.sh.
+
+**4. Concurrent installs forged duplicate authoritative history.** Two
+unserialized installers both passed the existing-state check before
+either latched: 29 of 30 trials produced duplicate journal transactions,
+and the fixed staging path let attempts scrub each other. The install now
+captures every member ONCE into immutable attempt-owned bytes (digest,
+validation, journal, and staged tree all derive from that single read —
+`cdc_digest_corpus_pairs` folds the corpus identity from memory), takes a
+package-scoped fcntl lock across existing-state check -> journal ->
+staging -> activation, stages into an attempt-unique directory
+(`.staging-<name>.<pid>`, stale ones pruned under the lock), and CHECKS
+the final directory sync before emitting `durable=1` (previously
+ignored; the idempotent path re-syncs, so a re-run heals an unproven
+latch). Identical concurrent installs are one install plus one idempotent
+observation; divergent ones are one winner plus one typed refusal, with
+the installed bytes provably one attempt's bytes. The kill matrix gained
+`after-latch` (dying between rename and directory sync: tree present,
+`durable=1` never claimed, re-run heals). The concurrency gates enter the
+race window deterministically through a test-only fifo rendezvous
+(`CDC_INSTALL_PAUSE_AFTER_CAPTURE`), not by racing the scheduler.
+
+Scope notes: the package lock relies on fcntl's per-process ownership,
+which matches the CLI surface (one install per process); if installs
+become an in-process library call it needs D29's shared-coordination
+treatment, and that boundary is written at the lock. Ed25519 signing,
+CT5, and the package.cdc layer remain queued and unclaimed.
+
 ## D29 — 2026-07-28 — Same-application store coordination (after ca26608)
 
 The second same-day review asked whether the same-application coordination

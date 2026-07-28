@@ -92,3 +92,22 @@ int cdc_digest_corpus(const char *const *paths, size_t count,
     cdc_digest_final(&ctx, out);
     return 1;
 }
+
+int cdc_digest_corpus_pairs(const char *const *names,
+                            const uint8_t (*digests)[CDC_DIGEST_SIZE],
+                            size_t count, uint8_t out[CDC_DIGEST_SIZE]) {
+    cdc_digest_ctx ctx;
+    size_t i;
+    if (!names || !digests || count == 0) {
+        return 0;
+    }
+    cdc_digest_init(&ctx);
+    for (i = 0; i < count; i++) {
+        const char *name = corpus_basename(names[i]);
+        cdc_digest_update(&ctx, name, strlen(name));
+        cdc_digest_update(&ctx, "\0", 1);
+        cdc_digest_update(&ctx, digests[i], CDC_DIGEST_SIZE);
+    }
+    cdc_digest_final(&ctx, out);
+    return 1;
+}

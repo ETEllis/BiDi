@@ -605,6 +605,37 @@ static cdc_store_status coord_acquire(const char *lock_path,
     return status;
 }
 
+/* Test-only pause point for the 1->0->1 lifecycle check: the last release
+ * signals `signal_fd` and blocks on `wait_fd` at the moment its ordering
+ * matters, so the check can hold the release open while a new first
+ * opener and a foreign contender attempt entry. One-shot; never armed in
+ * production. */
+static int release_pause_signal_fd = -1;
+static int release_pause_wait_fd = -1;
+
+void cdc_store_set_release_pause(int signal_fd, int wait_fd) {
+    release_pause_signal_fd = signal_fd;
+    release_pause_wait_fd = wait_fd;
+}
+
+static void release_pause(void) {
+    int signal_fd = release_pause_signal_fd;
+    int wait_fd = release_pause_wait_fd;
+    char byte = 'p';
+    ssize_t n;
+    if (signal_fd < 0) {
+        return;
+    }
+    release_pause_signal_fd = -1;
+    release_pause_wait_fd = -1;
+    do {
+        n = write(signal_fd, &byte, 1);
+    } while (n < 0 && errno == EINTR);
+    do {
+        n = read(wait_fd, &byte, 1);
+    } while (n < 0 && errno == EINTR);
+}
+
 static void coord_release(store_coord *coord) {
     store_coord **link;
     if (!coord) {
@@ -621,13 +652,33 @@ static void coord_release(store_coord *coord) {
             break;
         }
     }
+#ifdef CDC_STORE_TEST_RELEASE_WINDOW
+    /* COUNTEREXAMPLE ORDERING (second 2026-07-28 review, finding 2): the
+     * registry lock is released BEFORE the descriptor closes. In that
+     * window a new first opener registers a fresh object and takes the
+     * process fcntl lock through a NEW descriptor to the same file — and
+     * this close then drops it, because POSIX owns record locks by
+     * (process, file), not by descriptor. verify.sh compiles this define
+     * ONLY for the probe binary and requires the lifecycle check to
+     * catch it. */
     pthread_mutex_unlock(&coord_registry_lock);
-    /* Last handle in this process: closing inside the critical section is
-     * outside the contract, so no lock is held through this descriptor
-     * and closing it releases nothing another handle relies on. */
+    release_pause();
     pthread_mutex_destroy(&coord->mutex);
     close(coord->lock_fd);
     free(coord);
+#else
+    /* Last handle in this process: the descriptor is closed while the
+     * registry lock is STILL HELD, so no new opener can register a
+     * replacement object (and lock the file through a new descriptor)
+     * before this close lands — closing here can drop only locks that no
+     * longer exist. Closing inside the critical section is outside the
+     * contract, so no lock is held through this descriptor either. */
+    release_pause();
+    pthread_mutex_destroy(&coord->mutex);
+    close(coord->lock_fd);
+    free(coord);
+    pthread_mutex_unlock(&coord_registry_lock);
+#endif
 }
 
 static cdc_store_status coord_enter(store_coord *coord) {

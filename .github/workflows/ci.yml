@@ -57,19 +57,34 @@ jobs:
   studio:
     name: CDC Studio (macOS) builds and passes its tests
     runs-on: macos-14
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     # 2026-07-28 review, finding 3. The Linux guard in verify_ui.sh is
     # correct as a platform guard — the Ubuntu runner has a swift binary but
     # no SwiftUI — but it was the ONLY required UI check, so a product
     # surface that did not compile reached a green PR. This lane is the
     # compiler of record for the macOS app and is required, not optional.
+    #
+    # Second 2026-07-28 review, finding 1: this lane ALSO runs the full
+    # native suite. Until it did, a BSD-vs-GNU divergence (padded `wc`
+    # output compared as a string) meant the complete suite failed on a
+    # real Mac while both GitHub lanes stayed green — the macOS lane
+    # compiled Swift only, and the Linux lane never sees BSD userland.
+    # Formal proofs (Lean/Rocq) and the paper stay Linux-only; verify.sh
+    # skips missing provers by design, and --require-formal is the Linux
+    # lane's job.
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Toolchain version
-        run: swift --version
+        run: |
+          swift --version
+          cc --version
+          python3 --version
+
+      - name: Run full verification gate (native suite, BSD userland)
+        run: ./scripts/verify.sh
 
       - name: Build CDC Studio
         working-directory: ui/macos/CDCStudio

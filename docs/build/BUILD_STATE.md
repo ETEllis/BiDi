@@ -19,6 +19,24 @@ Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 
 ## Last completed phase and gate
 
+- **Second review round repaired (2026-07-28, D30).** Four findings at
+  `810f1f6`, each confirmed against the reviewer's own probes and gated:
+  (1) BSD `wc` padding failed the suite on a real Mac while both CI lanes
+  stayed green — counts are portable now and the macOS lane runs the FULL
+  native suite (formal proofs stay Linux-only); (2) `coord_release`
+  closed its descriptor after releasing the registry lock — a new opener
+  could register in the gap and the stale close dropped its fresh lock;
+  closed under the lock now, with a deterministic 1->0->1 lifecycle check
+  and a permanent release-window probe build that only that check
+  catches; (3) manifest headers were "format only" — one strict shared
+  parser now reads both formats everywhere, counts are re-derived, and a
+  permanent sweep mutates/removes every header field; (4) concurrent
+  installs duplicated the journal (29/30 trials) — capture-once immutable
+  bytes, a package-scoped lock, attempt-unique staging, a CHECKED final
+  directory sync before `durable=1`, an `after-latch` kill boundary, and
+  deterministic fifo-rendezvous concurrency gates (identical, divergent,
+  and mid-install mutation).
+
 - **Same-application store coordination repaired (2026-07-28, D29).**
   The repair requested after `ca26608` was confirmed absent (five checks,
   5/5 failing at `fe3d61d`) and landed: all handles in one process that

@@ -213,4 +213,11 @@ int cdc_store_commit_operations(const cdc_store *store);
 cdc_store_status cdc_store_lock_test(cdc_store *store);
 void cdc_store_unlock_test(cdc_store *store);
 
+/* Test-only (1->0->1 lifecycle check): arms a one-shot pause inside the
+ * next last-handle release, at the point where its ordering against new
+ * openers matters. The release writes one byte to `signal_fd`, then
+ * blocks reading one byte from `wait_fd` before closing the coordination
+ * descriptor. Never armed in production. */
+void cdc_store_set_release_pause(int signal_fd, int wait_fd);
+
 #endif

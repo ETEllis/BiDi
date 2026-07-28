@@ -59,9 +59,17 @@ Amendment Record) → the two operator-held documents (2026-07-22 amendment;
    the last independent oracle (D22–D26).
 7. **Phase I**: `cdc build` proof-carrying bundles (deterministic,
    cross-checked, refusal-first); `cdc install` crash-durable journaled
-   installs on the cdc_store substrate (kill matrix, held-writes-nothing,
-   zero-evidence refusal, idempotent/divergent reinstalls, typed
-   receipts); `cdc x` manifest-verified trusted-local execution (D28).
+   installs on the cdc_store substrate (four-boundary kill matrix,
+   held-writes-nothing, zero-evidence refusal, idempotent/divergent
+   reinstalls, typed receipts); `cdc x` manifest-verified trusted-local
+   execution (D28). Hardened by the second review round (D30):
+   capture-once immutable member bytes, package-scoped install lock with
+   deterministic concurrent-install gates, attempt-unique staging,
+   checked final directory sync before `durable=1`, one strict shared
+   manifest parser with a permanent field-mutation sweep, portable
+   counts with the macOS CI lane running the full native suite, and the
+   coordination registry's last-close window closed with its own probe
+   build.
 
 ## QUEUED, with recorded reasons (not blockers, not claims)
 

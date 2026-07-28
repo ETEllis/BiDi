@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "../cdc_digest.h"
+#include "cdc_manifest.h"
 
 int cdc_native_main(int argc, char **argv);
 
@@ -111,7 +112,6 @@ int cdc_cmd_x(int argc, char **argv) {
     char recorded[MAX_MEMBERS][96];
     int member_count = 0;
     char recorded_corpus[96] = "";
-    const char *cursor;
     int entry_found = 0;
     int i;
     int rc = 1;
@@ -142,52 +142,32 @@ int cdc_cmd_x(int argc, char **argv) {
         return 1;
     }
 
-    /* ---- parse the manifest strictly --------------------------------- */
-    cursor = manifest;
-    while (*cursor) {
-        char line[1200];
-        const char *end = strchr(cursor, '\n');
-        size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
-        if (length >= sizeof(line)) {
-            fprintf(stderr, "cdc x refused: manifest-malformed\n");
+    /* ---- strict manifest parse (the ONE shared parser) ---------------
+     * The header is a binding claim, not decoration: version, package
+     * name, and member count are all verified, and a manifest with a
+     * missing, duplicated, or mutated header never reaches execution
+     * (second 2026-07-28 review, finding 3). */
+    {
+        static cdc_manifest parsed;
+        char parse_error[128];
+        if (!cdc_manifest_parse(manifest, manifest_length,
+                                CDC_MANIFEST_PACKAGE, 0, name, &parsed,
+                                parse_error, sizeof(parse_error))) {
+            fprintf(stderr, "cdc x refused: manifest-malformed (%s)\n",
+                    parse_error);
             goto done;
         }
-        memcpy(line, cursor, length);
-        line[length] = '\0';
-        cursor += length + (end ? 1 : 0);
-        if (strncmp(line, "cdc-package ", 12) == 0) {
-            /* header */
-        } else if (strncmp(line, "member ", 7) == 0) {
-            char member[512], hex[96];
-            if (sscanf(line, "member %511s %95s", member, hex) != 2 ||
-                member_count >= MAX_MEMBERS) {
-                fprintf(stderr, "cdc x refused: manifest-malformed (%s)\n",
-                        line);
-                goto done;
-            }
-            members[member_count] = strdup(member);
+        for (i = 0; i < parsed.record_count; i++) {
+            members[member_count] = strdup(parsed.record_name[i]);
             if (!members[member_count]) {
                 goto done;
             }
             snprintf(recorded[member_count], sizeof(recorded[member_count]),
-                     "%s", hex);
+                     "%s", parsed.record_digest[i]);
             member_count++;
-        } else if (strncmp(line, "corpus ", 7) == 0) {
-            if (sscanf(line, "corpus %95s", recorded_corpus) != 1) {
-                fprintf(stderr, "cdc x refused: manifest-malformed (%s)\n",
-                        line);
-                goto done;
-            }
-        } else if (line[0] != '\0') {
-            fprintf(stderr, "cdc x refused: manifest-malformed (%s)\n",
-                    line);
-            goto done;
         }
-    }
-    if (member_count == 0 || recorded_corpus[0] == '\0') {
-        fprintf(stderr, "cdc x refused: manifest-malformed (no members or "
-                        "corpus)\n");
-        goto done;
+        snprintf(recorded_corpus, sizeof(recorded_corpus), "%s",
+                 parsed.corpus);
     }
 
     /* ---- the directory must be exactly the manifest ------------------- */
@@ -221,17 +201,7 @@ int cdc_cmd_x(int argc, char **argv) {
         closedir(dir);
         qsort(present, (size_t)present_count, sizeof(present[0]),
               name_compare);
-        /* manifest members are written sorted by install; verify anyway */
-        for (i = 0; i + 1 < member_count; i++) {
-            if (strcmp(members[i], members[i + 1]) >= 0) {
-                fprintf(stderr, "cdc x refused: manifest-malformed "
-                                "(unsorted members)\n");
-                for (i = 0; i < present_count; i++) {
-                    free(present[i]);
-                }
-                goto done;
-            }
-        }
+        /* member ordering is enforced by the strict parser */
         if (present_count != member_count) {
             fprintf(stderr,
                     "cdc x refused: %s carries %d .cdc file(s) but the "

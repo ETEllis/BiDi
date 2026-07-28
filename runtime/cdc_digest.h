@@ -56,4 +56,14 @@ int cdc_digest_file(const char *path, uint8_t out[CDC_DIGEST_SIZE]);
 int cdc_digest_corpus(const char *const *paths, size_t count,
                       uint8_t out[CDC_DIGEST_SIZE]);
 
+/* Same fold over pre-computed (basename, content-digest) pairs — for a
+ * caller that captured its inputs into memory ONCE and must not re-read
+ * the filesystem (a source mutated mid-operation would otherwise split
+ * the identity between what was digested and what was used; second
+ * 2026-07-28 review, finding 4). Produces byte-identical output to
+ * cdc_digest_corpus over the same names and content. */
+int cdc_digest_corpus_pairs(const char *const *names,
+                            const uint8_t (*digests)[CDC_DIGEST_SIZE],
+                            size_t count, uint8_t out[CDC_DIGEST_SIZE]);
+
 #endif

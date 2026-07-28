@@ -2042,6 +2042,7 @@ typedef struct {
     const char *dir;
     int signal_fd;
     int commits;
+    cdc_store *opened; /* published by samep_open_keep_body */
 } samep_args;
 
 static int samep_readable(int fd, int timeout_ms) {
@@ -2129,6 +2130,65 @@ static void *samep_reset_body(void *arg) {
     samep_args *args = (samep_args *)arg;
     samep_signal(args->signal_fd, (char)cdc_store_reset(args->dir));
     return NULL;
+}
+
+static void *samep_close_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    cdc_store_close(args->store);
+    samep_signal(args->signal_fd, 'c');
+    return NULL;
+}
+
+static void *samep_open_keep_body(void *arg) {
+    samep_args *args = (samep_args *)arg;
+    args->opened = NULL;
+    if (cdc_store_open(args->dir, &args->opened, NULL) != CDC_STORE_OK) {
+        samep_signal(args->signal_fd, 'f');
+        return NULL;
+    }
+    samep_signal(args->signal_fd, 'o');
+    return NULL;
+}
+
+/* Forks a foreign process that tries a non-blocking exclusive fcntl lock
+ * on `lock_path`. Returns 0 refused (a live lock excluded it), 1 acquired
+ * (no live lock), -1 on harness error. */
+static int samep_foreign_probe(const char *lock_path) {
+    pid_t pid;
+    int status;
+    fflush(NULL);
+    pid = fork();
+    if (pid < 0) {
+        return -1;
+    }
+    if (pid == 0) {
+        struct flock probe;
+        int fd = open(lock_path, O_RDWR);
+        if (fd < 0) {
+            _exit(90);
+        }
+        memset(&probe, 0, sizeof(probe));
+        probe.l_type = F_WRLCK;
+        probe.l_whence = SEEK_SET;
+        if (fcntl(fd, F_SETLK, &probe) == 0) {
+            _exit(1);
+        }
+        if (errno != EAGAIN && errno != EACCES) {
+            _exit(92);
+        }
+        _exit(0);
+    }
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status)) {
+        return -1;
+    }
+    if (WEXITSTATUS(status) == 0) {
+        return 0;
+    }
+    if (WEXITSTATUS(status) == 1) {
+        return 1;
+    }
+    return -1;
 }
 
 /* Spawns `body` on a thread, proves it does NOT complete while the
@@ -2577,6 +2637,157 @@ static int samep_check_close(const char *base) {
     return 0;
 }
 
+/* Check 6: the 1->0->1 lifecycle (second 2026-07-28 review, finding 2).
+ * The LAST release must not let a new first opener register a fresh
+ * coordination object — and take the process file lock through a NEW
+ * descriptor — before the old descriptor closes: POSIX owns record locks
+ * by (process, file), so that stale close would silently drop the new
+ * lock. The release is held open at its ordering-critical point by the
+ * test pause hook; a new opener and a foreign contender then attempt
+ * entry. */
+static int samep_check_lifecycle(const char *base) {
+    char dir[560];
+    char lock_path[620];
+    cdc_store *a = NULL;
+    samep_args open_args;
+    samep_args close_args;
+    pthread_t closer, opener;
+    int pause_sig[2], pause_go[2], closed[2], opened[2];
+    char code = 0;
+    int premature;
+    int probe;
+
+    snprintf(dir, sizeof(dir), "%s/lifecycle", base);
+    snprintf(lock_path, sizeof(lock_path), "%s/lock.cdcstore", dir);
+    if (!store_seed_dir(dir, 1) ||
+        cdc_store_open(dir, &a, NULL) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL lifecycle: seed\n");
+        return 1;
+    }
+    if (pipe(pause_sig) != 0 || pipe(pause_go) != 0 || pipe(closed) != 0 ||
+        pipe(opened) != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: pipes\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    cdc_store_set_release_pause(pause_sig[1], pause_go[0]);
+    close_args.store = a;
+    close_args.dir = dir;
+    close_args.commits = 0;
+    close_args.signal_fd = closed[1];
+    if (pthread_create(&closer, NULL, samep_close_body, &close_args) != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: closer thread\n");
+        cdc_store_close(a);
+        return 1;
+    }
+    if (!samep_readable(pause_sig[0], 8000) ||
+        !samep_wait_code(pause_sig[0], &code) || code != 'p') {
+        fprintf(stderr, "store-samep FAIL lifecycle: release pause never "
+                        "fired\n");
+        samep_signal(pause_go[1], 'g');
+        pthread_join(closer, NULL);
+        return 1;
+    }
+    open_args.store = NULL;
+    open_args.dir = dir;
+    open_args.commits = 0;
+    open_args.signal_fd = opened[1];
+    open_args.opened = NULL;
+    if (pthread_create(&opener, NULL, samep_open_keep_body, &open_args) !=
+        0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: opener thread\n");
+        samep_signal(pause_go[1], 'g');
+        pthread_join(closer, NULL);
+        return 1;
+    }
+    premature = samep_readable(opened[0], 300);
+    if (premature) {
+        /* The window is open: the opener registered a replacement while
+         * the last release was still in flight. Demonstrate the harm end
+         * to end — take the new lock, let the stale close land, and show
+         * a foreign process can now walk straight in. */
+        const char *harm = "window observed";
+        samep_wait_code(opened[0], &code);
+        pthread_join(opener, NULL);
+        if (code == 'o' && open_args.opened &&
+            cdc_store_lock_test(open_args.opened) == CDC_STORE_OK) {
+            samep_signal(pause_go[1], 'g');
+            pthread_join(closer, NULL);
+            samep_wait_code(closed[0], &code);
+            probe = samep_foreign_probe(lock_path);
+            harm = probe == 1
+                       ? "and the stale close dropped the fresh lock"
+                       : "stale close landed, lock survived";
+            cdc_store_unlock_test(open_args.opened);
+        } else {
+            samep_signal(pause_go[1], 'g');
+            pthread_join(closer, NULL);
+            samep_wait_code(closed[0], &code);
+        }
+        if (open_args.opened) {
+            cdc_store_close(open_args.opened);
+        }
+        fprintf(stderr, "store-samep FAIL lifecycle: a new opener "
+                        "registered during the last release window (%s)\n",
+                harm);
+        close(pause_sig[0]);
+        close(pause_sig[1]);
+        close(pause_go[1]);
+        close(closed[0]);
+        close(closed[1]);
+        close(opened[0]);
+        close(opened[1]);
+        return 1;
+    }
+    /* Fixed ordering: the opener is excluded until the release fully
+     * lands (descriptor closed under the registry lock). */
+    samep_signal(pause_go[1], 'g');
+    pthread_join(closer, NULL);
+    if (!samep_wait_code(closed[0], &code) || code != 'c') {
+        fprintf(stderr, "store-samep FAIL lifecycle: close never "
+                        "completed\n");
+        pthread_join(opener, NULL);
+        return 1;
+    }
+    if (!samep_readable(opened[0], 8000) ||
+        !samep_wait_code(opened[0], &code) || code != 'o') {
+        fprintf(stderr, "store-samep FAIL lifecycle: reopen never "
+                        "completed after the release\n");
+        pthread_join(opener, NULL);
+        return 1;
+    }
+    pthread_join(opener, NULL);
+    if (!open_args.opened ||
+        cdc_store_lock_test(open_args.opened) != CDC_STORE_OK) {
+        fprintf(stderr, "store-samep FAIL lifecycle: fresh handle cannot "
+                        "hold the section\n");
+        if (open_args.opened) {
+            cdc_store_close(open_args.opened);
+        }
+        return 1;
+    }
+    probe = samep_foreign_probe(lock_path);
+    cdc_store_unlock_test(open_args.opened);
+    cdc_store_close(open_args.opened);
+    close(pause_sig[0]);
+    close(pause_sig[1]);
+    close(pause_go[1]);
+    close(closed[0]);
+    close(closed[1]);
+    close(opened[0]);
+    close(opened[1]);
+    if (probe != 0) {
+        fprintf(stderr, "store-samep FAIL lifecycle: foreign probe "
+                        "result=%d (the fresh handle's lock must exclude "
+                        "other processes)\n",
+                probe);
+        return 1;
+    }
+    printf("samep-lifecycle last-close-window=closed new-opener-blocked=1 "
+           "foreign-acquire=refused\n");
+    return 0;
+}
+
 static int cmd_store_samep(const char *base) {
     int failed = 0;
     failed += samep_check_open(base);
@@ -2584,11 +2795,12 @@ static int cmd_store_samep(const char *base) {
     failed += samep_check_transition(base);
     failed += samep_check_reset(base);
     failed += samep_check_close(base);
+    failed += samep_check_lifecycle(base);
     if (failed) {
-        fprintf(stderr, "store-samep FAIL failed=%d/5\n", failed);
+        fprintf(stderr, "store-samep FAIL failed=%d/6\n", failed);
         return 1;
     }
-    printf("store-samep ok checks=5/5 shared-coordination=1\n");
+    printf("store-samep ok checks=6/6 shared-coordination=1\n");
     return 0;
 }
 

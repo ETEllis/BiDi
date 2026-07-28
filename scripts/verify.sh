@@ -184,7 +184,7 @@ python3 cdc_boot.py --dump $CDC_ROOT_SOURCES > build/frontend_dump_boot.txt
 # shellcheck disable=SC2086
 ./build/cdc_frontend_check dump $CDC_ROOT_SOURCES > build/frontend_dump_native.txt
 cmp build/frontend_dump_boot.txt build/frontend_dump_native.txt
-FRONTEND_RECORDS=$(wc -l < build/frontend_dump_boot.txt)
+FRONTEND_RECORDS=$(awk 'END {print NR}' < build/frontend_dump_boot.txt)
 test "$FRONTEND_RECORDS" -ge 5000
 echo "frontend differential ok records=${FRONTEND_RECORDS}"
 # shellcheck disable=SC2086
@@ -218,7 +218,7 @@ CONSUMED_ATTRS=build/consumed_attrs.txt
 grep -ohE 'stmt_(attr_copy|copy_attr|int_attr|double_attr)\(stmt, *"[^"]+"' \
   runtime/cdc_native_runtime.c runtime/cdc_bridge_runtime.c \
   | sed 's/.*"\(.*\)"/\1/' | LC_ALL=C sort -u > "$CONSUMED_ATTRS"
-CONSUMED_COUNT=$(wc -l < "$CONSUMED_ATTRS")
+CONSUMED_COUNT=$(awk 'END {print NR}' < "$CONSUMED_ATTRS")
 # A broken extraction must not make this gate vacuous.
 test "$CONSUMED_COUNT" -ge 90
 QUOTED_CONSUMED=0
@@ -240,7 +240,7 @@ for fixture in tests/fixtures/frontend/*.cdc; do
   fi
   run_step ./build/cdc_frontend_check reject "$fixture"
 done
-echo "frontend rejection parity ok fixtures=$(ls tests/fixtures/frontend/*.cdc | wc -l)"
+echo "frontend rejection parity ok fixtures=$(ls tests/fixtures/frontend/*.cdc | awk 'END {print NR}')"
 SANITIZED=0
 if cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread -fsanitize=address,undefined \
   runtime/cdc_frontend_check.c \
@@ -285,7 +285,7 @@ if ! cmp -s build/tracked_paths.txt build/manifest_paths.txt; then
 fi
 assert_fresh_file build/blake3-manifest.txt \
   evidence/gates/CT0/blake3-manifest.txt "./scripts/regen_provenance.sh"
-echo "CT0 provenance ok entries=$(grep -c '^blake3:' evidence/gates/CT0/blake3-manifest.txt) tracked=$(wc -l < build/tracked_paths.txt)"
+echo "CT0 provenance ok entries=$(grep -c '^blake3:' evidence/gates/CT0/blake3-manifest.txt) tracked=$(awk 'END {print NR}' < build/tracked_paths.txt)"
 # Counterexample: modifying ANY tracked file must break the gate. The probe
 # file is restored before any assertion runs, so a failure here cannot leave
 # the working tree dirty.
@@ -315,6 +315,7 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/toolchain/cmd_build.c \
   runtime/toolchain/cmd_install.c \
   runtime/toolchain/cmd_x.c \
+  runtime/toolchain/cdc_manifest.c \
   runtime/cdc_abi.c \
   runtime/cdc_registry.c \
   runtime/cdc_parser.c \
@@ -385,7 +386,7 @@ echo "toolchain-verify-parity ok (byte-identical contract reports)"
 # so compare the check records and check the corpus line separately.
 grep -v '^corpus ' build/vectors_native.txt > build/vectors_native_checks.txt
 cmp build/vectors_native_checks.txt build/vectors_oracle.txt
-VECTOR_COUNT=$(wc -l < build/vectors_native_checks.txt)
+VECTOR_COUNT=$(awk 'END {print NR}' < build/vectors_native_checks.txt)
 test "$VECTOR_COUNT" -ge 250
 # Every record carries all six section-7 fields.
 awk '$1 == "corpus" { next } NF != 6 { print "malformed vector: " $0; exit 1 }' \
@@ -762,7 +763,9 @@ grep -q "samep-reset blocked=1 stale-commit=corrupt-tail fresh generation=0 seal
   build/store_samep.txt
 grep -q "samep-close closed-one-handle=1 lock-preserved=1 foreign-acquire=refused" \
   build/store_samep.txt
-grep -q "store-samep ok checks=5/5 shared-coordination=1" build/store_samep.txt
+grep -q "samep-lifecycle last-close-window=closed new-opener-blocked=1 foreign-acquire=refused" \
+  build/store_samep.txt
+grep -q "store-samep ok checks=6/6 shared-coordination=1" build/store_samep.txt
 # Permanent counterexample: the probe build reproduces the pre-repair
 # per-handle locking (CDC_STORE_TEST_PER_HANDLE_LOCK) and every one of the
 # five checks must catch it — a suite that cannot see the defect it was
@@ -790,8 +793,41 @@ if ./build/cdc_frontend_check_samep_probe store-samep build/store_samep_probe \
   echo "store-samep passed against the per-handle probe build" >&2
   exit 1
 fi
-grep -q "store-samep FAIL failed=5/5" build/store_samep_probe.txt
-echo "store-samep ok (probe build refused 5/5)"
+grep -q "store-samep FAIL failed=5/6" build/store_samep_probe.txt
+echo "store-samep ok (per-handle probe build refused 5/6)"
+# Second permanent probe (second 2026-07-28 review, finding 2): the
+# release-window build reproduces the historical coord_release ordering —
+# registry unlocked BEFORE the descriptor closes. Only the lifecycle
+# check can see that window, and it must: a new first opener registers a
+# replacement during the gap and the stale close then drops the fresh
+# process lock.
+rm -f build/cdc_frontend_check_window_probe
+run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
+  -DCDC_STORE_TEST_RELEASE_WINDOW \
+  runtime/cdc_frontend_check.c \
+  runtime/cdc_abi.c \
+  runtime/cdc_registry.c \
+  runtime/cdc_store.c \
+  runtime/cdc_digest.c \
+  runtime/cdc_blake3.c \
+  runtime/cdc_receipt.c \
+  runtime/cdc_parser.c \
+  runtime/cdc_ast.c \
+  runtime/cdc_lexer.c \
+  runtime/cdc_diagnostic.c \
+  runtime/cdc_source.c \
+  -o build/cdc_frontend_check_window_probe
+rm -rf build/store_samep_window
+mkdir -p build/store_samep_window
+if ./build/cdc_frontend_check_window_probe store-samep build/store_samep_window \
+  > build/store_samep_window.txt 2>&1; then
+  echo "store-samep passed against the release-window probe build" >&2
+  exit 1
+fi
+grep -q "store-samep FAIL failed=1/6" build/store_samep_window.txt
+grep -q "a new opener registered during the last release window (and the stale close dropped the fresh lock)" \
+  build/store_samep_window.txt
+echo "store-samep ok (release-window probe refused: 1/6, lifecycle only)"
 
 if [ "$SANITIZED" = "1" ]; then
   rm -rf build/store_generation_asan build/store_race_asan \
@@ -868,7 +904,7 @@ cp build/persistence-bytes/log.cdcstore build/persistence_before.bin
 test -s build/persistence_before.bin
 run_step ./build/cdc run tests/fixtures/persistence/hold_writes_nothing.cdc
 cmp build/persistence_before.bin build/persistence-bytes/log.cdcstore
-echo "held appends leave the sealed log byte-identical ($(wc -c < build/persistence_before.bin) bytes, 3 holds)"
+echo "held appends leave the sealed log byte-identical ($(($(wc -c < build/persistence_before.bin))) bytes, 3 holds)"
 
 # Counterexamples 2 and 3 — durability and replay identity are OBSERVED,
 # never taken from the declaration. Over-claiming either must fail closed.
@@ -906,13 +942,13 @@ echo "typed gate rejects undeclared durable holds"
   framework_persistence.cdc > /dev/null
 awk 'NF != 6 { print "malformed execution vector: " $0; exit 1 }' \
   build/test_vectors.txt
-EXEC_VECTORS=$(wc -l < build/test_vectors.txt)
+EXEC_VECTORS=$(awk 'END {print NR}' < build/test_vectors.txt)
 # 19 commit + 8 hold + 10 nest, matching the gate line exactly.
 test "$EXEC_VECTORS" = "37"
-test "$(awk '$2 == "commit"' build/test_vectors.txt | wc -l)" = "19"
-test "$(awk '$2 == "hold"' build/test_vectors.txt | wc -l)" = "8"
-test "$(awk '$2 == "nest"' build/test_vectors.txt | wc -l)" = "10"
-test "$(awk '$2 == "fail"' build/test_vectors.txt | wc -l)" = "0"
+test "$(awk '$2 == "commit"' build/test_vectors.txt | awk 'END {print NR}')" = "19"
+test "$(awk '$2 == "hold"' build/test_vectors.txt | awk 'END {print NR}')" = "8"
+test "$(awk '$2 == "nest"' build/test_vectors.txt | awk 'END {print NR}')" = "10"
+test "$(awk '$2 == "fail"' build/test_vectors.txt | awk 'END {print NR}')" = "0"
 # The decision column is the ternary vocabulary, never pass/fail.
 if grep -qE " (pass|true|false) " build/test_vectors.txt; then
   echo "execution vectors used a binary decision vocabulary" >&2
@@ -923,8 +959,8 @@ fi
 # is the link, so a consumer can check that what ran is what the source
 # said would run. Jobs with no witness binding render "-" — honest, not a
 # placeholder that would read as evidence.
-WITNESSED=$(awk '$6 != "-"' build/test_vectors.txt | wc -l)
-UNWITNESSED=$(awk '$6 == "-"' build/test_vectors.txt | wc -l)
+WITNESSED=$(awk '$6 != "-"' build/test_vectors.txt | awk 'END {print NR}')
+UNWITNESSED=$(awk '$6 == "-"' build/test_vectors.txt | awk 'END {print NR}')
 test "$WITNESSED" = "36"
 test "$UNWITNESSED" = "1"
 # The single unwitnessed effect is the rival writer in the compare-and-set
@@ -983,6 +1019,7 @@ for ROUND in a b; do
     runtime/toolchain/cmd_build.c \
     runtime/toolchain/cmd_install.c \
     runtime/toolchain/cmd_x.c \
+    runtime/toolchain/cdc_manifest.c \
     runtime/cdc_abi.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
@@ -1054,7 +1091,7 @@ test "$(grep -c "verify=ok" build/lifecycle_states.txt)" = "5"
 # And exactly two distinct replay identities across all stop points: the
 # state before the single durable append, and the state after it. A third
 # value would mean an effect was observed half-applied.
-DISTINCT=$(sed 's/.*replay=//' build/lifecycle_states.txt | sort -u | wc -l)
+DISTINCT=$(sed 's/.*replay=//' build/lifecycle_states.txt | sort -u | awk 'END {print NR}')
 test "$DISTINCT" = "2"
 echo "cancellation ok (5 stop points, store intact at each, ${DISTINCT} replay identities: pre/post, none between)"
 
@@ -1143,7 +1180,8 @@ run_step ./build/cdc_frontend_check abi-io . io
 run_step ./build/cdc_frontend_check abi-io /dev/null io
 rm -f build/test_fifo
 mkfifo build/test_fifo
-timeout 10 ./build/cdc_frontend_check abi-io build/test_fifo io
+perl -e 'alarm shift @ARGV; exec @ARGV or die "exec: $!"' 10 \
+  ./build/cdc_frontend_check abi-io build/test_fifo io
 rm -f build/test_fifo
 run_step ./build/cdc_frontend_check io-mid-read build
 if [ "$(id -u)" != "0" ]; then
@@ -1245,6 +1283,7 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/toolchain/cmd_build.c \
     runtime/toolchain/cmd_install.c \
     runtime/toolchain/cmd_x.c \
+    runtime/toolchain/cdc_manifest.c \
     runtime/cdc_abi.c \
     runtime/cdc_registry.c \
     runtime/cdc_parser.c \
@@ -1451,16 +1490,28 @@ test ! -d build/cdc_modules/silent-stats
 # 3. kill matrix: the process genuinely dies at each named boundary; the
 #    package directory is NEVER present after a kill, the journal always
 #    opens and verifies, and a plain re-run heals the window
-for PHASE in before-journal after-journal before-latch; do
+for PHASE in before-journal after-journal before-latch after-latch; do
   rm -rf build/cdc_modules
   set +e
   CDC_MODULES=build/cdc_modules CDC_INSTALL_KILL="$PHASE" \
+    CDC_RECEIPTS="build/kill_receipt_${PHASE}.txt" \
     ./build/cdc install tests/fixtures/packages/ternary-stats \
     > /dev/null 2>&1
   KILL_RC=$?
   set -e
   test "$KILL_RC" = "137"
-  test ! -d build/cdc_modules/ternary-stats
+  if [ "$PHASE" = "after-latch" ]; then
+    # the rename landed before the kill; the directory sync did not run,
+    # so the tree is present but durable=1 was NEVER claimed
+    test -d build/cdc_modules/ternary-stats
+    test -f "build/kill_receipt_${PHASE}.txt"
+    if grep -q "durable=1" "build/kill_receipt_${PHASE}.txt"; then
+      echo "install claimed durable=1 before the checked directory sync" >&2
+      exit 1
+    fi
+  else
+    test ! -d build/cdc_modules/ternary-stats
+  fi
   if [ "$PHASE" = "before-journal" ]; then
     WANT_SEALED=0
   else
@@ -1474,7 +1525,7 @@ for PHASE in before-journal after-journal before-latch; do
   CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
     > /dev/null
 done
-echo "install kill matrix ok (3 boundaries: no partial directory, journal intact, re-run heals)"
+echo "install kill matrix ok (4 boundaries: no partial directory, journal intact, re-run heals, durable never claimed early)"
 # 4. a tampered installed member is refused BY NAME before anything runs
 printf '#\n' >> build/cdc_modules/ternary-stats/stats.cdc
 if CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
@@ -1514,8 +1565,178 @@ if CDC_MODULES=build/cdc_modules ./build/cdc install build/ternary-stats \
 fi
 grep -q "reason=already-installed-divergent" build/install_divergent.txt
 rm -rf build/ternary-stats
-echo "Phase I counterexamples ok (held-writes-nothing, zero-evidence, kill x3,"
+echo "Phase I counterexamples ok (held-writes-nothing, zero-evidence, kill x4,"
 echo "  tamper-by-name, traversal, unmanifested, divergent-reinstall)"
+
+# ---- second 2026-07-28 review, finding 3: every manifest header field is
+# load-bearing. Headers were "format only": grammar=999, abi=999.0, a
+# REMOVED header, and a package claiming a different name and count were
+# all accepted. Now one strict parser reads both formats for
+# build/check/install/x, and each mutation below must be refused typed.
+cp build/cdc-bundle.manifest build/manifest_sweep.bak
+bundle_mutation_refused() {
+  sed "$1" build/manifest_sweep.bak > build/cdc-bundle.manifest
+  # shellcheck disable=SC2086
+  if ./build/cdc build --check $CDC_ROOT_SOURCES \
+    > build/manifest_probe_out.txt 2>&1; then
+    echo "cdc build --check accepted a mutated manifest ($2)" >&2
+    exit 1
+  fi
+  grep -q "manifest-malformed" build/manifest_probe_out.txt
+}
+bundle_mutation_refused '1s/v=1/v=999/' "v"
+bundle_mutation_refused '1s/grammar=1/grammar=999/' "grammar"
+bundle_mutation_refused '1s/abi=[0-9.]*/abi=999.0/' "abi"
+bundle_mutation_refused '1s/files=[0-9]*/files=999/' "files"
+bundle_mutation_refused '1s/statements=[0-9]*/statements=999999/' "statements"
+bundle_mutation_refused '1s/checks=[0-9]*/checks=999/' "checks"
+bundle_mutation_refused '1s/ grammar=1//' "dropped-field"
+bundle_mutation_refused '1d' "removed-header"
+bundle_mutation_refused '1p' "duplicated-header"
+bundle_mutation_refused 's/^corpus /junk /' "unknown-line"
+cp build/manifest_sweep.bak build/cdc-bundle.manifest
+# shellcheck disable=SC2086
+run_step ./build/cdc build --check $CDC_ROOT_SOURCES
+echo "bundle manifest sweep ok (10 mutations refused, manifest restored)"
+
+PKG_MANIFEST=build/cdc_modules/ternary-stats/.manifest
+cp "$PKG_MANIFEST" build/pkg_manifest_sweep.bak
+package_mutation_refused() {
+  sed "$1" build/pkg_manifest_sweep.bak > "$PKG_MANIFEST"
+  if CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc \
+    > build/pkg_probe_out.txt 2>&1; then
+    echo "cdc x accepted a mutated package manifest ($2)" >&2
+    exit 1
+  fi
+  grep -q "manifest-malformed" build/pkg_probe_out.txt
+}
+package_mutation_refused '1s/v=1/v=999/' "v"
+package_mutation_refused '1s/name=ternary-stats/name=not-this-package/' "name"
+package_mutation_refused '1s/files=[0-9]*/files=999/' "files"
+package_mutation_refused '1d' "removed-header"
+package_mutation_refused '1p' "duplicated-header"
+package_mutation_refused 's/^corpus /junk /' "unknown-line"
+# an installed manifest the parser refuses is its own typed refusal at
+# reinstall time — the installed state is suspect, nothing is compared
+sed '1s/v=1/v=999/' build/pkg_manifest_sweep.bak > "$PKG_MANIFEST"
+if CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/ternary-stats > build/pkg_badmanifest.txt 2>&1; then
+  echo "cdc install compared against a malformed installed manifest" >&2
+  exit 1
+fi
+grep -q "reason=installed-manifest-malformed" build/pkg_badmanifest.txt
+cp build/pkg_manifest_sweep.bak "$PKG_MANIFEST"
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
+echo "package manifest sweep ok (6 mutations + malformed-installed refused, restored)"
+
+# ---- second 2026-07-28 review, finding 4: concurrent installs. Without
+# the package-scoped lock, 29 of 30 two-process same-package trials
+# produced DUPLICATE journal transactions — two authoritative histories
+# for one logical install. The pause fifo holds both attempts at the
+# same pre-lock rendezvous and releases them together, so the race
+# window is genuinely entered, deterministically.
+rm -rf build/cdc_modules build/install_f1 build/install_f2
+mkfifo build/install_f1 build/install_f2
+CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
+  ./build/cdc install tests/fixtures/packages/ternary-stats \
+  > build/concurrent_a.txt 2>&1 &
+CONC_A=$!
+CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
+  ./build/cdc install tests/fixtures/packages/ternary-stats \
+  > build/concurrent_b.txt 2>&1 &
+CONC_B=$!
+exec 3>build/install_f1
+exec 4>build/install_f2
+printf x >&3
+printf x >&4
+exec 3>&- 4>&-
+set +e
+wait $CONC_A
+CONC_A_RC=$?
+wait $CONC_B
+CONC_B_RC=$?
+set -e
+test "$CONC_A_RC" = "0"
+test "$CONC_B_RC" = "0"
+cat build/concurrent_a.txt build/concurrent_b.txt > build/concurrent_all.txt
+test "$(grep -c "cdc install ok name=ternary-stats files=1 sealed=1" build/concurrent_all.txt)" = "1"
+test "$(grep -c "already-installed=identical" build/concurrent_all.txt)" = "1"
+./build/cdc_frontend_check store-inspect build/cdc_modules/.journal \
+  | grep -q "open=ok recovered=0 sealed=1 events=2 generation=0 verify=ok"
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
+rm -f build/install_f1 build/install_f2
+echo "concurrent identical installs ok (one install, one observation, ONE journal transaction)"
+
+# divergent concurrent installers: one winner, one typed refusal, and the
+# installed bytes are exactly one attempt's bytes — never a mixture
+rm -rf build/cdc_modules build/conc_a build/conc_b build/install_f1 build/install_f2
+mkdir -p build/conc_a/ternary-stats build/conc_b/ternary-stats
+cp tests/fixtures/packages/ternary-stats/stats.cdc build/conc_a/ternary-stats/
+cp tests/fixtures/packages/ternary-stats/stats.cdc build/conc_b/ternary-stats/
+printf '\n# divergent-b\n' >> build/conc_b/ternary-stats/stats.cdc
+mkfifo build/install_f1 build/install_f2
+CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
+  ./build/cdc install build/conc_a/ternary-stats \
+  > build/concurrent_da.txt 2>&1 &
+CONC_A=$!
+CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
+  ./build/cdc install build/conc_b/ternary-stats \
+  > build/concurrent_db.txt 2>&1 &
+CONC_B=$!
+exec 3>build/install_f1
+exec 4>build/install_f2
+printf x >&3
+printf x >&4
+exec 3>&- 4>&-
+set +e
+wait $CONC_A
+CONC_A_RC=$?
+wait $CONC_B
+CONC_B_RC=$?
+set -e
+test "$((CONC_A_RC + CONC_B_RC))" = "1"
+cat build/concurrent_da.txt build/concurrent_db.txt > build/concurrent_dall.txt
+test "$(grep -c "cdc install ok name=ternary-stats files=1 sealed=1" build/concurrent_dall.txt)" = "1"
+test "$(grep -c "reason=already-installed-divergent" build/concurrent_dall.txt)" = "1"
+./build/cdc_frontend_check store-inspect build/cdc_modules/.journal \
+  | grep -q "open=ok recovered=0 sealed=1 events=2 generation=0 verify=ok"
+if [ "$CONC_A_RC" = "0" ]; then
+  cmp build/conc_a/ternary-stats/stats.cdc build/cdc_modules/ternary-stats/stats.cdc
+else
+  cmp build/conc_b/ternary-stats/stats.cdc build/cdc_modules/ternary-stats/stats.cdc
+fi
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
+rm -rf build/conc_a build/conc_b
+rm -f build/install_f1 build/install_f2
+echo "concurrent divergent installs ok (one winner, one refusal, no byte mixing)"
+
+# source mutation during installation: every consumer of the member —
+# digest, journal, staged tree — derives from ONE capture, so a source
+# mutated after capture cannot split the installed identity
+rm -rf build/cdc_modules build/mutpkg build/install_f1
+mkdir -p build/mutpkg/ternary-stats
+cp tests/fixtures/packages/ternary-stats/stats.cdc build/mutpkg/ternary-stats/
+cp build/mutpkg/ternary-stats/stats.cdc build/mut_original.bak
+mkfifo build/install_f1
+CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
+  ./build/cdc install build/mutpkg/ternary-stats > build/mutation.txt 2>&1 &
+MUT_PID=$!
+exec 3>build/install_f1
+printf '\n# mutated-after-capture\n' >> build/mutpkg/ternary-stats/stats.cdc
+printf x >&3
+exec 3>&-
+wait $MUT_PID
+grep -q "cdc install ok name=ternary-stats" build/mutation.txt
+cmp build/mut_original.bak build/cdc_modules/ternary-stats/stats.cdc
+CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
+rm -rf build/mutpkg
+rm -f build/install_f1
+echo "mid-install source mutation ok (captured bytes installed, identity whole)"
+
+# leave a clean fixture install for any later section
+rm -rf build/cdc_modules
+CDC_MODULES=build/cdc_modules ./build/cdc install \
+  tests/fixtures/packages/ternary-stats > /dev/null
 
 echo
 echo "== Native reducer runtime =="
