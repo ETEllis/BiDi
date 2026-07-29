@@ -853,8 +853,64 @@ static int cmd_store_check(const char *base) {
         cdc_store_close(store);
         return 1;
     }
+    /* Stable store identity. `det1` and `det2` have IDENTICAL histories (the
+     * replay digests above are equal), so a uuid that distinguishes them is
+     * distinguishing the STORES, not their contents. The uuid must also be
+     * stable across close/reopen and must not move when a new event is
+     * sealed — that is exactly what makes it usable as an out-of-band binding
+     * anchor where `attest` (which tracks the sealed bytes) cannot serve. */
+    {
+        uint8_t uuid_a[CDC_STORE_UUID_SIZE], uuid_b[CDC_STORE_UUID_SIZE];
+        uint8_t uuid_reopen[CDC_STORE_UUID_SIZE];
+        cdc_store *other = NULL;
+        char other_dir[512];
+
+        if (cdc_store_uuid(store, uuid_a) != CDC_STORE_OK ||
+            cdc_store_uuid(NULL, uuid_b) != CDC_STORE_EARG ||
+            cdc_store_uuid(store, NULL) != CDC_STORE_EARG) {
+            fprintf(stderr, "store-check FAIL: uuid accessor contract\n");
+            cdc_store_close(store);
+            return 1;
+        }
+        /* stable while the store advances */
+        cdc_store_stage(store, "uuid-probe", 10);
+        if (cdc_store_commit(store) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_b) != CDC_STORE_OK ||
+            memcmp(uuid_a, uuid_b, CDC_STORE_UUID_SIZE) != 0) {
+            fprintf(stderr, "store-check FAIL: uuid moved when sealing\n");
+            cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        store = NULL;
+        /* stable across reopen */
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_reopen) != CDC_STORE_OK ||
+            memcmp(uuid_a, uuid_reopen, CDC_STORE_UUID_SIZE) != 0) {
+            fprintf(stderr, "store-check FAIL: uuid unstable across reopen\n");
+            if (store) cdc_store_close(store);
+            return 1;
+        }
+        /* distinct from a store with an identical history */
+        snprintf(other_dir, sizeof(other_dir), "%s/det2", base);
+        if (cdc_store_open(other_dir, &other, NULL) != CDC_STORE_OK ||
+            cdc_store_uuid(other, uuid_b) != CDC_STORE_OK) {
+            fprintf(stderr, "store-check FAIL: uuid peer store\n");
+            cdc_store_close(store);
+            if (other) cdc_store_close(other);
+            return 1;
+        }
+        if (memcmp(uuid_a, uuid_b, CDC_STORE_UUID_SIZE) == 0) {
+            fprintf(stderr,
+                    "store-check FAIL: identical histories share a uuid\n");
+            cdc_store_close(store);
+            cdc_store_close(other);
+            return 1;
+        }
+        cdc_store_close(other);
+    }
     cdc_store_close(store);
-    printf("store-check ok determinism=1 attest=%s\n", attest);
+    printf("store-check ok determinism=1 uuid=stable attest=%s\n", attest);
     return 0;
 }
 
