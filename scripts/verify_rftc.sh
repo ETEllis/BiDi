@@ -6,6 +6,30 @@
 # results from being mislabeled as quantum computation.
 set -euo pipefail
 
+# Progress output must never decide the verdict.
+#
+# GitHub's macOS runners deliver signals while this script has children in
+# flight, and a write to the piped stdout can return EINTR. bash's `echo`
+# builtin does not retry, so under `set -e` an interrupted PROGRESS line
+# aborts a gate whose every assertion has already passed. That is exactly
+# what happened on ETEllis/BiDi-Coherence-Delta-Calculus#11:
+#
+#   ./scripts/verify_rftc.sh: line 192: echo: write error: Interrupted system call
+#
+# after the grammar, keyed-BLAKE3, transport, supervisor, cell, scheduler,
+# wire, journal, cross-process, store-replay and crucible lanes had all
+# reported PASS. `log` retries the write and, failing that, refuses to take
+# the run down with it. Assertions are untouched: every `exit 1`, every
+# `jq -e`, every `cmp` keeps its exact force.
+log() {
+  local _line="$*" _tries=0
+  until printf '%s\n' "$_line"; do
+    _tries=$((_tries + 1))
+    [ "$_tries" -ge 5 ] && break
+  done
+  return 0
+}
+
 cd "$(dirname "$0")/.."
 
 compiler="${CC:-cc}"
@@ -45,7 +69,7 @@ common_flags=(-std=c99 -Wall -Wextra -pedantic -pthread)
 
 mkdir -p "$out_dir"
 
-echo "== RFTC: six-form grammar and fail-closed counterexamples =="
+log "== RFTC: six-form grammar and fail-closed counterexamples =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_rftc_language_test.c \
   runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
@@ -53,20 +77,20 @@ echo "== RFTC: six-form grammar and fail-closed counterexamples =="
   -o "$out_dir/cdc_rftc_language_test"
 "$out_dir/cdc_rftc_language_test"
 
-echo "== RFTC: keyed BLAKE3 authentication primitive =="
+log "== RFTC: keyed BLAKE3 authentication primitive =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_rftc_crypto_test.c runtime/cdc_blake3.c \
   -o "$out_dir/cdc_rftc_crypto_test"
 "$out_dir/cdc_rftc_crypto_test"
 
-echo "== RFTC: authenticated transport and scoped authority =="
+log "== RFTC: authenticated transport and scoped authority =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_control_plane_test.c \
   runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
   -o "$out_dir/cdc_control_plane_test"
 "$out_dir/cdc_control_plane_test"
 
-echo "== RFTC: serialized supervisor admission =="
+log "== RFTC: serialized supervisor admission =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_supervisor_test.c \
   runtime/cdc_supervisor.c runtime/cdc_authority.c runtime/cdc_transport.c \
@@ -74,7 +98,7 @@ echo "== RFTC: serialized supervisor admission =="
   -o "$out_dir/cdc_supervisor_test"
 "$out_dir/cdc_supervisor_test"
 
-echo "== RFTC: sealed logical cells and recursive scheduler =="
+log "== RFTC: sealed logical cells and recursive scheduler =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_cell_test.c \
   runtime/cdc_cell.c runtime/cdc_frame.c runtime/cdc_topology.c \
@@ -93,28 +117,28 @@ echo "== RFTC: sealed logical cells and recursive scheduler =="
   -o "$out_dir/cdc_scheduler_wire_test"
 "$out_dir/cdc_scheduler_wire_test"
 
-echo "== RFTC: authenticated durable scheduler journal =="
+log "== RFTC: authenticated durable scheduler journal =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_scheduler_journal_test.c \
   "${journal_sources[@]}" -lm \
   -o "$out_dir/cdc_scheduler_journal_test"
 "$out_dir/cdc_scheduler_journal_test"
 
-echo "== RFTC: canonical cross-process envelope =="
+log "== RFTC: canonical cross-process envelope =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_transport_process_test.c \
   runtime/cdc_authority.c runtime/cdc_transport.c runtime/cdc_blake3.c \
   -o "$out_dir/cdc_transport_process_test"
 "$out_dir/cdc_transport_process_test"
 
-echo "== RFTC: sealed event-recovery API =="
+log "== RFTC: sealed event-recovery API =="
 "$compiler" "${common_flags[@]}" -Werror -O2 \
   experiments/rftc/cdc_store_replay_api_test.c \
   runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
   -o "$out_dir/cdc_store_replay_api_test"
 "$out_dir/cdc_store_replay_api_test"
 
-echo "== RFTC: release build and deterministic replay =="
+log "== RFTC: release build and deterministic replay =="
 "$compiler" "${common_flags[@]}" -O2 "$source_file" \
   "${runtime_sources[@]}" -lm -o "$out_dir/rftc_crucible"
 
@@ -170,8 +194,8 @@ if re.search(r'(?:src|href)\s*=\s*"(?:https?:)?//', html):
 print("RFTC UI self-contained, evidence-bound, reduced-motion aware")
 PY
 
-echo
-echo "== RFTC: alternate-seed counterexample search =="
+log ""
+log "== RFTC: alternate-seed counterexample search =="
 "$out_dir/rftc_crucible" --profile smoke --seed 0x5246544300abcdef \
   --json "$out_dir/verdict-alternate.json" \
   --csv "$out_dir/metrics-alternate.csv"
@@ -188,8 +212,8 @@ if cmp -s <(jq -c '.experiments' "$out_dir/verdict-a.json") \
   exit 1
 fi
 
-echo
-echo "== RFTC: memory and undefined-behavior sanitizers =="
+log ""
+log "== RFTC: memory and undefined-behavior sanitizers =="
 "$compiler" "${common_flags[@]}" -O1 -g \
   -fsanitize=address,undefined -fno-omit-frame-pointer \
   "$source_file" "${runtime_sources[@]}" -lm \
@@ -262,18 +286,18 @@ if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
   runtime/cdc_blake3.c \
   -o "$out_dir/cdc_supervisor_test_tsan" 2>/dev/null; then
   "$out_dir/cdc_supervisor_test_tsan"
-  echo "RFTC supervisor concurrency PASS under ThreadSanitizer"
+  log "RFTC supervisor concurrency PASS under ThreadSanitizer"
 else
-  echo "RFTC supervisor ThreadSanitizer unavailable; lane skipped (recorded)"
+  log "RFTC supervisor ThreadSanitizer unavailable; lane skipped (recorded)"
 fi
 
 if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
   experiments/rftc/cdc_scheduler_test.c "${cell_sources[@]}" -lm \
   -o "$out_dir/cdc_scheduler_test_tsan" 2>/dev/null; then
   "$out_dir/cdc_scheduler_test_tsan"
-  echo "RFTC recursive scheduler concurrency PASS under ThreadSanitizer"
+  log "RFTC recursive scheduler concurrency PASS under ThreadSanitizer"
 else
-  echo "RFTC scheduler ThreadSanitizer unavailable; lane skipped (recorded)"
+  log "RFTC scheduler ThreadSanitizer unavailable; lane skipped (recorded)"
 fi
 
 if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
@@ -281,9 +305,9 @@ if "$compiler" "${common_flags[@]}" -Werror -O1 -g -fsanitize=thread \
   "${journal_sources[@]}" -lm \
   -o "$out_dir/cdc_scheduler_journal_test_tsan" 2>/dev/null; then
   "$out_dir/cdc_scheduler_journal_test_tsan"
-  echo "RFTC scheduler journal concurrency PASS under ThreadSanitizer"
+  log "RFTC scheduler journal concurrency PASS under ThreadSanitizer"
 else
-  echo "RFTC scheduler journal ThreadSanitizer unavailable; lane skipped (recorded)"
+  log "RFTC scheduler journal ThreadSanitizer unavailable; lane skipped (recorded)"
 fi
 
 "$compiler" "${common_flags[@]}" -Werror -O1 -g \
@@ -296,5 +320,5 @@ fi
 cp "$out_dir/verdict-a.json" "$out_dir/verdict.json"
 cp "$out_dir/metrics-a.csv" "$out_dir/metrics.csv"
 
-echo
-echo "RFTC rapid gate PASS"
+log ""
+log "RFTC rapid gate PASS"
