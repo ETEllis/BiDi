@@ -908,9 +908,65 @@ static int cmd_store_check(const char *base) {
             return 1;
         }
         cdc_store_close(other);
+        /* stable through the two-phase compaction transition: preparing a
+         * base (snapshot) and activating it (compact) each rewrite the HEAD
+         * record, and both must carry the identity forward unchanged. */
+        if (cdc_store_snapshot(store) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_b) != CDC_STORE_OK ||
+            memcmp(uuid_a, uuid_b, CDC_STORE_UUID_SIZE) != 0) {
+            fprintf(stderr,
+                    "store-check FAIL: uuid moved when snapshot prepared\n");
+            cdc_store_close(store);
+            return 1;
+        }
+        if (cdc_store_compact(store) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_b) != CDC_STORE_OK ||
+            memcmp(uuid_a, uuid_b, CDC_STORE_UUID_SIZE) != 0) {
+            fprintf(stderr,
+                    "store-check FAIL: uuid moved when compaction "
+                    "activated\n");
+            cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        store = NULL;
+        /* stable across the reopen that follows compaction (the uuid must
+         * be re-read from the compacted HEAD, not remembered) */
+        if (cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_reopen) != CDC_STORE_OK ||
+            memcmp(uuid_a, uuid_reopen, CDC_STORE_UUID_SIZE) != 0) {
+            fprintf(stderr,
+                    "store-check FAIL: uuid unstable across "
+                    "post-compaction reopen\n");
+            if (store) cdc_store_close(store);
+            return 1;
+        }
+        cdc_store_close(store);
+        store = NULL;
+        /* a genuine reset destroys the identity: the store recreated at
+         * the SAME path starts empty and mints a DIFFERENT uuid, so
+         * nothing bound to the old identity can silently apply to the
+         * replacement. */
+        if (cdc_store_reset(dir) != CDC_STORE_OK ||
+            cdc_store_open(dir, &store, NULL) != CDC_STORE_OK ||
+            cdc_store_uuid(store, uuid_b) != CDC_STORE_OK) {
+            fprintf(stderr, "store-check FAIL: reset/recreate\n");
+            if (store) cdc_store_close(store);
+            return 1;
+        }
+        if (cdc_store_sealed_count(store) != 0 ||
+            memcmp(uuid_a, uuid_b, CDC_STORE_UUID_SIZE) == 0) {
+            fprintf(stderr,
+                    "store-check FAIL: recreated store kept the old "
+                    "identity\n");
+            cdc_store_close(store);
+            return 1;
+        }
     }
     cdc_store_close(store);
-    printf("store-check ok determinism=1 uuid=stable attest=%s\n", attest);
+    printf("store-check ok determinism=1 uuid=stable+reset-remints "
+           "attest=%s\n",
+           attest);
     return 0;
 }
 

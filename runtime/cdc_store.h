@@ -136,7 +136,10 @@ uint64_t cdc_store_generation(const cdc_store *store);
  * prepared base still belongs to this uuid before activating a new
  * generation. Two stores with identical histories still carry different
  * uuids, and a store reachable through several paths (absolute, relative,
- * symlinked) reports one uuid.
+ * symlinked) reports one uuid. The identity ends when the store does:
+ * `cdc_store_reset` deletes the HEAD with the log, so a store recreated at
+ * the same path mints a NEW uuid — state bound to the old identity can
+ * never silently apply to the replacement.
  *
  * Provided so a caller can bind out-of-band state — an authority record, an
  * external anchor — to the store ITSELF rather than to the path it happens to
