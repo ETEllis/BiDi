@@ -1,5 +1,11 @@
 # BUILD_STATE — BiDi/CDC lane
 
+> **Historical branch ledger — not current release authority.** This file is an
+> append-oriented record of earlier accepted gate boundaries, branch identities,
+> and the ABI at which individual features first appeared. For the current
+> release, use the repository root README, language reference, semantic spine,
+> verification matrix, and live gate receipts.
+
 Updated at every accepted gate boundary. Companion files: `RESUME_HERE.md`
 (exact continuation), `DECISIONS.md` (append-only decision record),
 `../../evidence/gates/<gate-id>/` (evidence bundles).

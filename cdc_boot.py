@@ -38,6 +38,7 @@ WITNESS_LINK_FORMS = {
     "council": ("deliberate",),
     "evolution": ("evolve",),
     "universal": ("universal",),
+    "spectrum": ("spectrum",),
     # Persistence (capability H6). Collect-only, like every other form here:
     # the bootloader records the declarations and checks their linkage; the
     # durable semantics live in the C store and are exercised through
@@ -77,6 +78,7 @@ class BootState:
     council_steps: set[str] = field(default_factory=set)
     evolution_steps: set[str] = field(default_factory=set)
     universal_steps: set[str] = field(default_factory=set)
+    spectrum_steps: set[str] = field(default_factory=set)
     store_steps: set[str] = field(default_factory=set)
     persist_steps: set[str] = field(default_factory=set)
     expectations: list[tuple[str, list[str], str]] = field(default_factory=list)
@@ -187,6 +189,9 @@ def parse_file(state: BootState, path: Path) -> None:
             "deliberate",
             "evolve",
             "universal",
+            "orbit",
+            "variational",
+            "spectrum",
             "store",
             "persist",
             "frame",
@@ -227,6 +232,8 @@ def parse_file(state: BootState, path: Path) -> None:
                 state.evolution_steps.add(key)
             if cmd == "universal":
                 state.universal_steps.add(key)
+            if cmd == "spectrum":
+                state.spectrum_steps.add(key)
             if cmd == "store":
                 state.store_steps.add(key)
             if cmd == "persist":
@@ -407,6 +414,7 @@ def eval_expect(state: BootState, args: list[str]) -> tuple[bool, str]:
         "bridge",
         "counter",
         "universal",
+        "spectrum",
         "store",
         "persistence",
     }:
@@ -423,6 +431,7 @@ def eval_expect(state: BootState, args: list[str]) -> tuple[bool, str]:
             "bridge": state.bridge_steps,
             "counter": state.counter_steps,
             "universal": state.universal_steps,
+            "spectrum": state.spectrum_steps,
             "store": state.store_steps,
             "persistence": state.persist_steps,
         }

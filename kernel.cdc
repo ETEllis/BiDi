@@ -5,10 +5,12 @@ kernel bidi stage=2 target=cdc
   term cell channel module field counter trace window measurement bridge policy
   term lifted-frame universal-record
   term durable-store persist-record
+  term orbit tangent-map recurrence-receipt monodromy multiplier-spectrum polarity-witness
 
   rule flow commit nest relation trace trace-order window measure adapt synchronize
   rule existence-viability dyadic-triadic-closure invariant-check witness-check
   rule universal-close persist-gate replay-identity
+  rule differentiate-path recurrence-gate relative-restore classify-spectrum polarity-covariance
 
   provides parser-state reducer-state witness-state trace-window-state
   provides balanced-ternary-carrier angular-phase path-relation invariant-gate
@@ -21,6 +23,7 @@ kernel bidi stage=2 target=cdc
   provides transition-framework procedural-framework episodic-framework deliberative-framework persistence-framework
   provides framework-contract task-loop-composition bidi-gated-durable-mutation
   provides universal-operator radiant-receptive-cones lifted-720-closure phase-holonomy
+  provides variational-universal-operator recurrence-gated-monodromy typed-u2-holds scoped-polarity-covariance
   provides native-witness-suite native-capability-suite native-self-hosting-contract
 
   bootloader read-source parse-lines collect-native-declarations verify-expectations report
@@ -29,11 +32,11 @@ kernel bidi stage=2 target=cdc
   expect host-debt <= 1
   expect python-files == 0
   expect bootloader minimal == true
-  expect terms >= 14
-  expect rules >= 17
+  expect terms >= 20
+  expect rules >= 22
   expect invariants >= 16
-  expect witnesses >= 4824
-  expect capabilities >= 39
+  expect witnesses >= 4831
+  expect capabilities >= 46
   expect frameworks >= 6
   expect frameworks closed
   expect provides parser-state reducer-state witness-state trace-window-state
@@ -47,5 +50,6 @@ kernel bidi stage=2 target=cdc
   expect provides transition-framework procedural-framework episodic-framework deliberative-framework persistence-framework
   expect provides framework-contract task-loop-composition bidi-gated-durable-mutation
   expect provides universal-operator radiant-receptive-cones lifted-720-closure phase-holonomy
+  expect provides variational-universal-operator recurrence-gated-monodromy typed-u2-holds scoped-polarity-covariance
   expect provides native-witness-suite native-capability-suite native-self-hosting-contract
 end

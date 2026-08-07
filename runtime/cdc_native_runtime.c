@@ -8,6 +8,7 @@
 #include "cdc_receipt.h"
 #include "cdc_source.h"
 #include "cdc_store.h"
+#include "cdc_variational.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -35,6 +36,11 @@
 #define MAX_BRIDGES 32
 #define MAX_COUNTERS 32
 #define MAX_UNIVERSALS 8
+#define MAX_ORBITS 32
+#define MAX_VARIATIONALS 32
+#define MAX_SPECTRA 32
+#define MAX_U2_COORDINATE_TEXT 512
+#define MAX_U2_DIMENSION (MAX_CELLS + 2 * MAX_MODULES)
 #define MAX_WITNESSES 64
 #define MAX_STORES 8
 #define MAX_PERSIST_JOBS 32
@@ -266,6 +272,32 @@ typedef struct {
     double tolerance;
 } UniversalJob;
 
+/* U2 forms are derived analysis declarations.  They do not add a fourth
+ * reduction: orbit qualifies recurrence of one Universal execution,
+ * variational binds its tangent, and spectrum requests characteristic
+ * multipliers only after recurrence authorizes a return tangent. */
+typedef struct {
+    char id[64];
+    char universal[64];
+    char coordinates[MAX_U2_COORDINATE_TEXT];
+    char exclude[MAX_U2_COORDINATE_TEXT];
+    char quotient[32];
+    double absolute_tolerance;
+    double relative_tolerance;
+} OrbitJob;
+
+typedef struct {
+    char id[64];
+    char orbit[64];
+} VariationalJob;
+
+typedef struct {
+    char id[64];
+    char variational[64];
+    double neutral_tolerance;
+    double schur_tolerance;
+} SpectrumJob;
+
 typedef struct {
     char frame[64];
     char receptive_angle[32];
@@ -333,6 +365,10 @@ typedef struct {
 } WitnessDecl;
 
 typedef struct {
+    /* Digest of the exact grammar-1 canonical statement stream used to
+     * populate this runtime.  It is captured before the AST is released, so
+     * receipts never re-read a path that may have changed after parsing. */
+    char source_digest[72];
     Field fields[MAX_FIELDS];
     Module modules[MAX_MODULES];
     Cell cells[MAX_CELLS];
@@ -350,6 +386,9 @@ typedef struct {
     SurfaceBridgeJob bridges[MAX_BRIDGES];
     CounterJob counters[MAX_COUNTERS];
     UniversalJob universals[MAX_UNIVERSALS];
+    OrbitJob orbits[MAX_ORBITS];
+    VariationalJob variationals[MAX_VARIATIONALS];
+    SpectrumJob spectra[MAX_SPECTRA];
     WitnessDecl witnesses[MAX_WITNESSES];
     StoreDecl stores[MAX_STORES];
     PersistJob persists[MAX_PERSIST_JOBS];
@@ -370,6 +409,9 @@ typedef struct {
     int bridge_count;
     int counter_count;
     int universal_count;
+    int orbit_count;
+    int variational_count;
+    int spectrum_count;
     int store_count;
     int persist_count;
     int witness_count;
@@ -560,6 +602,32 @@ static void stmt_canonical_copy(const cdc_stmt *stmt, char *out,
     free(buffer);
     if (written < 0 || (size_t)written >= out_size) {
         fail("witness statement too long to digest without truncation");
+    }
+}
+
+static void unit_canonical_digest(const cdc_unit *unit, char *out,
+                                  size_t out_size) {
+    char *buffer = NULL;
+    size_t length = 0;
+    FILE *mem = open_memstream(&buffer, &length);
+    uint8_t digest[CDC_DIGEST_SIZE];
+    int write_failed;
+    int close_failed;
+    if (!mem) {
+        fail("could not render canonical source identity");
+    }
+    cdc_unit_canonical(unit, mem);
+    write_failed = fflush(mem) != 0 || ferror(mem);
+    close_failed = fclose(mem) != 0;
+    if (write_failed || close_failed) {
+        free(buffer);
+        fail("could not seal canonical source identity");
+    }
+    cdc_digest(buffer ? buffer : "", length, digest);
+    cdc_digest_hex(digest, out, out_size);
+    free(buffer);
+    if (out[0] == '\0') {
+        fail("canonical source identity was not rendered");
     }
 }
 
@@ -872,6 +940,74 @@ static void add_universal(Runtime *rt, const cdc_stmt *stmt) {
     job->tolerance = stmt_double_attr(stmt, "tolerance", 0.000001);
 }
 
+static void add_orbit(Runtime *rt, const cdc_stmt *stmt) {
+    OrbitJob *job;
+    double legacy_tolerance;
+    if (rt->orbit_count >= MAX_ORBITS) {
+        fail("too many orbit jobs");
+    }
+    job = &rt->orbits[rt->orbit_count++];
+    memset(job, 0, sizeof(*job));
+    stmt_arg0_copy(stmt, job->id, sizeof(job->id));
+    stmt_copy_attr(stmt, "universal", job->universal,
+                   sizeof(job->universal), "");
+    stmt_copy_attr(stmt, "coordinates", job->coordinates,
+                   sizeof(job->coordinates), "all");
+    stmt_copy_attr(stmt, "exclude", job->exclude,
+                   sizeof(job->exclude), "");
+    stmt_copy_attr(stmt, "quotient", job->quotient,
+                   sizeof(job->quotient), "none");
+    legacy_tolerance = stmt_double_attr(stmt, "tolerance", 0.000001);
+    job->absolute_tolerance = stmt_double_attr(
+        stmt, "absolute-tolerance", legacy_tolerance);
+    job->relative_tolerance = stmt_double_attr(
+        stmt, "relative-tolerance", 0.0);
+    if (job->id[0] == '\0' || job->universal[0] == '\0') {
+        fail("orbit requires an id and universal=");
+    }
+    if (!isfinite(job->absolute_tolerance) ||
+        job->absolute_tolerance <= 0.0 ||
+        !isfinite(job->relative_tolerance) ||
+        job->relative_tolerance < 0.0) {
+        fail("orbit tolerances must be finite with absolute > 0 and relative >= 0");
+    }
+}
+
+static void add_variational(Runtime *rt, const cdc_stmt *stmt) {
+    VariationalJob *job;
+    if (rt->variational_count >= MAX_VARIATIONALS) {
+        fail("too many variational jobs");
+    }
+    job = &rt->variationals[rt->variational_count++];
+    memset(job, 0, sizeof(*job));
+    stmt_arg0_copy(stmt, job->id, sizeof(job->id));
+    stmt_copy_attr(stmt, "orbit", job->orbit, sizeof(job->orbit), "");
+    if (job->id[0] == '\0' || job->orbit[0] == '\0') {
+        fail("variational requires an id and orbit=");
+    }
+}
+
+static void add_spectrum(Runtime *rt, const cdc_stmt *stmt) {
+    SpectrumJob *job;
+    if (rt->spectrum_count >= MAX_SPECTRA) {
+        fail("too many spectrum jobs");
+    }
+    job = &rt->spectra[rt->spectrum_count++];
+    memset(job, 0, sizeof(*job));
+    stmt_arg0_copy(stmt, job->id, sizeof(job->id));
+    stmt_copy_attr(stmt, "variational", job->variational,
+                   sizeof(job->variational), "");
+    job->neutral_tolerance = stmt_double_attr(stmt, "neutral-tolerance", 1e-9);
+    job->schur_tolerance = stmt_double_attr(stmt, "schur-tolerance", 1e-10);
+    if (job->id[0] == '\0' || job->variational[0] == '\0') {
+        fail("spectrum requires an id and variational=");
+    }
+    if (!isfinite(job->neutral_tolerance) || job->neutral_tolerance <= 0.0 ||
+        !isfinite(job->schur_tolerance) || job->schur_tolerance <= 0.0) {
+        fail("spectrum tolerances must be finite and positive");
+    }
+}
+
 static void add_counter(Runtime *rt, const cdc_stmt *stmt) {
     CounterJob *counter;
     if (rt->counter_count >= MAX_COUNTERS) {
@@ -1181,6 +1317,8 @@ static void parse_source(Runtime *rt, const char *path) {
     cdc_diag_list_free(&diags);
 
     memset(rt, 0, sizeof(*rt));
+    unit_canonical_digest(&unit, rt->source_digest,
+                          sizeof(rt->source_digest));
     for (s = 0; s < unit.count; s++) {
         const cdc_stmt *stmt = &unit.stmts[s];
         const char *directive = cdc_stmt_directive(stmt);
@@ -1225,6 +1363,12 @@ static void parse_source(Runtime *rt, const char *path) {
             add_evolution(rt, stmt);
         } else if (strcmp(directive, "universal") == 0) {
             add_universal(rt, stmt);
+        } else if (strcmp(directive, "orbit") == 0) {
+            add_orbit(rt, stmt);
+        } else if (strcmp(directive, "variational") == 0) {
+            add_variational(rt, stmt);
+        } else if (strcmp(directive, "spectrum") == 0) {
+            add_spectrum(rt, stmt);
         } else if (strcmp(directive, "store") == 0) {
             add_store(rt, stmt);
         } else if (strcmp(directive, "persist") == 0) {
@@ -2699,6 +2843,1310 @@ static void run_universal(Runtime *rt, const char *path) {
     printf("native universal ok jobs=%d source=%s\n", rt->universal_count, path);
 }
 
+typedef struct {
+    cdc_u2_layout layout;
+    cdc_u2_monodromy tangent;
+    double initial[MAX_U2_DIMENSION];
+    double final[MAX_U2_DIMENSION];
+    double endpoint_time;
+    char reason[48];
+} NativeU2Tangent;
+
+static UniversalJob *find_universal_job(Runtime *rt, const char *id) {
+    for (int i = 0; i < rt->universal_count; i++) {
+        if (strcmp(rt->universals[i].id, id) == 0) {
+            return &rt->universals[i];
+        }
+    }
+    return NULL;
+}
+
+static OrbitJob *find_orbit_job(Runtime *rt, const char *id) {
+    for (int i = 0; i < rt->orbit_count; i++) {
+        if (strcmp(rt->orbits[i].id, id) == 0) {
+            return &rt->orbits[i];
+        }
+    }
+    return NULL;
+}
+
+static VariationalJob *find_variational_job(Runtime *rt, const char *id) {
+    for (int i = 0; i < rt->variational_count; i++) {
+        if (strcmp(rt->variationals[i].id, id) == 0) {
+            return &rt->variationals[i];
+        }
+    }
+    return NULL;
+}
+
+static void u2_tangent_release(NativeU2Tangent *tangent) {
+    if (!tangent) {
+        return;
+    }
+    cdc_u2_layout_release(&tangent->layout);
+    cdc_u2_monodromy_release(&tangent->tangent);
+    memset(tangent, 0, sizeof(*tangent));
+}
+
+static void u2_select_module_cells(Runtime *rt, const char *module_name,
+                                   unsigned char *selected_cells,
+                                   unsigned char *selected_modules) {
+    Module *module = find_module(rt, module_name);
+    if (!module) {
+        fail("U2 path closure references an unknown module");
+    }
+    selected_modules[(size_t)(module - rt->modules)] = 1;
+    for (int i = 0; i < rt->cell_count; i++) {
+        if (strcmp(rt->cells[i].module, module->name) == 0) {
+            selected_cells[i] = 1;
+        }
+    }
+}
+
+static void u2_select_field_cells(Runtime *rt, const char *field_name,
+                                  unsigned char *selected_cells,
+                                  unsigned char *selected_modules) {
+    if (!find_field(rt, field_name)) {
+        fail("U2 path closure references an unknown field");
+    }
+    for (int i = 0; i < rt->cell_count; i++) {
+        if (cell_in_field(rt, &rt->cells[i], field_name)) {
+            selected_cells[i] = 1;
+            u2_select_module_cells(rt, rt->cells[i].module, selected_cells,
+                                   selected_modules);
+        }
+    }
+}
+
+static void u2_select_council_cells(Runtime *rt, const char *deliberation_id,
+                                    unsigned char *selected_cells,
+                                    unsigned char *selected_modules) {
+    Deliberation *deliberation = find_deliberation(rt, deliberation_id);
+    Council *council = NULL;
+    char members[sizeof(((Council *)0)->members)];
+    char *save = NULL;
+    char *member;
+    if (!deliberation || !(council = find_council(rt, deliberation->council))) {
+        fail("U2 path closure references an unknown deliberation or council");
+    }
+    snprintf(members, sizeof(members), "%s", council->members);
+    member = strtok_r(members, ",", &save);
+    while (member) {
+        u2_select_module_cells(rt, member, selected_cells, selected_modules);
+        member = strtok_r(NULL, ",", &save);
+    }
+}
+
+/* Build the executable state closure of this Universal, rather than a closure
+ * of every declaration in the source file.  U1 executes the ordered step
+ * stream and then reads the selected bridge and council.  The closure therefore
+ * includes coordinates touched or read by those exact operations, plus the
+ * lifted cover coordinate.  Selecting a cell closes over its owning module;
+ * selecting a module closes over all of its cells so continuous state and the
+ * discrete latch itinerary describe the same runtime object. */
+static cdc_u2_status u2_build_layout(Runtime *rt, UniversalJob *universal,
+                                     cdc_u2_layout *layout) {
+    const char *cell_names[MAX_CELLS];
+    const char *module_names[MAX_MODULES];
+    size_t cell_count = 0;
+    size_t module_count = 0;
+    unsigned char selected_cells[MAX_CELLS] = {0};
+    unsigned char selected_modules[MAX_MODULES] = {0};
+    SurfaceBridgeJob *record;
+    TraceJob *trace;
+    int cover_source_index;
+    long cover_coordinate;
+    cdc_u2_status status;
+    for (int i = 0; i < rt->step_count; i++) {
+        Step *step = &rt->steps[i];
+        if (step->kind == STEP_FLOW) {
+            u2_select_field_cells(rt, step->field, selected_cells,
+                                  selected_modules);
+            if (step->has_expect_theta) {
+                int expected = find_cell_index(rt, step->expect_theta_cell);
+                if (expected < 0) {
+                    return CDC_U2_INVALID_ARGUMENT;
+                }
+                selected_cells[expected] = 1;
+                u2_select_module_cells(rt, rt->cells[expected].module,
+                                       selected_cells, selected_modules);
+            }
+        } else if (step->kind == STEP_COMMIT) {
+            u2_select_module_cells(rt, step->module, selected_cells,
+                                   selected_modules);
+        } else {
+            u2_select_module_cells(rt, step->parent, selected_cells,
+                                   selected_modules);
+            u2_select_module_cells(rt, step->child, selected_cells,
+                                   selected_modules);
+        }
+    }
+    cover_source_index = find_cell_index(rt, universal->cover_cell);
+    if (cover_source_index < 0) {
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    selected_cells[cover_source_index] = 1;
+    u2_select_module_cells(rt, rt->cells[cover_source_index].module,
+                           selected_cells, selected_modules);
+    record = find_bridge_job(rt, universal->record);
+    trace = record ? find_trace(rt, record->trace) : NULL;
+    if (!trace) {
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    u2_select_field_cells(rt, trace->field, selected_cells, selected_modules);
+    u2_select_council_cells(rt, universal->decision, selected_cells,
+                            selected_modules);
+    for (int i = 0; i < rt->cell_count; i++) {
+        if (selected_cells[i]) {
+            cell_names[cell_count++] = rt->cells[i].name;
+        }
+    }
+    for (int i = 0; i < rt->module_count; i++) {
+        if (selected_modules[i]) {
+            module_names[module_count++] = rt->modules[i].name;
+        }
+    }
+    status = cdc_u2_layout_build(layout, cell_names, cell_count,
+                                 module_names, module_count);
+    if (status != CDC_U2_OK) {
+        return status;
+    }
+    cell_count = 0;
+    for (int i = 0; i < rt->cell_count; i++) {
+        if (selected_cells[i]) {
+            layout->coordinates[cell_count++].source_index = (size_t)i;
+        }
+    }
+    module_count = 0;
+    for (int i = 0; i < rt->module_count; i++) {
+        if (selected_modules[i]) {
+            size_t coordinate = layout->cell_count + 2 * module_count++;
+            layout->coordinates[coordinate].source_index = (size_t)i;
+            layout->coordinates[coordinate + 1].source_index = (size_t)i;
+        }
+    }
+    /* The U1 cover cell is an unwrapped lifted coordinate.  Its 2*pi/4*pi
+     * projection may close while the executable coordinate does not. */
+    {
+        char name[CDC_U2_COORDINATE_NAME_MAX];
+        int written = snprintf(name, sizeof(name), "%s.theta",
+                               universal->cover_cell);
+        cover_coordinate = written > 0 && (size_t)written < sizeof(name)
+                               ? cdc_u2_layout_find(layout, name)
+                               : -1;
+    }
+    if (cover_coordinate < 0 ||
+        cdc_u2_layout_set_period(layout, (size_t)cover_coordinate, 0.0) !=
+            CDC_U2_OK) {
+        cdc_u2_layout_release(layout);
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    return CDC_U2_OK;
+}
+
+static cdc_u2_status u2_pack_runtime(Runtime *rt, const cdc_u2_layout *layout,
+                                     double *packed) {
+    if (!layout || !layout->coordinates || !packed) {
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0; i < layout->dimension; i++) {
+        const cdc_u2_coordinate *coordinate = &layout->coordinates[i];
+        if (coordinate->kind == CDC_U2_COORDINATE_THETA) {
+            if (coordinate->source_index >= (size_t)rt->cell_count) {
+                return CDC_U2_DIMENSION_MISMATCH;
+            }
+            packed[i] = rt->cells[coordinate->source_index].theta;
+        } else {
+            if (coordinate->source_index >= (size_t)rt->module_count) {
+                return CDC_U2_DIMENSION_MISMATCH;
+            }
+            packed[i] = coordinate->kind == CDC_U2_COORDINATE_BELIEF
+                            ? rt->modules[coordinate->source_index].belief
+                            : rt->modules[coordinate->source_index].prior;
+        }
+        if (!isfinite(packed[i])) {
+            return CDC_U2_NONFINITE;
+        }
+    }
+    return CDC_U2_OK;
+}
+
+static int u2_discrete_state_equal(const cdc_u2_layout *layout,
+                                   const Runtime *initial,
+                                   const Runtime *final) {
+    if (!layout || initial->cell_count != final->cell_count) {
+        return 0;
+    }
+    for (size_t i = 0; i < layout->dimension; i++) {
+        const cdc_u2_coordinate *coordinate = &layout->coordinates[i];
+        size_t source_index = coordinate->source_index;
+        if (coordinate->kind != CDC_U2_COORDINATE_THETA) {
+            continue;
+        }
+        if (source_index >= (size_t)initial->cell_count ||
+            initial->cells[source_index].has_latch !=
+                final->cells[source_index].has_latch ||
+            initial->cells[source_index].latch !=
+                final->cells[source_index].latch) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int u2_commit_has_smooth_itinerary(Runtime *rt, Step *step,
+                                          double tolerance) {
+    Module *module = find_module(rt, step->module);
+    Field *field;
+    if (!module || !(field = find_field(rt, module->field))) {
+        return 0;
+    }
+    for (int i = 0; i < rt->cell_count; i++) {
+        double kappa;
+        double margin;
+        if (strcmp(rt->cells[i].module, module->name) != 0) {
+            continue;
+        }
+        kappa = cos(rt->cells[i].theta);
+        margin = fmin(fabs(kappa - field->deadband),
+                      fabs(kappa + field->deadband));
+        if (!isfinite(margin) || margin <= tolerance) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static cdc_u2_status u2_flow_local_map(Runtime *rt, Step *step,
+                                       const cdc_u2_layout *layout,
+                                       cdc_matrix *local,
+                                       char *reason, size_t reason_size) {
+    Field *field = find_field(rt, step->field);
+    cdc_u2_flow_coupling couplings[MAX_CHANNELS];
+    double state[MAX_U2_DIMENSION];
+    size_t count = 0;
+    cdc_u2_status status;
+    if (!field) {
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    status = u2_pack_runtime(rt, layout, state);
+    if (status != CDC_U2_OK) {
+        return status;
+    }
+    for (int i = 0; i < rt->channel_count; i++) {
+        Channel *channel = &rt->channels[i];
+        int source_index = find_cell_index(rt, channel->source);
+        int target_index = find_cell_index(rt, channel->target);
+        char source_name[CDC_U2_COORDINATE_NAME_MAX];
+        char target_name[CDC_U2_COORDINATE_NAME_MAX];
+        long source_coordinate;
+        long target_coordinate;
+        if (source_index < 0 || target_index < 0) {
+            return CDC_U2_INVALID_ARGUMENT;
+        }
+        if (!cell_in_field(rt, &rt->cells[source_index], field->name) ||
+            !cell_in_field(rt, &rt->cells[target_index], field->name)) {
+            continue;
+        }
+        if (channel->delay != 0.0) {
+            snprintf(reason, reason_size, "unsupported-delay-state");
+            return CDC_U2_VALIDATION_FAILED;
+        }
+        if (snprintf(source_name, sizeof(source_name), "%s.theta",
+                     channel->source) <= 0 ||
+            snprintf(target_name, sizeof(target_name), "%s.theta",
+                     channel->target) <= 0 ||
+            (source_coordinate = cdc_u2_layout_find(layout, source_name)) < 0 ||
+            (target_coordinate = cdc_u2_layout_find(layout, target_name)) < 0) {
+            return CDC_U2_DIMENSION_MISMATCH;
+        }
+        couplings[count].source_theta = (size_t)source_coordinate;
+        couplings[count].target_theta = (size_t)target_coordinate;
+        couplings[count].coefficient =
+            field->gain * channel->weight * step->duration;
+        couplings[count].angle = channel->angle;
+        count++;
+    }
+    return cdc_u2_flow_jacobian(layout, state, layout->dimension,
+                                couplings, count, local);
+}
+
+static cdc_u2_status u2_execute_tangent(Runtime *initial, UniversalJob *universal,
+                                        double tolerance,
+                                        NativeU2Tangent *out) {
+    Runtime execution = *initial;
+    cdc_matrix local;
+    cdc_u2_status status;
+    double time = 0.0;
+    memset(out, 0, sizeof(*out));
+    memset(&local, 0, sizeof(local));
+    snprintf(out->reason, sizeof(out->reason), "none");
+    status = u2_build_layout(&execution, universal, &out->layout);
+    if (status != CDC_U2_OK) {
+        snprintf(out->reason, sizeof(out->reason), "state-manifest-mismatch");
+        return status;
+    }
+    status = u2_pack_runtime(&execution, &out->layout, out->initial);
+    if (status != CDC_U2_OK) {
+        snprintf(out->reason, sizeof(out->reason), "%s",
+                 cdc_u2_status_reason(status));
+        return status;
+    }
+    status = cdc_u2_monodromy_init(&out->tangent, out->layout.dimension);
+    if (status != CDC_U2_OK ||
+        cdc_matrix_init(&local, out->layout.dimension,
+                       out->layout.dimension) != CDC_LINALG_OK) {
+        snprintf(out->reason, sizeof(out->reason), "allocation-failed");
+        cdc_matrix_release(&local);
+        return CDC_U2_ALLOCATION_FAILED;
+    }
+    for (int i = 0; i < execution.step_count; i++) {
+        Step *step = &execution.steps[i];
+        cdc_u2_event_kind kind;
+        int transverse = -1;
+        if (step->kind == STEP_FLOW) {
+            FlowResult flow;
+            if (!isfinite(step->duration) || step->duration < 0.0) {
+                status = CDC_U2_INVALID_ARGUMENT;
+                snprintf(out->reason, sizeof(out->reason),
+                         "unsupported-primal-semantic");
+                goto done;
+            }
+            status = u2_flow_local_map(&execution, step, &out->layout,
+                                       &local, out->reason,
+                                       sizeof(out->reason));
+            if (status != CDC_U2_OK) {
+                goto done;
+            }
+            execute_flow(&execution, step, &flow);
+            time += step->duration;
+            kind = CDC_U2_EVENT_FLOW;
+        } else if (step->kind == STEP_COMMIT) {
+            CommitResult commit;
+            if (!u2_commit_has_smooth_itinerary(&execution, step, tolerance)) {
+                status = CDC_U2_MODE_DIVERGENCE;
+                snprintf(out->reason, sizeof(out->reason),
+                         "nondifferentiable-quantization");
+                goto done;
+            }
+            execute_commit(&execution, step, &commit);
+            if (strcmp(commit.status, "accepted") != 0) {
+                status = CDC_U2_MODE_DIVERGENCE;
+                snprintf(out->reason, sizeof(out->reason), "primal-held");
+                goto done;
+            }
+            status = cdc_u2_commit_jacobian(out->layout.dimension,
+                                            CDC_U2_COMMIT_SCHEDULED, 1,
+                                            &local);
+            if (status != CDC_U2_OK) {
+                goto done;
+            }
+            kind = CDC_U2_EVENT_SCHEDULED_COMMIT;
+        } else {
+            NestResult nest;
+            Module *parent = find_module(&execution, step->parent);
+            Module *child = find_module(&execution, step->child);
+            char parent_belief[CDC_U2_COORDINATE_NAME_MAX];
+            char child_belief[CDC_U2_COORDINATE_NAME_MAX];
+            char child_prior[CDC_U2_COORDINATE_NAME_MAX];
+            long parent_index;
+            long child_index;
+            long child_prior_index;
+            if (!parent || !child) {
+                status = CDC_U2_INVALID_ARGUMENT;
+                goto done;
+            }
+            if (snprintf(parent_belief, sizeof(parent_belief), "%s.belief",
+                         parent->name) <= 0 ||
+                snprintf(child_belief, sizeof(child_belief), "%s.belief",
+                         child->name) <= 0 ||
+                snprintf(child_prior, sizeof(child_prior), "%s.prior",
+                         child->name) <= 0 ||
+                (parent_index = cdc_u2_layout_find(&out->layout,
+                                                   parent_belief)) < 0 ||
+                (child_index = cdc_u2_layout_find(&out->layout,
+                                                  child_belief)) < 0 ||
+                (child_prior_index = cdc_u2_layout_find(&out->layout,
+                                                        child_prior)) < 0) {
+                status = CDC_U2_DIMENSION_MISMATCH;
+                goto done;
+            }
+            status = cdc_u2_nest_jacobian(
+                out->layout.dimension,
+                (size_t)parent_index, (size_t)child_index,
+                (size_t)child_prior_index,
+                find_field(&execution, parent->field)->gain, &local);
+            if (status != CDC_U2_OK) {
+                goto done;
+            }
+            execute_nest(&execution, step, &nest);
+            kind = CDC_U2_EVENT_NEST;
+        }
+        status = cdc_u2_monodromy_append(&out->tangent, &local, kind, time,
+                                         transverse);
+        if (status != CDC_U2_OK) {
+            snprintf(out->reason, sizeof(out->reason), "%s",
+                     cdc_u2_status_reason(status));
+            goto done;
+        }
+    }
+    status = u2_pack_runtime(&execution, &out->layout, out->final);
+    if (status == CDC_U2_OK) {
+        out->endpoint_time = time;
+    }
+
+done:
+    if (status != CDC_U2_OK && strcmp(out->reason, "none") == 0) {
+        snprintf(out->reason, sizeof(out->reason), "%s",
+                 cdc_u2_status_reason(status));
+    }
+    cdc_matrix_release(&local);
+    return status;
+}
+
+static long u2_coordinate_index(Runtime *rt, const cdc_u2_layout *layout,
+                                const char *name) {
+    long exact = cdc_u2_layout_find(layout, name);
+    char theta_name[CDC_U2_COORDINATE_NAME_MAX];
+    int written;
+    if (exact >= 0) {
+        return exact;
+    }
+    if (find_cell(rt, name)) {
+        written = snprintf(theta_name, sizeof(theta_name), "%s.theta", name);
+        if (written > 0 && (size_t)written < sizeof(theta_name)) {
+            return cdc_u2_layout_find(layout, theta_name);
+        }
+    }
+    return -1;
+}
+
+static int u2_apply_coordinate_list(Runtime *rt, const cdc_u2_layout *layout,
+                                    const char *text, unsigned char *mask,
+                                    int value) {
+    char copy[MAX_U2_COORDINATE_TEXT];
+    char *save = NULL;
+    char *token;
+    if (!text || text[0] == '\0') {
+        return 1;
+    }
+    if ((size_t)snprintf(copy, sizeof(copy), "%s", text) >= sizeof(copy)) {
+        return 0;
+    }
+    token = strtok_r(copy, ",", &save);
+    while (token) {
+        long index = u2_coordinate_index(rt, layout, token);
+        if (index < 0) {
+            return 0;
+        }
+        mask[index] = (unsigned char)value;
+        token = strtok_r(NULL, ",", &save);
+    }
+    return 1;
+}
+
+static int u2_coordinate_mask(Runtime *rt, const cdc_u2_layout *layout,
+                              OrbitJob *orbit, unsigned char *mask,
+                              int *projected) {
+    if (strcmp(orbit->coordinates, "all") == 0) {
+        memset(mask, 1, layout->dimension);
+    } else {
+        memset(mask, 0, layout->dimension);
+        if (!u2_apply_coordinate_list(rt, layout, orbit->coordinates, mask, 1)) {
+            return 0;
+        }
+    }
+    if (!u2_apply_coordinate_list(rt, layout, orbit->exclude, mask, 0)) {
+        return 0;
+    }
+    *projected = 0;
+    for (size_t i = 0; i < layout->dimension; i++) {
+        if (!mask[i]) {
+            *projected = 1;
+        }
+    }
+    return 1;
+}
+
+static void u2_digest_layout(const cdc_u2_layout *layout, char *hex,
+                             size_t hex_size) {
+    cdc_digest_ctx context;
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char line[256];
+    cdc_digest_init(&context);
+    for (size_t i = 0; i < layout->dimension; i++) {
+        int written = snprintf(line, sizeof(line),
+                               "%zu|%s|%d|%zu|%.17g\n", i,
+                               layout->coordinates[i].name,
+                               (int)layout->coordinates[i].kind,
+                               layout->coordinates[i].source_index,
+                               layout->coordinates[i].period);
+        if (written > 0 && (size_t)written < sizeof(line)) {
+            cdc_digest_update(&context, line, (size_t)written);
+        }
+    }
+    cdc_digest_final(&context, digest);
+    cdc_digest_hex(digest, hex, hex_size);
+}
+
+static void u2_digest_matrix(const cdc_matrix *matrix, char *hex,
+                             size_t hex_size) {
+    cdc_digest_ctx context;
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char line[96];
+    int written;
+    if (!matrix || !matrix->data || matrix->rows == 0 || matrix->cols == 0) {
+        if (hex_size) {
+            hex[0] = '\0';
+        }
+        return;
+    }
+    cdc_digest_init(&context);
+    written = snprintf(line, sizeof(line), "%zu|%zu\n", matrix->rows,
+                       matrix->cols);
+    if (written > 0 && (size_t)written < sizeof(line)) {
+        cdc_digest_update(&context, line, (size_t)written);
+    }
+    for (size_t i = 0; i < matrix->rows * matrix->cols; i++) {
+        written = snprintf(line, sizeof(line), "%.17g\n", matrix->data[i]);
+        if (written > 0 && (size_t)written < sizeof(line)) {
+            cdc_digest_update(&context, line, (size_t)written);
+        }
+    }
+    cdc_digest_final(&context, digest);
+    cdc_digest_hex(digest, hex, hex_size);
+}
+
+static void u2_digest_universal(const UniversalJob *job,
+                                const UniversalResult *result,
+                                char *hex, size_t hex_size) {
+    cdc_digest_ctx context;
+    uint8_t digest[CDC_DIGEST_SIZE];
+    char line[1024];
+    int written;
+    cdc_digest_init(&context);
+    written = snprintf(
+        line, sizeof(line),
+        "%s|%s|%s|%s|%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s\n",
+        job->id, result->frame, result->receptive_angle,
+        result->radiant_angle, result->holonomy, result->half_projection,
+        result->half_sheet, result->full_projection, result->full_sheet,
+        result->winding, result->record_coordinate,
+        result->decision_coordinate, result->enacted_coordinate,
+        result->status, result->reason);
+    if (written > 0 && (size_t)written < sizeof(line)) {
+        cdc_digest_update(&context, line, (size_t)written);
+    }
+    cdc_digest_final(&context, digest);
+    cdc_digest_hex(digest, hex, hex_size);
+}
+
+static void u2_json_string(const char *value) {
+    const unsigned char *cursor = (const unsigned char *)(value ? value : "");
+    putchar('"');
+    while (*cursor) {
+        if (*cursor == '"' || *cursor == '\\') {
+            putchar('\\');
+            putchar((int)*cursor);
+        } else if (*cursor < 0x20) {
+            printf("\\u%04x", (unsigned int)*cursor);
+        } else {
+            putchar((int)*cursor);
+        }
+        cursor++;
+    }
+    putchar('"');
+}
+
+typedef struct {
+    size_t cover_coordinate;
+    double displacement;
+    int field_cell_count;
+    int incident_channel_count;
+    int mutating_step_count;
+    int winding;
+    int equivariance_verified;
+    int section_verified;
+    char projection[16];
+    char sheet[16];
+} U2PhaseRestoration;
+
+static const char *u2_latch_mode_name(int has_latch, char latch) {
+    if (!has_latch) {
+        return "unlatched";
+    }
+    switch (latch) {
+    case '+':
+        return "latched:+";
+    case '0':
+        return "latched:0";
+    case '-':
+        return "latched:-";
+    default:
+        return "latched:unknown";
+    }
+}
+
+static void u2_digest_discrete_state(const cdc_u2_layout *layout,
+                                     const Runtime *rt, char *hex,
+                                     size_t hex_size) {
+    cdc_digest_ctx context;
+    unsigned char digest[32];
+    size_t theta_count = 0;
+    if (!layout || !layout->coordinates || !rt || !hex || hex_size == 0) {
+        if (hex && hex_size) {
+            hex[0] = '\0';
+        }
+        return;
+    }
+    cdc_digest_init(&context);
+    for (size_t i = 0; i < layout->dimension; i++) {
+        const cdc_u2_coordinate *coordinate = &layout->coordinates[i];
+        const Cell *cell;
+        char source_index_text[32];
+        if (coordinate->kind != CDC_U2_COORDINATE_THETA ||
+            coordinate->source_index >= (size_t)rt->cell_count) {
+            continue;
+        }
+        cell = &rt->cells[coordinate->source_index];
+        theta_count++;
+        cdc_digest_update(&context, coordinate->name, strlen(coordinate->name));
+        snprintf(source_index_text, sizeof(source_index_text), "%zu",
+                 coordinate->source_index);
+        cdc_digest_update(&context, source_index_text,
+                          strlen(source_index_text));
+        cdc_digest_update(&context, cell->name, strlen(cell->name));
+        cdc_digest_update(&context, cell->module, strlen(cell->module));
+        cdc_digest_update(&context,
+                          cell->has_latch ? "1" : "0", 1);
+        cdc_digest_update(&context, &cell->latch, 1);
+        cdc_digest_update(&context,
+                          u2_latch_mode_name(cell->has_latch, cell->latch),
+                          strlen(u2_latch_mode_name(cell->has_latch,
+                                                    cell->latch)));
+    }
+    if (theta_count == 0) {
+        cdc_digest_update(&context, "empty-discrete-state",
+                          strlen("empty-discrete-state"));
+    }
+    cdc_digest_final(&context, digest);
+    cdc_digest_hex(digest, hex, hex_size);
+}
+
+static void u2_emit_discrete_state_entries(const cdc_u2_layout *layout,
+                                           const Runtime *rt) {
+    int first = 1;
+    if (!layout || !layout->coordinates || !rt) {
+        printf("null");
+        return;
+    }
+    putchar('[');
+    for (size_t i = 0; i < layout->dimension; i++) {
+        const cdc_u2_coordinate *coordinate = &layout->coordinates[i];
+        const Cell *cell;
+        if (coordinate->kind != CDC_U2_COORDINATE_THETA ||
+            coordinate->source_index >= (size_t)rt->cell_count) {
+            continue;
+        }
+        cell = &rt->cells[coordinate->source_index];
+        if (!first) {
+            putchar(',');
+        }
+        first = 0;
+        printf("{\"cell\":");
+        u2_json_string(cell->name);
+        printf(",\"coordinate\":");
+        u2_json_string(coordinate->name);
+        printf(",\"sourceIndex\":%zu,\"hasLatch\":%s,\"latch\":",
+               coordinate->source_index, cell->has_latch ? "true" : "false");
+        if (cell->has_latch) {
+            char latch[2] = {cell->latch, '\0'};
+            u2_json_string(latch);
+        } else {
+            printf("null");
+        }
+        printf(",\"mode\":");
+        u2_json_string(u2_latch_mode_name(cell->has_latch, cell->latch));
+        putchar('}');
+    }
+    putchar(']');
+}
+
+static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
+                         UniversalJob *universal,
+                         const UniversalResult *universal_result,
+                         const Runtime *initial_runtime,
+                         const Runtime *final_runtime,
+                         const SpectrumJob *spectrum_job,
+                         NativeU2Tangent *tangent,
+                         const cdc_matrix *path_tangent,
+                         int tangent_ready,
+                         const cdc_u2_recurrence_result *recurrence,
+                         const U2PhaseRestoration *restoration,
+                         const cdc_matrix *restoration_derivative,
+                         const cdc_u2_spectrum *spectrum,
+                         const char *status, const char *reason) {
+    char layout_hex[72] = "";
+    char universal_hex[72] = "";
+    char path_tangent_hex[72] = "";
+    char monodromy_hex[72] = "";
+    char restoration_derivative_hex[72] = "";
+    char initial_discrete_hex[72] = "";
+    char final_discrete_hex[72] = "";
+    int monodromy_ready = tangent_ready && recurrence &&
+                          recurrence->authorizes_monodromy;
+    const char *analysis = strcmp(status, "accepted") == 0 || monodromy_ready
+                               ? "monodromy"
+                               : tangent_ready ? "tangent" : "held";
+    const char *scope = recurrence->projected ? "projected" :
+                        recurrence->kind == CDC_U2_RECURRENCE_RELATIVE
+                            ? "relative" : "full";
+    int layout_ready = tangent->layout.dimension > 0 &&
+                       tangent->layout.coordinates != NULL;
+    int restoration_ready =
+        layout_ready && restoration && restoration_derivative &&
+        restoration->equivariance_verified && restoration->section_verified &&
+        restoration->cover_coordinate < tangent->layout.dimension &&
+        restoration_derivative->data &&
+        restoration_derivative->rows == tangent->layout.dimension &&
+        restoration_derivative->cols == tangent->layout.dimension;
+    if (layout_ready) {
+        u2_digest_layout(&tangent->layout, layout_hex, sizeof(layout_hex));
+    }
+    u2_digest_universal(universal, universal_result, universal_hex,
+                        sizeof(universal_hex));
+    if (tangent_ready) {
+        u2_digest_matrix(path_tangent, path_tangent_hex,
+                         sizeof(path_tangent_hex));
+    }
+    if (monodromy_ready) {
+        u2_digest_matrix(&tangent->tangent.matrix, monodromy_hex,
+                         sizeof(monodromy_hex));
+    }
+    if (restoration_ready) {
+        u2_digest_matrix(restoration_derivative, restoration_derivative_hex,
+                         sizeof(restoration_derivative_hex));
+    }
+    if (tangent_ready && initial_runtime && final_runtime) {
+        u2_digest_discrete_state(&tangent->layout, initial_runtime,
+                                 initial_discrete_hex,
+                                 sizeof(initial_discrete_hex));
+        u2_digest_discrete_state(&tangent->layout, final_runtime,
+                                 final_discrete_hex,
+                                 sizeof(final_discrete_hex));
+    }
+    printf("u2-json={\"schema\":\"cdc.u2.stability.v1\",\"orbit\":");
+    u2_json_string(orbit->id);
+    printf(",\"status\":");
+    u2_json_string(status);
+    printf(",\"reason\":");
+    u2_json_string(reason);
+    printf(",\"analysis\":");
+    u2_json_string(analysis);
+    printf(",\"runtimeIdentity\":\"cdc-native-u2-v1\"");
+    printf(",\"sourceDigest\":");
+    u2_json_string(source_digest);
+    printf(",\"sourceDigestSurface\":\"grammar-1-canonical\"");
+    printf(",\"universal\":{\"id\":");
+    u2_json_string(universal->id);
+    printf(",\"status\":");
+    u2_json_string(universal_result->status);
+    printf(",\"reason\":");
+    u2_json_string(universal_result->reason);
+    printf(",\"resultDigest\":");
+    u2_json_string(universal_hex);
+    printf(",\"receptiveAngle\":");
+    u2_json_string(universal_result->receptive_angle);
+    printf(",\"radiantAngle\":");
+    u2_json_string(universal_result->radiant_angle);
+    printf(",\"holonomy\":");
+    u2_json_string(universal_result->holonomy);
+    printf(",\"winding\":%d}", universal_result->winding);
+    printf(",\"manifestDigest\":");
+    if (layout_ready) {
+        u2_json_string(layout_hex);
+    } else {
+        printf("null");
+    }
+    printf(",\"methods\":{\"flow\":\"explicit-euler-map\","
+           "\"commit\":\"scheduled-fixed-mode-reset\","
+           "\"nest\":\"fixed-trit-overwrite\","
+           "\"guard\":\"unbound-no-saltation\","
+           "\"spectrum\":\"validated-real-schur\"}");
+    printf(",\"methodDetail\":");
+    if (!tangent_ready) {
+        printf("null");
+    } else {
+        printf("{\"flow\":{\"localMap\":\"explicit-euler-synchronous\","
+               "\"jacobian\":\"analytic-exact\",\"finiteDifferenceOracle\":null},"
+               "\"commit\":{\"kind\":\"scheduled-fixed-mode-reset\","
+               "\"continuousDerivative\":\"identity-within-fixed-mode\","
+               "\"saltation\":\"not-applicable\"},"
+               "\"nest\":{\"localMap\":\"fixed-trit-overwrite\","
+               "\"jacobian\":\"analytic-exact\","
+               "\"childPrior\":\"overwrite-parent-belief\"},"
+               "\"guard\":{\"binding\":null,\"eventLocalization\":null,"
+               "\"saltation\":null},"
+               "\"spectrum\":{\"solver\":\"validated-real-schur\","
+               "\"ordering\":\"sorted-multipliers\"}}");
+    }
+    printf(",\"tolerances\":{\"recurrenceAbsolute\":%.17g,"
+           "\"recurrenceRelative\":%.17g,\"neutral\":%.17g,"
+           "\"schur\":%.17g}", orbit->absolute_tolerance,
+           orbit->relative_tolerance, spectrum_job->neutral_tolerance,
+           spectrum_job->schur_tolerance);
+    printf(",\"finiteDifference\":");
+    if (!tangent_ready) {
+        printf("null");
+    } else {
+        printf("{\"status\":\"not-run\",\"step\":null,\"residual\":null}");
+    }
+    printf(",\"eventBudget\":");
+    if (!tangent_ready) {
+        printf("null");
+    } else {
+        printf("{\"status\":\"not-applicable\",\"limit\":null,\"used\":null}");
+    }
+    printf(",\"neutralModeRemoval\":");
+    if (!tangent_ready) {
+        printf("null");
+    } else {
+        printf("{\"status\":\"not-requested\",\"generatorDigest\":null,"
+               "\"removedModes\":null}");
+    }
+    printf(",\"determinism\":"
+           "\"source-order,row-major,canonical-float,sorted-multipliers\"");
+    printf(",\"recurrence\":");
+    if (!tangent_ready) {
+        printf("null,");
+    } else {
+        printf("{\"kind\":");
+        u2_json_string(cdc_u2_recurrence_kind_name(recurrence->kind));
+        printf(",\"scope\":");
+        u2_json_string(scope);
+        printf(",\"residual\":%.17g,\"absoluteTolerance\":%.17g,"
+               "\"relativeTolerance\":%.17g,\"normalizedResidual\":%.17g,"
+               "\"verified\":%s,\"authorizesMonodromy\":%s,"
+               "\"discreteStateVerified\":%s,"
+               "\"restorationDerivativeApplied\":%s,\"restoration\":",
+               recurrence->residual, recurrence->absolute_tolerance,
+               recurrence->relative_tolerance,
+               recurrence->normalized_residual,
+               recurrence->verified ? "true" : "false",
+               recurrence->authorizes_monodromy ? "true" : "false",
+               recurrence->discrete_state_verified ? "true" : "false",
+               recurrence->restoration_derivative_applied ? "true" : "false");
+        if (!restoration_ready) {
+            printf("null},");
+        } else {
+            printf("{\"action\":\"cover-phase-translation\","
+                   "\"coordinateIndex\":%zu,\"coordinate\":",
+                   restoration->cover_coordinate);
+            u2_json_string(
+                tangent->layout.coordinates[restoration->cover_coordinate].name);
+            printf(",\"displacement\":%.17g,\"equivarianceWitness\":{"
+                   "\"id\":\"isolated-affine-two-turn-cover\","
+                   "\"verified\":%s,\"fieldGain\":0,"
+                   "\"fieldCellCount\":%d,\"incidentChannelCount\":%d,"
+                   "\"mutatingStepCount\":%d},\"sectionWitness\":{"
+                   "\"id\":\"u1-two-turn-returned-restored\","
+                   "\"verified\":%s,\"winding\":%d,\"projection\":",
+                   restoration->displacement,
+                   restoration->equivariance_verified ? "true" : "false",
+                   restoration->field_cell_count,
+                   restoration->incident_channel_count,
+                   restoration->mutating_step_count,
+                   restoration->section_verified ? "true" : "false",
+                   restoration->winding);
+            u2_json_string(restoration->projection);
+            printf(",\"sheet\":");
+            u2_json_string(restoration->sheet);
+            printf("},\"derivativeRows\":%zu,\"derivativeColumns\":%zu,"
+                   "\"derivativeDigest\":",
+                   restoration_derivative->rows,
+                   restoration_derivative->cols);
+            u2_json_string(restoration_derivative_hex);
+            printf(",\"derivative\":[");
+            for (size_t i = 0;
+                 i < restoration_derivative->rows * restoration_derivative->cols;
+                 i++) {
+                if (i) {
+                    putchar(',');
+                }
+                printf("%.17g", restoration_derivative->data[i]);
+            }
+            printf("]}},");
+        }
+    }
+    printf("\"discreteState\":");
+    if (!tangent_ready || !initial_runtime || !final_runtime) {
+        printf("null,");
+    } else {
+        printf("{\"verified\":%s,\"initialDigest\":",
+               recurrence->discrete_state_verified ? "true" : "false");
+        u2_json_string(initial_discrete_hex);
+        printf(",\"finalDigest\":");
+        u2_json_string(final_discrete_hex);
+        printf(",\"initial\":");
+        u2_emit_discrete_state_entries(&tangent->layout, initial_runtime);
+        printf(",\"final\":");
+        u2_emit_discrete_state_entries(&tangent->layout, final_runtime);
+        printf("},");
+    }
+    printf("\"dimension\":");
+    if (layout_ready) {
+        printf("%zu,\"coordinates\":[", tangent->layout.dimension);
+        for (size_t i = 0; i < tangent->layout.dimension; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("{\"name\":");
+            u2_json_string(tangent->layout.coordinates[i].name);
+            printf(",\"period\":%.17g}",
+                   tangent->layout.coordinates[i].period);
+        }
+        printf("],\"initialState\":");
+    } else {
+        printf("null,\"coordinates\":null,\"initialState\":");
+    }
+    if (!tangent_ready) {
+        printf("null,\"finalState\":null,\"pathTangentDigest\":null,"
+               "\"pathTangent\":null,");
+    } else {
+        putchar('[');
+        for (size_t i = 0; i < tangent->layout.dimension; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("%.17g", tangent->initial[i]);
+        }
+        printf("],\"finalState\":[");
+        for (size_t i = 0; i < tangent->layout.dimension; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("%.17g", tangent->final[i]);
+        }
+        printf("],\"pathTangentDigest\":");
+        u2_json_string(path_tangent_hex);
+        printf(",\"pathTangent\":[");
+        for (size_t i = 0; i < path_tangent->rows * path_tangent->cols; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("%.17g", path_tangent->data[i]);
+        }
+        printf("],");
+    }
+    printf("\"events\":[");
+    for (size_t i = 0; tangent_ready && i < tangent->tangent.event_count; i++) {
+        cdc_u2_event *event = &tangent->tangent.events[i];
+        if (i) {
+            putchar(',');
+        }
+        printf("{\"kind\":");
+        u2_json_string(cdc_u2_event_kind_name(event->kind));
+        printf(",\"time\":%.17g,\"transverse\":", event->time);
+        if (event->transverse < 0) {
+            printf("null");
+        } else {
+            printf("%s", event->transverse ? "true" : "false");
+        }
+        putchar('}');
+    }
+    printf("],");
+    if (!monodromy_ready) {
+        printf("\"monodromyDigest\":null,\"monodromy\":null,"
+               "\"multipliers\":null,"
+               "\"spectrumDiagnostics\":null,"
+               "\"backend\":null,\"classification\":\"held\"}");
+    } else if (strcmp(status, "accepted") != 0 || !spectrum) {
+        printf("\"monodromyDigest\":");
+        u2_json_string(monodromy_hex);
+        printf(",\"monodromy\":[");
+        for (size_t i = 0; i < tangent->tangent.matrix.rows *
+                               tangent->tangent.matrix.cols; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("%.17g", tangent->tangent.matrix.data[i]);
+        }
+        printf("],\"multipliers\":null,"
+               "\"spectrumDiagnostics\":null,"
+               "\"backend\":null,\"classification\":\"held\"}");
+    } else {
+        printf("\"monodromyDigest\":");
+        u2_json_string(monodromy_hex);
+        printf(",\"monodromy\":[");
+        for (size_t i = 0; i < tangent->tangent.matrix.rows *
+                               tangent->tangent.matrix.cols; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("%.17g", tangent->tangent.matrix.data[i]);
+        }
+        printf("],\"multipliers\":[");
+        for (size_t i = 0; i < spectrum->dimension; i++) {
+            if (i) {
+                putchar(',');
+            }
+            printf("{\"real\":%.17g,\"imag\":%.17g,\"modulus\":%.17g,"
+                   "\"mode\":\"%s\"}",
+                   spectrum->multipliers[i].real,
+                   spectrum->multipliers[i].imag,
+                   spectrum->multipliers[i].modulus,
+                   spectrum->multipliers[i].mode == CDC_U2_MULTIPLIER_GAUGE
+                       ? "gauge" : "physical");
+        }
+        printf("],\"backend\":");
+        u2_json_string(spectrum->backend);
+        printf(",\"spectrumDiagnostics\":{\"spectralRadius\":%.17g,"
+               "\"schur\":{\"reconstructionResidual\":%.17g,"
+               "\"orthogonalityResidual\":%.17g,"
+               "\"triangularResidual\":%.17g,"
+               "\"validationTolerance\":%.17g}}",
+               spectrum->spectral_radius,
+               spectrum->schur_reconstruction_residual,
+               spectrum->schur_orthogonality_residual,
+               spectrum->schur_triangular_residual,
+               spectrum_job->schur_tolerance);
+        printf(",\"classification\":");
+        u2_json_string(cdc_u2_stability_class_name(spectrum->classification));
+        putchar('}');
+    }
+    putchar('\n');
+}
+
+static cdc_u2_status u2_restore_verified_cover_phase(
+    const double *final_state, size_t dimension, double *restored_state,
+    void *opaque) {
+    U2PhaseRestoration *restoration = (U2PhaseRestoration *)opaque;
+    if (!final_state || !restored_state || !restoration ||
+        restoration->cover_coordinate >= dimension) {
+        return CDC_U2_INVALID_ARGUMENT;
+    }
+    memcpy(restored_state, final_state, dimension * sizeof(double));
+    restored_state[restoration->cover_coordinate] -= restoration->displacement;
+    return CDC_U2_OK;
+}
+
+/* V1's executable phase quotient is intentionally narrow.  It is admitted
+ * only for the verified two-turn U1 cover when that cover is an isolated
+ * affine phase: one cell in a zero-gain field, no incident channels, and no
+ * commit/nest mutation of its module.  Under exactly these executable maps,
+ * theta -> theta + 4*pi is an equivariance and D(rho)=I. */
+static int u2_cover_phase_quotient_is_executable(
+    Runtime *rt, UniversalJob *universal, const UniversalResult *result,
+    const cdc_u2_layout *layout,
+    U2PhaseRestoration *restoration) {
+    Cell *cover = find_cell(rt, universal->cover_cell);
+    Module *module;
+    Field *field;
+    char coordinate_name[CDC_U2_COORDINATE_NAME_MAX];
+    long index;
+    int field_cells = 0;
+    if (!restoration || !cover ||
+        !(module = find_module(rt, cover->module)) ||
+        !(field = find_field(rt, module->field)) || field->gain != 0.0 ||
+        result->winding != 2 || strcmp(result->full_projection, "returned") != 0 ||
+        strcmp(result->full_sheet, "restored") != 0) {
+        return 0;
+    }
+    if (snprintf(coordinate_name, sizeof(coordinate_name), "%s.theta",
+                 cover->name) <= 0 ||
+        (index = cdc_u2_layout_find(layout, coordinate_name)) < 0) {
+        return 0;
+    }
+    for (int i = 0; i < rt->cell_count; i++) {
+        if (cell_in_field(rt, &rt->cells[i], field->name)) {
+            field_cells++;
+        }
+    }
+    if (field_cells != 1) {
+        return 0;
+    }
+    for (int i = 0; i < rt->channel_count; i++) {
+        if (strcmp(rt->channels[i].source, cover->name) == 0 ||
+            strcmp(rt->channels[i].target, cover->name) == 0) {
+            return 0;
+        }
+    }
+    for (int i = 0; i < rt->step_count; i++) {
+        Step *step = &rt->steps[i];
+        if ((step->kind == STEP_COMMIT &&
+             strcmp(step->module, module->name) == 0) ||
+            (step->kind == STEP_NEST &&
+             (strcmp(step->parent, module->name) == 0 ||
+              strcmp(step->child, module->name) == 0))) {
+            return 0;
+        }
+    }
+    restoration->cover_coordinate = (size_t)index;
+    restoration->displacement = 4.0 * PI;
+    restoration->field_cell_count = field_cells;
+    restoration->incident_channel_count = 0;
+    restoration->mutating_step_count = 0;
+    restoration->winding = result->winding;
+    restoration->equivariance_verified = 1;
+    restoration->section_verified = 1;
+    snprintf(restoration->projection, sizeof(restoration->projection), "%s",
+             result->full_projection);
+    snprintf(restoration->sheet, sizeof(restoration->sheet), "%s",
+             result->full_sheet);
+    return 1;
+}
+
+static void run_stability(Runtime *source, const char *path) {
+    (void)path;
+    if (source->spectrum_count == 0) {
+        fail("stability source has no spectrum job");
+    }
+    for (int i = 0; i < source->spectrum_count; i++) {
+        SpectrumJob *spectrum_job = &source->spectra[i];
+        VariationalJob *variational = find_variational_job(
+            source, spectrum_job->variational);
+        OrbitJob *orbit = NULL;
+        UniversalJob *declared_universal;
+        Runtime primal;
+        Runtime initial;
+        UniversalResult universal_result;
+        NativeU2Tangent tangent;
+        cdc_u2_recurrence_spec recurrence_spec;
+        cdc_u2_recurrence_result recurrence;
+        cdc_u2_spectrum spectrum;
+        cdc_matrix path_tangent;
+        cdc_matrix restoration_derivative;
+        U2PhaseRestoration phase_restoration;
+        unsigned char include[MAX_U2_DIMENSION];
+        cdc_u2_status status;
+        const char *reason = "none";
+        int projected = 0;
+        int primal_accepted;
+        int tangent_ready = 0;
+        memset(&tangent, 0, sizeof(tangent));
+        memset(&recurrence_spec, 0, sizeof(recurrence_spec));
+        memset(&recurrence, 0, sizeof(recurrence));
+        memset(&spectrum, 0, sizeof(spectrum));
+        memset(&path_tangent, 0, sizeof(path_tangent));
+        memset(&restoration_derivative, 0, sizeof(restoration_derivative));
+        memset(&phase_restoration, 0, sizeof(phase_restoration));
+        if (!variational || !(orbit = find_orbit_job(source, variational->orbit)) ||
+            !(declared_universal = find_universal_job(source, orbit->universal))) {
+            fail("spectrum references an unknown variational, orbit, or universal job");
+            continue;
+        }
+        /* Each analysis starts from an identical in-memory snapshot.  The
+         * U1 executor below stops before run_universal_enactment, so stability
+         * never writes the declared evolve output. */
+        primal = *source;
+        declared_universal = find_universal_job(&primal, orbit->universal);
+        primal_accepted = execute_universal(&primal, declared_universal,
+                                            &universal_result, &initial);
+        if (!primal_accepted) {
+            reason = "primal-held";
+            status = CDC_U2_MODE_DIVERGENCE;
+        } else {
+            status = u2_execute_tangent(
+                &initial, find_universal_job(&initial, orbit->universal),
+                orbit->absolute_tolerance, &tangent);
+        }
+        if (status == CDC_U2_OK) {
+            if (cdc_matrix_init(&path_tangent, tangent.layout.dimension,
+                                tangent.layout.dimension) != CDC_LINALG_OK ||
+                cdc_matrix_copy(&path_tangent, &tangent.tangent.matrix) !=
+                    CDC_LINALG_OK) {
+                status = CDC_U2_ALLOCATION_FAILED;
+                reason = "allocation-failed";
+            } else {
+                tangent_ready = 1;
+            }
+        }
+        if (!primal_accepted) {
+            /* Preserve the typed U1 failure. No tangent may be derived from a
+             * snapshot the Universal executor never admitted. */
+        } else if (status != CDC_U2_OK) {
+            if (strcmp(reason, "none") == 0) {
+                reason = tangent.reason;
+            }
+        } else if (!u2_coordinate_mask(&initial, &tangent.layout, orbit,
+                                       include, &projected)) {
+            fail("orbit coordinates reference an unknown state coordinate");
+        } else {
+            int quotient_ready = 1;
+            recurrence_spec.kind = CDC_U2_RECURRENCE_FULL;
+            recurrence_spec.absolute_tolerance = orbit->absolute_tolerance;
+            recurrence_spec.relative_tolerance = orbit->relative_tolerance;
+            recurrence_spec.include = include;
+            recurrence_spec.discrete_state_verified =
+                u2_discrete_state_equal(&tangent.layout, &initial, &primal);
+            if (strcmp(orbit->quotient, "phase") == 0 && !projected &&
+                u2_cover_phase_quotient_is_executable(
+                    &initial, find_universal_job(&initial, orbit->universal),
+                    &universal_result, &tangent.layout, &phase_restoration) &&
+                cdc_matrix_init(&restoration_derivative,
+                                tangent.layout.dimension,
+                                tangent.layout.dimension) == CDC_LINALG_OK &&
+                cdc_matrix_identity(&restoration_derivative) == CDC_LINALG_OK) {
+                recurrence_spec.kind = CDC_U2_RECURRENCE_RELATIVE;
+                recurrence_spec.restore_endpoint =
+                    u2_restore_verified_cover_phase;
+                recurrence_spec.restoration_context = &phase_restoration;
+                recurrence_spec.restoration_equivariant = 1;
+                recurrence_spec.restoration_derivative =
+                    &restoration_derivative;
+            } else if (strcmp(orbit->quotient, "none") != 0) {
+                quotient_ready = 0;
+                recurrence.kind = CDC_U2_RECURRENCE_RELATIVE;
+                recurrence.projected = projected;
+                recurrence.absolute_tolerance = orbit->absolute_tolerance;
+                recurrence.relative_tolerance = orbit->relative_tolerance;
+                reason = "undeclared-quotient";
+            }
+            if (quotient_ready) {
+                status = cdc_u2_recurrence_check(
+                    &tangent.layout, tangent.initial, tangent.final,
+                    tangent.layout.dimension, &recurrence_spec, &recurrence);
+                if (projected) {
+                    reason = "undeclared-quotient";
+                } else if (status != CDC_U2_OK) {
+                    reason = cdc_u2_status_reason(status);
+                } else {
+                    status = cdc_u2_monodromy_bind_recurrence(
+                        &tangent.tangent, &recurrence_spec, &recurrence,
+                        tangent.endpoint_time);
+                    if (status != CDC_U2_OK) {
+                        reason = cdc_u2_status_reason(status);
+                    } else {
+                        status = cdc_u2_spectrum_compute(
+                            &tangent.tangent.matrix, NULL, &recurrence, NULL,
+                            spectrum_job->neutral_tolerance,
+                            spectrum_job->schur_tolerance, &spectrum);
+                        if (status != CDC_U2_OK) {
+                            reason = cdc_u2_status_reason(status);
+                        }
+                    }
+                }
+            }
+        }
+        u2_emit_json(source->source_digest, orbit, declared_universal,
+                     &universal_result, &initial, &primal,
+                     spectrum_job, &tangent, &path_tangent, tangent_ready,
+                     &recurrence,
+                     phase_restoration.equivariance_verified
+                         ? &phase_restoration
+                         : NULL,
+                     restoration_derivative.data ? &restoration_derivative
+                                                 : NULL,
+                     strcmp(reason, "none") == 0 ? &spectrum : NULL,
+                     strcmp(reason, "none") == 0 ? "accepted" : "held",
+                     reason);
+        cdc_u2_spectrum_release(&spectrum);
+        cdc_matrix_release(&path_tangent);
+        cdc_matrix_release(&restoration_derivative);
+        u2_tangent_release(&tangent);
+    }
+}
+
 static void collect_replay_data(const char *reducer_path, const char *surface_path, ReplayData *data) {
     Runtime reducer;
     Runtime surface;
@@ -2934,6 +4382,7 @@ static void usage(void) {
     fprintf(stderr, "  cdc_native_runtime council council_bridge.cdc\n");
     fprintf(stderr, "  cdc_native_runtime evolve council_bridge.cdc\n");
     fprintf(stderr, "  cdc_native_runtime universal framework_loop.cdc\n");
+    fprintf(stderr, "  cdc_native_runtime stability u2_analysis.cdc\n");
     fprintf(stderr, "  cdc_native_runtime persist framework_persistence.cdc\n");
     fprintf(stderr, "  cdc_native_runtime replay native_reducer.cdc native_surface.cdc [framework_loop.cdc]\n");
     exit(2);
@@ -3037,6 +4486,8 @@ int CDC_NATIVE_ENTRY(int argc, char **argv) {
         run_evolution(&runtime, argv[2]);
     } else if (strcmp(argv[1], "universal") == 0) {
         run_universal(&runtime, argv[2]);
+    } else if (strcmp(argv[1], "stability") == 0) {
+        run_stability(&runtime, argv[2]);
     } else if (strcmp(argv[1], "persist") == 0) {
         run_persistence(&runtime, argv[2]);
     } else if (strcmp(argv[1], "fused") == 0) {

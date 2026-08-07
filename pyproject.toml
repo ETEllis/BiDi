@@ -1,7 +1,7 @@
 [project]
 name = "bidi-coherence-delta-calculus"
-version = "0.2.4"
-description = "Native .cdc language sources, a minimal Python bootloader, operational C bridge/reducer/full-surface/IR/proof/council runtimes, generated bridge codebooks, Lean/Coq finite proof mirrors, and paper source for BiDi Coherence-Delta Calculus."
+version = "0.3.0"
+description = "Native .cdc language sources, an executable hybrid reducer, guarded Universal Operator closure, recurrence-gated variational analysis, adversarial receipts, and finite Lean/Rocq mirrors for BiDi Coherence-Delta Calculus."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

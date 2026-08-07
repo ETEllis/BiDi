@@ -128,6 +128,7 @@ static const char *const FORM_NAMES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
+    "orbit",   "variational", "spectrum",
     "store",   "persist", "frame",   "reduce",  "complex",
     "topology", "authority", "transport",
 };
@@ -418,6 +419,7 @@ static const link_form LINK_FORMS[] = {
     {"council", {"deliberate", NULL, NULL}},
     {"evolution", {"evolve", NULL, NULL}},
     {"universal", {"universal", NULL, NULL}},
+    {"spectrum", {"spectrum", NULL, NULL}},
     {"store", {"store", NULL, NULL}},
     {"persistence", {"persist", NULL, NULL}},
 };
@@ -896,7 +898,7 @@ static int eval_expect(cdc_registry *registry, const cdc_stmt *stmt,
     {
         static const char *const SURFACE_HEADS[] = {
             "guard", "trace", "measure", "policy",
-            "bridge", "counter", "universal",
+            "bridge", "counter", "universal", "spectrum",
         };
         for (i = 0; i < sizeof(SURFACE_HEADS) / sizeof(SURFACE_HEADS[0]);
              i++) {

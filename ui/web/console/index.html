@@ -3,284 +3,367 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Möbi𝒰s Console — BiDi Coherence-Delta Calculus</title>
-<meta name="description" content="Operator console for the CDC toolchain: typed ternary outcomes, the Universal Operator's double cover, the bridge codebook, and the durable store's failure taxonomy.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<title>Möbi𝒰s Evidence Console — CDC Universal Operator</title>
+<meta name="description" content="Receipt-backed CDC evidence console for traversing source identity, U1 closure, U2 tangent, recurrence authorization, spectrum, and proof.">
 <style>
-/* ---------------------------------------------------------------------------
-   Möbi𝒰s design tokens — mirrored verbatim from ui/design/mobius-tokens.json.
-   scripts/verify.sh fails if these drift. Nothing here is decorative invention:
-   the palette is the identity's color law (cobalt-indigo substrate → phase
-   indigo → white/electric hinge → cyan resolve) and 7.16197° is the wordmark's
-   shipped invariant, used as the product's only tilt angle.
---------------------------------------------------------------------------- */
+/* Canonical Möbi𝒰s tokens. scripts/verify_ui.sh gates every value. */
 :root{
-  --abyss:#040d1d; --night:#07152c; --deep:#0b1e3d; --raised:#122a52; --hairline:#1d356b;
-  --indigo:#707ddd; --indigo-deep:#394db8; --violet-ink:#27316f;
-  --electric:#137dff; --electric-deep:#0c6fd8; --paper:#f8fbff;
-  --cyan:#31e2e7; --cyan-lift:#43f0ec; --teal:#008d9b;
-  --ember:#ff6b57;
+  --abyss:#040d1d;--night:#07152c;--deep:#0b1e3d;--raised:#122a52;--hairline:#1d356b;
+  --indigo:#707ddd;--indigo-deep:#394db8;--violet-ink:#27316f;
+  --electric:#137dff;--electric-deep:#0c6fd8;--paper:#f8fbff;
+  --cyan:#31e2e7;--cyan-lift:#43f0ec;--teal:#008d9b;--ember:#ff6b57;
+  --text-secondary:rgba(248,251,255,.72);--text-muted:rgba(248,251,255,.64);
+  --text-quiet:rgba(248,251,255,.58);
   --tilt:7.16197deg;
-  --r-sm:6px; --r-md:10px; --r-lg:16px;
-  --s-xs:4px; --s-sm:8px; --s-md:16px; --s-lg:24px; --s-xl:40px; --s-xxl:64px;
-  --restore:2.4s;
+  --r-sm:6px;--r-md:10px;--r-lg:16px;
+  --s-xs:4px;--s-sm:8px;--s-md:16px;--s-lg:24px;--s-xl:40px;--s-xxl:64px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:
-    radial-gradient(1100px 620px at 78% -8%, rgba(19,125,255,.16), transparent 62%),
-    radial-gradient(820px 520px at 4% 8%, rgba(112,125,221,.12), transparent 58%),
-    var(--abyss);
-  color:var(--paper);
-  font:400 15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased;
-  letter-spacing:-.005em;
-  min-height:100vh;
+html{background:var(--abyss);color-scheme:dark}
+body{margin:0;min-height:100vh;background:var(--abyss);color:var(--paper);
+  font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-wrap:anywhere}
+button,a{font:inherit}
+button{color:inherit}
+a{color:var(--cyan);text-underline-offset:3px}
+a:hover{color:var(--cyan-lift)}
+:focus-visible{outline:2px solid var(--cyan-lift);outline-offset:3px}
+.mono,code,pre{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  font-variant-ligatures:none}
+.skip-link{position:absolute;z-index:20;left:12px;top:-100px;padding:8px 12px;background:var(--paper);
+  color:var(--abyss);border-radius:var(--r-sm)}
+.skip-link:focus{top:12px}
+.instrument{width:min(100%,1440px);margin:0 auto;padding:var(--s-lg)}
+
+/* Masthead and current claim */
+.mast{display:flex;align-items:center;gap:var(--s-md);min-width:0;padding:var(--s-sm) 0 var(--s-lg)}
+.mark{width:54px;height:40px;flex:0 0 auto;transform:rotate(var(--tilt))}
+.brand{min-width:0}
+.brand strong{display:block;font-size:18px;line-height:1.2;letter-spacing:-.02em}
+.brand span{display:block;margin-top:3px;color:var(--text-muted);font-size:12px}
+.mast-spacer{flex:1}
+.snapshot-badge{display:flex;align-items:center;gap:9px;min-width:0;padding:8px 10px;
+  border:1px solid var(--hairline);border-left:3px solid var(--cyan);border-radius:var(--r-sm);
+  background:var(--night);color:rgba(248,251,255,.72);font-size:12px}
+.snapshot-badge::before{content:"+";display:grid;place-items:center;width:18px;height:18px;
+  border:1px solid rgba(49,226,231,.48);border-radius:50%;color:var(--cyan);font:700 11px/1 monospace}
+.claim-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-xl);align-items:end;
+  padding:var(--s-lg) 0 var(--s-xl);border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
+.eyebrow{margin:0 0 8px;color:var(--text-muted);font-size:11.5px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase}
+.claim-bar h1{max-width:900px;margin:0;font-size:clamp(30px,4.7vw,58px);line-height:1.02;
+  letter-spacing:-.04em;font-weight:620}
+.claim-bar h1 em{color:var(--cyan);font-style:normal}
+.claim-copy{max-width:780px;margin:14px 0 0;color:rgba(248,251,255,.68);font-size:16px}
+.claim-coordinate{display:grid;grid-template-columns:auto auto;gap:7px 18px;margin:0;min-width:220px}
+.claim-coordinate dt{color:var(--text-muted);font-size:11.5px}
+.claim-coordinate dd{margin:0;text-align:right;font:600 11.5px/1.5 ui-monospace,"SF Mono",monospace}
+
+/* One traversable evidence orbit */
+.route-label{margin:var(--s-lg) 0 var(--s-md);color:var(--text-muted);font-size:12px}
+.route-label strong{color:var(--paper);font-weight:600}
+.shell{display:grid;grid-template-columns:minmax(210px,250px) minmax(0,1fr) minmax(238px,280px);
+  gap:var(--s-md);align-items:start;min-width:0}
+.rail,.workspace{min-width:0;border:1px solid var(--hairline);background:var(--night)}
+.rail{border-radius:var(--r-md);padding:var(--s-md)}
+.rail h2{margin:0;font-size:14px;letter-spacing:-.01em}
+.rail-intro{margin:7px 0 14px;color:var(--text-muted);font-size:12px}
+.source-list{display:grid;gap:8px}
+.source-option{width:100%;min-width:0;padding:12px;text-align:left;border:1px solid var(--hairline);
+  border-left:3px solid transparent;border-radius:var(--r-sm);background:var(--deep);cursor:pointer;
+  transition:border-color .14s ease,background-color .14s ease}
+.source-option:hover{background:var(--raised)}
+.source-option[aria-checked="true"]{border-left-color:var(--electric);border-top-color:rgba(19,125,255,.5);
+  background:var(--raised)}
+.source-option strong{display:block;font-size:12.5px;line-height:1.35}
+.source-option span{display:block;margin-top:6px;color:var(--text-muted);font-size:11.5px}
+.source-option .fixture{color:var(--text-secondary)}
+.boundary{margin-top:var(--s-md);padding-top:var(--s-md);border-top:1px solid var(--hairline)}
+.boundary strong{display:block;padding-left:8px;border-left:2px solid var(--indigo);color:var(--paper);font-size:11.5px}
+.boundary p{margin:7px 0 0;color:var(--text-muted);font-size:11.5px}
+.runtime-list{display:grid;grid-template-columns:1fr auto;gap:7px 10px;margin:var(--s-md) 0 0;padding-top:var(--s-md);
+  border-top:1px solid var(--hairline);font-size:11.5px}
+.runtime-list dt{color:var(--text-muted)}
+.runtime-list dd{margin:0;color:var(--text-secondary);text-align:right}
+
+.workspace{border-radius:var(--r-md);overflow:hidden}
+.orbit{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;
+  padding:1px;background:var(--hairline)}
+.orbit-tab{position:relative;z-index:1;min-width:0;min-height:70px;padding:11px 9px;border:0;
+  border-bottom:3px solid transparent;background:var(--deep);text-align:left;cursor:pointer}
+.orbit-tab:hover{background:var(--raised)}
+.orbit-tab[aria-selected="true"]{background:var(--raised);border-bottom-color:var(--electric)}
+.orbit-tab .step{display:block;color:var(--text-quiet);font:600 10.5px/1 monospace;letter-spacing:.08em}
+.orbit-tab .stage-name{display:block;margin-top:7px;font-size:11.5px;font-weight:650;line-height:1.15}
+.orbit-tab .stage-state{display:flex;align-items:center;gap:5px;margin-top:7px;color:rgba(248,251,255,.52);
+  font-size:11.5px;line-height:1.1}
+.state-dot{display:inline-grid;place-items:center;width:15px;height:15px;border:1px solid currentColor;
+  border-radius:50%;font:700 10px/1 monospace;flex:0 0 auto}
+.state-accepted{color:var(--cyan)!important}.state-held{color:var(--paper)!important}
+.state-held .state-dot{color:var(--indigo);border-color:var(--indigo)}
+.state-violated{color:var(--ember)!important}.state-not-emitted{color:var(--text-secondary)!important}
+.stage-viewport{min-height:490px;padding:var(--s-lg);background:var(--deep)}
+.stage-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-md);
+  padding-bottom:var(--s-md);border-bottom:1px solid var(--hairline)}
+.stage-head h2{margin:0;font-size:24px;line-height:1.1;letter-spacing:-.025em}
+.stage-head p{margin:7px 0 0;color:var(--text-muted);font-size:12px}
+.state-label{display:inline-flex;align-items:center;gap:7px;max-width:220px;padding:6px 9px;
+  border:1px solid currentColor;border-radius:var(--r-sm);font-size:11.5px;font-weight:650}
+.stage-body{padding-top:var(--s-lg)}
+.fact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-lg)}
+.fact{min-width:0;padding:11px 0;border-top:1px solid rgba(29,53,107,.72)}
+.fact:nth-child(-n+2){border-top:0;padding-top:0}
+.fact dt{margin:0 0 5px;color:var(--text-muted);font-size:11.5px}
+.fact dd{margin:0;color:var(--paper);font-size:12.5px;overflow-wrap:anywhere}
+.fact dd.mono{font-size:11.5px;color:rgba(248,251,255,.82);word-break:break-word}
+.evidence-section{margin-top:var(--s-lg)}
+.evidence-section>h3{margin:0 0 12px;color:var(--paper);font-size:12.5px;letter-spacing:-.005em}
+.evidence-section+.local-scroll{margin-top:var(--s-md)}
+.callout{margin-bottom:var(--s-lg);padding:14px 16px;border:1px solid var(--hairline);
+  border-left:3px solid var(--indigo);border-radius:var(--r-sm);background:var(--night)}
+.stage-body>.callout:not(:first-child){margin-top:var(--s-lg)}
+.callout.accepted{border-left-color:var(--cyan)}.callout.violated{border-left-color:var(--ember)}
+.callout strong{display:block;font-size:13px}.callout p{margin:6px 0 0;color:var(--text-secondary);font-size:12px}
+.cover-stage{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(0,1.2fr);gap:var(--s-lg);align-items:center}
+.cover-figure{margin:0;padding:var(--s-md);border:1px solid var(--hairline);border-radius:var(--r-md);
+  background:var(--night)}
+.cover-figure svg{display:block;width:100%;height:auto;max-height:220px}
+.cover-figure figcaption{margin-top:10px;color:var(--text-muted);font-size:11.5px}
+.local-scroll{max-width:100%;overflow:auto;border:1px solid var(--hairline);border-radius:var(--r-sm)}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+caption{padding:10px;text-align:left;color:var(--text-muted);font-size:11.5px}
+th,td{padding:8px 10px;border-top:1px solid rgba(29,53,107,.66);text-align:left;white-space:nowrap}
+th{color:var(--text-secondary);font-weight:600;background:var(--night)}
+td{color:var(--text-secondary)}
+.timeline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:var(--s-lg)}
+.event{min-width:0;padding:10px;border-top:2px solid var(--electric);background:var(--night)}
+.event strong{display:block;font:600 11.5px/1.3 monospace;overflow-wrap:anywhere}
+.event span{display:block;margin-top:5px;color:var(--text-muted);font-size:11px}
+.spectrum-layout{display:grid;grid-template-columns:minmax(190px,.7fr) minmax(0,1.3fr);gap:var(--s-lg)}
+.unit-figure{margin:0;padding:var(--s-md);border:1px solid var(--hairline);border-radius:var(--r-md);background:var(--night)}
+.unit-figure svg{display:block;width:100%;height:auto}.unit-figure figcaption{margin-top:8px;color:var(--text-muted);font-size:11.5px}
+.proof-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:var(--s-lg)}
+.method-contract{margin-top:var(--s-lg);border:1px solid var(--hairline);border-radius:var(--r-sm);background:var(--night)}
+.method-contract summary{padding:12px 14px;color:var(--paper);font-size:12.5px;font-weight:650;cursor:pointer}
+.method-contract[open] summary{border-bottom:1px solid var(--hairline)}
+.method-contract .fact-grid{padding:14px}
+.action{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 12px;
+  border:1px solid var(--electric);border-radius:var(--r-sm);background:var(--electric-deep);color:var(--paper);
+  font-weight:650;text-decoration:none;cursor:pointer}
+.action.secondary{border-color:var(--hairline);background:var(--night)}
+.copy-note{color:var(--text-muted);font-size:11.5px}
+
+/* Proof rail */
+.proof-links{display:grid;margin:10px 0 0}
+.proof-link{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px 0;border-top:1px solid var(--hairline);
+  color:var(--paper);text-decoration:none;font-size:11.5px}
+.proof-link span:last-child{color:var(--cyan);font-family:monospace}
+.proof-link.unavailable{color:var(--text-muted);cursor:not-allowed}
+.proof-link.unavailable span:last-child{color:var(--indigo)}
+.provenance{margin:var(--s-md) 0 0;padding-top:var(--s-md);border-top:1px solid var(--hairline)}
+.provenance h3,.foundation h3{margin:0;font-size:11.5px;text-transform:uppercase;letter-spacing:.1em}
+.provenance dl{display:grid;gap:10px;margin:12px 0 0}
+.provenance dt{color:var(--text-muted);font-size:11.5px}.provenance dd{margin:4px 0 0;
+  color:var(--text-secondary);font:500 11.5px/1.5 monospace;overflow-wrap:anywhere;word-break:normal}
+.foundation{margin-top:var(--s-md);padding-top:var(--s-md);border-top:1px solid var(--hairline)}
+.foundation-grid{display:grid;grid-template-columns:1fr auto;gap:7px 10px;margin-top:10px;font-size:11.5px}
+.foundation-grid span:nth-child(odd){color:var(--text-muted)}
+.foundation-grid span:nth-child(even){color:var(--text-secondary);font-family:monospace;text-align:right}
+.ternary-key{display:flex;gap:12px;flex-wrap:wrap;margin-top:var(--s-md);padding-top:var(--s-md);
+  border-top:1px solid var(--hairline);font-size:11.5px}
+.ternary-key span{display:flex;align-items:center;gap:5px}.ternary-key b{font-family:monospace}
+.ternary-key .accepted{color:var(--cyan)}.ternary-key .held{color:var(--paper)}
+.ternary-key .held b{color:var(--indigo)}
+.ternary-key .violated{color:var(--ember)}
+
+.fatal-state,.noscript-state{margin:var(--s-xl) 0;padding:var(--s-lg);border:1px solid var(--ember);
+  border-left-width:3px;border-radius:var(--r-md);background:var(--night)}
+.fatal-state[hidden]{display:none}.fatal-state h2,.noscript-state h2{margin:0;font-size:18px}
+.fatal-state p,.noscript-state p{margin:8px 0 0;color:rgba(248,251,255,.64)}
+.footer{display:flex;justify-content:space-between;gap:var(--s-md);flex-wrap:wrap;margin-top:var(--s-lg);
+  padding:var(--s-lg) 0;color:var(--text-quiet);font-size:11px;border-top:1px solid var(--hairline)}
+
+/* Contract proof viewports: 1440px, 1024px, 768px, and 320px. */
+@media (max-width:1180px){
+  .shell{grid-template-columns:minmax(210px,240px) minmax(0,1fr)}
+  .proof-rail{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-lg)}
+  .proof-rail>div:nth-child(n+2){margin-top:0;padding-top:0;border-top:0}
 }
-.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;font-variant-ligatures:none}
-.wrap{max-width:1120px;margin:0 auto;padding:var(--s-xxl) var(--s-lg) var(--s-xxl)}
-
-/* ---- masthead ---------------------------------------------------------- */
-.mast{display:flex;align-items:center;gap:var(--s-md);margin-bottom:var(--s-xl)}
-.mark{width:56px;height:40px;flex:none;transform:rotate(var(--tilt))}
-.mast h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em}
-.mast p{margin:1px 0 0;font-size:11px;color:var(--indigo);letter-spacing:.01em}
-.mast .spacer{flex:1}
-.live{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:500;
-  color:rgba(248,251,255,.62);padding:6px 11px;border:1px solid var(--hairline);
-  border-radius:999px;background:rgba(11,30,61,.55)}
-.live i{width:6px;height:6px;border-radius:50%;background:var(--cyan);display:block;
-  box-shadow:0 0 0 3px rgba(49,226,231,.16)}
-
-/* ---- hero -------------------------------------------------------------- */
-.hero{margin:0 0 var(--s-xxl)}
-.hero h2{font-size:clamp(30px,5.2vw,50px);line-height:1.04;margin:0 0 var(--s-md);
-  font-weight:600;letter-spacing:-.032em;max-width:16ch}
-.hero h2 em{font-style:normal;color:var(--cyan)}
-.hero .law{font-size:15px;color:rgba(248,251,255,.6);max-width:56ch;margin:0}
-
-/* ---- layout ------------------------------------------------------------ */
-section{margin-bottom:var(--s-xxl)}
-.eyebrow{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:rgba(248,251,255,.34);margin:0 0 var(--s-md)}
-.panel{background:linear-gradient(180deg,rgba(18,42,82,.55),rgba(11,30,61,.42));
-  border:1px solid var(--hairline);border-radius:var(--r-md);padding:var(--s-lg)}
-.grid2{display:grid;grid-template-columns:minmax(300px,1fr) minmax(280px,1fr);gap:var(--s-lg);
-  align-items:start}
-@media (max-width:860px){.grid2{grid-template-columns:1fr}}
-
-/* ---- ternary vocabulary ------------------------------------------------ */
-/* Zero is equilibrium, not a lesser failure. It gets the calmest treatment of
-   the three; only a violated invariant is warm. */
-.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 7px;
-  border-radius:999px;font-size:12px;font-weight:600;border:1px solid}
-.chip b{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;
-  font-size:12px;font-family:ui-monospace,"SF Mono",Menlo,monospace}
-.chip.commit{color:var(--cyan);background:rgba(49,226,231,.13);border-color:rgba(49,226,231,.32)}
-.chip.commit b{background:rgba(49,226,231,.2);border:1px solid rgba(49,226,231,.5)}
-.chip.hold{color:var(--indigo);background:rgba(112,125,221,.1);border-color:rgba(112,125,221,.3)}
-.chip.hold b{background:rgba(112,125,221,.2);border:1px solid rgba(112,125,221,.5)}
-.chip.violated{color:var(--ember);background:rgba(255,107,87,.13);border-color:rgba(255,107,87,.33)}
-.chip.violated b{background:rgba(255,107,87,.2);border:1px solid rgba(255,107,87,.5)}
-.chip small{font-weight:500;font-size:10px;opacity:.72;font-family:ui-monospace,Menlo,monospace}
-
-.trits{display:inline-flex;gap:3px}
-.trits span{width:23px;height:23px;display:grid;place-items:center;border-radius:5px;
-  font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;border:1px solid}
-.t-p{color:var(--cyan);background:rgba(49,226,231,.12);border-color:rgba(49,226,231,.34)}
-.t-z{color:var(--indigo);background:rgba(112,125,221,.12);border-color:rgba(112,125,221,.34)}
-.t-n{color:var(--ember);background:rgba(255,107,87,.12);border-color:rgba(255,107,87,.34)}
-
-/* ---- reduction ladder -------------------------------------------------- */
-.ladder{display:grid;gap:1px;background:var(--hairline);border:1px solid var(--hairline);
-  border-radius:var(--r-md);overflow:hidden}
-.rung{display:grid;grid-template-columns:104px 1fr auto;gap:var(--s-md);align-items:center;
-  background:linear-gradient(180deg,rgba(18,42,82,.5),rgba(11,30,61,.4));padding:14px var(--s-md)}
-.rung .verb{font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--paper);
-  letter-spacing:.04em}
-.rung .verb span{display:block;font-family:inherit;font-size:9.5px;font-weight:500;
-  color:rgba(248,251,255,.36);margin-top:4px;letter-spacing:.02em}
-.rung .body{display:flex;align-items:center;gap:var(--s-md);flex-wrap:wrap;font-size:12px;
-  color:rgba(248,251,255,.66)}
-.kv{font:500 11.5px/1 ui-monospace,"SF Mono",Menlo,monospace;color:rgba(248,251,255,.5)}
-.kv b{color:var(--paper);font-weight:600}
-
-/* ---- double cover ------------------------------------------------------ */
-.cover{display:grid;place-items:center;padding:var(--s-md) 0 var(--s-lg)}
-.cover svg{width:100%;max-width:340px;height:auto;overflow:visible}
-.band{fill:none;stroke-width:2;stroke-linecap:round}
-@keyframes restore{to{transform:rotate(720deg)}}
-.spin{transform-origin:50% 50%;animation:restore var(--restore) linear infinite}
-@media (prefers-reduced-motion:reduce){.spin{animation:none}}
-.legend{display:grid;gap:9px;margin-top:var(--s-sm)}
-.legend div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-md);
-  font-size:11px}
-.legend dt{color:rgba(248,251,255,.46);font-weight:500}
-.legend dd{margin:0;font:600 11.5px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--cyan)}
-.legend dd.pending{color:var(--indigo)}
-
-/* ---- closure ----------------------------------------------------------- */
-.closure{display:flex;align-items:center;gap:var(--s-lg);flex-wrap:wrap;margin-bottom:var(--s-md)}
-.coord{display:block}
-.coord em{display:block;font-style:normal;font-size:10px;font-weight:500;
-  color:rgba(248,251,255,.42);margin-bottom:5px}
-.coord strong{font:600 21px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.02em}
-.equals{font-size:20px;color:var(--cyan)}
-.verdict{font-size:13px;color:rgba(248,251,255,.72);margin:0;max-width:52ch}
-
-/* ---- bridge grid ------------------------------------------------------- */
-.bridge{display:grid;grid-template-columns:repeat(16,1fr);gap:4px}
-@media (max-width:720px){.bridge{grid-template-columns:repeat(8,1fr)}}
-.cellx{aspect-ratio:1;border-radius:4px;background:rgba(18,42,82,.6);
-  border:1px solid rgba(29,53,107,.9);display:grid;place-items:center;
-  font:600 8px/1 ui-monospace,Menlo,monospace;color:rgba(248,251,255,.26);
-  transition:background .18s ease,color .18s ease,transform .18s ease}
-.cellx:hover{background:var(--raised);color:rgba(248,251,255,.8);transform:translateY(-1px)}
-.cellx.on{background:var(--cyan);color:var(--abyss);border-color:var(--cyan-lift);
-  box-shadow:0 0 0 3px rgba(49,226,231,.18)}
-.cellx.enacted{border-color:var(--electric);color:var(--paper);
-  box-shadow:inset 0 0 0 1px rgba(19,125,255,.55)}
-.bridge-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--s-lg);
-  margin-top:var(--s-lg);flex-wrap:wrap}
-.readouts{display:flex;gap:var(--s-xl)}
-.readouts div em{display:block;font-style:normal;font-size:10px;font-weight:500;
-  color:rgba(248,251,255,.42);margin-top:4px}
-.readouts div strong{font:600 17px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--cyan)}
-.keys{display:grid;gap:6px;font-size:10.5px;color:rgba(248,251,255,.45)}
-.keys span{display:flex;align-items:center;gap:7px}
-.keys i{width:11px;height:11px;border-radius:3px;display:block}
-.keys .sw-on{background:var(--cyan)}
-.keys .sw-enacted{border:1px solid var(--electric);box-shadow:inset 0 0 0 1px rgba(19,125,255,.5)}
-
-/* ---- reciprocal cones -------------------------------------------------- */
-.cones{display:flex;gap:var(--s-xl);margin:var(--s-lg) 0 var(--s-md)}
-.cones div strong{display:block;font:600 15px/1 ui-monospace,"SF Mono",Menlo,monospace}
-.cones div em{font-style:normal;font-size:10px;font-weight:500;
-  color:rgba(248,251,255,.42);display:block;margin-top:4px}
-.cones-note{font-size:11px;color:rgba(248,251,255,.45)}
-
-/* ---- taxonomy ---------------------------------------------------------- */
-.tax{display:grid;gap:1px;background:var(--hairline);border:1px solid var(--hairline);
-  border-radius:var(--r-md);overflow:hidden}
-.tax .row{display:grid;grid-template-columns:170px 1fr;gap:var(--s-md);padding:15px var(--s-md);
-  background:linear-gradient(180deg,rgba(18,42,82,.5),rgba(11,30,61,.4));align-items:start}
-.tax h4{margin:0 0 3px;font-size:13px;font-weight:600}
-.tax p{margin:0;font-size:11.5px;color:rgba(248,251,255,.55);max-width:62ch}
-@media (max-width:720px){.tax .row{grid-template-columns:1fr}}
-
-footer{border-top:1px solid var(--hairline);padding-top:var(--s-lg);
-  font-size:11px;color:rgba(248,251,255,.34);display:flex;gap:var(--s-md);flex-wrap:wrap}
-footer .mono{color:rgba(248,251,255,.46)}
+@media (max-width:1024px){
+  .instrument{padding:var(--s-md)}
+  .claim-bar{gap:var(--s-lg)}
+  .orbit{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .orbit-tab{min-height:62px}
+}
+@media (max-width:768px){
+  .mast{align-items:flex-start;flex-wrap:wrap}.mast-spacer{display:none}.snapshot-badge{margin-left:auto}
+  .claim-bar{grid-template-columns:1fr;align-items:start}.claim-coordinate{grid-template-columns:90px minmax(0,1fr);width:100%;min-width:0;max-width:none}
+  .claim-coordinate dd{text-align:left}
+  .shell{grid-template-columns:1fr}.proof-rail{grid-column:auto;display:block}
+  .source-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cover-stage,.spectrum-layout{grid-template-columns:1fr}
+  .timeline{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:520px){
+  .instrument{padding:12px}.mast{gap:10px}.mark{width:44px;height:34px}
+  .snapshot-badge{width:100%;margin:4px 0 0}.claim-bar{padding:20px 0 24px}
+  .claim-bar h1{font-size:32px}.claim-copy{font-size:14px}
+  .claim-coordinate{grid-template-columns:72px minmax(0,1fr);gap:8px 10px}
+  .source-list{grid-template-columns:1fr}.orbit{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stage-viewport{min-height:0;padding:var(--s-md)}.stage-head{display:grid}.fact-grid{grid-template-columns:1fr}
+  .fact:nth-child(2){border-top:1px solid rgba(29,53,107,.72);padding-top:11px}
+  .timeline{grid-template-columns:1fr}.footer{display:block}.footer span{display:block;margin-top:5px}
+  .provenance dl{gap:14px}.provenance dd{padding:8px;border-left:2px solid var(--hairline);background:var(--deep);line-height:1.6}
+  .foundation-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr)}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition-duration:.001ms!important}}
+@media (prefers-contrast:more){
+  .rail,.workspace,.source-option,.cover-figure,.unit-figure,.local-scroll,.method-contract{border-color:var(--indigo)}
+  .brand span,.rail-intro,.stage-head p,.callout p{color:var(--paper)}
+}
+@media (forced-colors:active){.state-dot,.source-option,.action{forced-color-adjust:auto}}
 </style>
 </head>
 <body>
-<div class="wrap">
-
+<a class="skip-link" href="#evidence-stage">Skip to evidence</a>
+<main class="instrument" id="console">
   <header class="mast">
-    <!-- The closed band, drawn once, at the identity tilt. Same geometry the
-         operator watches below: one body, many projections. -->
-    <svg class="mark" viewBox="0 0 56 40" aria-hidden="true">
-      <defs>
-        <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#31e2e7"/><stop offset=".55" stop-color="#137dff"/>
-          <stop offset="1" stop-color="#707ddd"/>
-        </linearGradient>
-      </defs>
-      <path d="M6 20c0-8 8-13 22-13s22 5 22 13-8 13-22 13S6 28 6 20z" fill="none"
-            stroke="url(#markGrad)" stroke-width="2.2"/>
-      <path d="M6 20c8 6 14 8 22 8s14-2 22-8" fill="none" stroke="url(#markGrad)"
-            stroke-width="1.5" opacity=".62"/>
-      <circle cx="28" cy="20" r="2.6" fill="#f8fbff"/>
+    <svg class="mark" viewBox="0 0 56 40" role="img" aria-label="Möbi𝒰s closed-band mark">
+      <path d="M6 20c0-8 8-13 22-13s22 5 22 13-8 13-22 13S6 28 6 20z" fill="none" stroke="#31e2e7" stroke-width="2.2"/>
+      <path d="M6 20c8 6 14 8 22 8s14-2 22-8" fill="none" stroke="#707ddd" stroke-width="1.6"/>
+      <circle cx="28" cy="20" r="2.7" fill="#f8fbff"/>
     </svg>
-    <div>
-      <h1>Möbi𝒰s Console</h1>
-      <p>BiDi Coherence-Delta Calculus · native toolchain</p>
+    <div class="brand">
+      <strong>Möbi𝒰s Evidence Console</strong>
+      <span>BiDi Coherence-Delta Calculus · Universal Operator</span>
     </div>
-    <div class="spacer"></div>
-    <span class="live"><i></i>replay bound to runtime output</span>
+    <span class="mast-spacer"></span>
+    <div class="snapshot-badge">Verified replay snapshot · ABI 1.5</div>
   </header>
 
-  <section class="hero">
-    <h2>One geometry.<br>Many <em>projections</em>.</h2>
-    <p class="law">One turn inverts the sheet; two turns restore it. Every result this
-      system produces is balanced ternary — accepted, held, or violated — and a held
-      result is equilibrium, not a near-miss.</p>
+  <section class="claim-bar" aria-labelledby="claim-title">
+    <div>
+      <p class="eyebrow">Current claim ceiling</p>
+      <h1 id="claim-title">Loading receipt-bound <em>evidence</em>…</h1>
+      <p class="claim-copy" id="claim-copy">Validating the embedded snapshot against its receipt schema.</p>
+    </div>
+    <dl class="claim-coordinate" aria-label="claim coordinates">
+      <dt>Maturity</dt><dd id="claim-maturity">—</dd>
+      <dt>Verdict</dt><dd id="claim-verdict">—</dd>
+      <dt>Scope</dt><dd id="claim-scope">—</dd>
+      <dt>Receipt</dt><dd id="claim-receipt">—</dd>
+    </dl>
   </section>
 
-  <section>
-    <p class="eyebrow">Reduction · live record</p>
-    <div class="ladder" id="ladder"></div>
-  </section>
+  <p class="route-label"><strong>Evidence orbit</strong> · Source → U1 Closure → Tangent → Recurrence → Spectrum → Receipt / Paper</p>
 
-  <section>
-    <p class="eyebrow">Universal Operator</p>
-    <div class="grid2">
-      <div class="panel">
-        <div class="cover">
-          <svg id="band" viewBox="-72 -54 144 108" role="img"
-               aria-label="Lifted double cover: the band carries a half twist, so one turn returns the projection with the sheet inverted and only the second turn restores it."></svg>
+  <div class="fatal-state" id="fatal-state" role="alert" hidden>
+    <h2>Receipt transport rejected</h2>
+    <p id="fatal-reason">The embedded snapshot could not be validated. No scientific claim is shown.</p>
+  </div>
+
+  <div class="shell" id="evidence-shell">
+    <aside class="rail source-rail" aria-labelledby="source-title">
+      <h2 id="source-title">Recorded source</h2>
+      <p class="rail-intro">Select a native analysis record. The calibration fixture is evidence of the mechanism, not a stronger claim about the canonical source.</p>
+      <div class="source-list" role="radiogroup" aria-label="select recorded analysis">
+        <button class="source-option" type="button" role="radio" aria-checked="true" data-source="canonical-held">
+          <strong>Canonical operator</strong>
+          <span>framework_loop.cdc</span>
+          <span class="source-state">full-state recurrence held</span>
+        </button>
+        <button class="source-option" type="button" role="radio" aria-checked="false" data-source="relative-fixture">
+          <strong>Relative calibration</strong>
+          <span>u720_true_relative_marginal.cdc</span>
+          <span class="fixture">positive fixture · not canonical</span>
+        </button>
+      </div>
+      <div class="boundary">
+        <strong>Browser boundary · read only</strong>
+        <p>This static console cannot invoke the native runtime. Regenerate the snapshot with the checked command; this surface never recalculates recurrence, eigenvalues, or verdicts.</p>
+      </div>
+      <dl class="runtime-list">
+        <dt>Runtime</dt><dd id="runtime-id">—</dd>
+        <dt>ABI</dt><dd>1.5</dd>
+        <dt>Grammar</dt><dd>1</dd>
+        <dt>Snapshot</dt><dd id="snapshot-date">—</dd>
+      </dl>
+    </aside>
+
+    <section class="workspace" aria-labelledby="stage-title">
+      <nav class="orbit" role="tablist" aria-label="evidence orbit stages">
+        <button class="orbit-tab" id="tab-source" type="button" role="tab" aria-selected="true" aria-controls="evidence-stage" tabindex="0" data-stage="source">
+          <span class="step">01</span><span class="stage-name">Source</span><span class="stage-state"></span>
+        </button>
+        <button class="orbit-tab" id="tab-u1" type="button" role="tab" aria-selected="false" aria-controls="evidence-stage" tabindex="-1" data-stage="u1">
+          <span class="step">02</span><span class="stage-name">U1 Closure</span><span class="stage-state"></span>
+        </button>
+        <button class="orbit-tab" id="tab-tangent" type="button" role="tab" aria-selected="false" aria-controls="evidence-stage" tabindex="-1" data-stage="tangent">
+          <span class="step">03</span><span class="stage-name">Tangent</span><span class="stage-state"></span>
+        </button>
+        <button class="orbit-tab" id="tab-recurrence" type="button" role="tab" aria-selected="false" aria-controls="evidence-stage" tabindex="-1" data-stage="recurrence">
+          <span class="step">04</span><span class="stage-name">Recurrence</span><span class="stage-state"></span>
+        </button>
+        <button class="orbit-tab" id="tab-spectrum" type="button" role="tab" aria-selected="false" aria-controls="evidence-stage" tabindex="-1" data-stage="spectrum">
+          <span class="step">05</span><span class="stage-name">Spectrum</span><span class="stage-state"></span>
+        </button>
+        <button class="orbit-tab" id="tab-receipt" type="button" role="tab" aria-selected="false" aria-controls="evidence-stage" tabindex="-1" data-stage="receipt">
+          <span class="step">06</span><span class="stage-name">Receipt / Paper</span><span class="stage-state"></span>
+        </button>
+      </nav>
+      <div class="stage-viewport" id="evidence-stage" role="tabpanel" tabindex="0" aria-labelledby="tab-source" aria-live="polite">
+        <header class="stage-head">
+          <div><h2 id="stage-title">Source</h2><p id="stage-summary">Canonical source and runtime identity.</p></div>
+          <span class="state-label state-not-emitted" id="stage-status"><span class="state-dot">∅</span>validating</span>
+        </header>
+        <div class="stage-body" id="stage-body"></div>
+      </div>
+    </section>
+
+    <aside class="rail proof-rail" aria-labelledby="proof-title">
+      <div>
+        <h2 id="proof-title">Descend into proof</h2>
+        <p class="rail-intro">The selected source stays in context while the route moves from receipt to semantic and paper claims.</p>
+        <div class="proof-links">
+          <a class="proof-link" id="raw-receipt-link" href="receipts/canonical-held.txt"><span>Exact native receipt</span><span>↗</span></a>
+          <a class="proof-link" href="../../../docs/u2/U2_SEMANTICS.md"><span>U2 semantics</span><span>↗</span></a>
+          <a class="proof-link" href="../../../tests/u2/CONTRACT.md"><span>Verification contract</span><span>↗</span></a>
+          <a class="proof-link" href="../../../README.md"><span>Repository landing</span><span>↗</span></a>
+          <a class="proof-link" href="../../../paper/arxiv/main.tex"><span>arXiv source</span><span>↗</span></a>
+          <span class="proof-link unavailable" aria-label="Compiled paper PDF is not present in this checkout"><span>Compiled paper PDF</span><span>not present</span></span>
         </div>
-        <dl class="legend" id="legend"></dl>
       </div>
-      <div class="panel">
-        <p class="eyebrow">Closure</p>
-        <div class="closure" id="closure"></div>
-        <p class="verdict" id="verdict"></p>
-        <div class="cones" id="cones"></div>
-        <p class="verdict cones-note">The cones must be angularly biased and mutually
-          reciprocal within one flow evaluation; their sum is the accumulated holonomy
-          carried across the turn.</p>
+      <div class="provenance">
+        <h3>Transport provenance</h3>
+        <dl>
+          <div><dt>Command</dt><dd id="provenance-command">—</dd></div>
+          <div><dt>Source digest</dt><dd id="provenance-source">—</dd></div>
+          <div><dt>Manifest digest</dt><dd id="provenance-manifest">—</dd></div>
+          <div><dt>Receipt file SHA-256</dt><dd id="provenance-receipt">—</dd></div>
+        </dl>
       </div>
-    </div>
-  </section>
+      <div class="foundation">
+        <h3>Foundational replay</h3>
+        <div class="foundation-grid" id="foundation-grid"></div>
+      </div>
+      <div class="ternary-key" aria-label="ternary verdict key">
+        <span class="accepted"><b>+</b> accepted</span>
+        <span class="held"><b>0</b> held</span>
+        <span class="violated"><b>−</b> violated</span>
+      </div>
+    </aside>
+  </div>
 
-  <section>
-    <p class="eyebrow">Bridge codebook · 2⁶ = 4³ = 64</p>
-    <div class="panel">
-      <div class="bridge" id="bridge"></div>
-      <div class="bridge-foot">
-        <div class="readouts" id="readouts"></div>
-        <div class="keys">
-          <span><i class="sw-on"></i>projected occupancy</span>
-          <span><i class="sw-enacted"></i>enacted coordinate</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <p class="eyebrow">Durable store · failure taxonomy</p>
-    <div class="tax">
-      <div class="row">
-        <span class="chip commit"><b>+</b>recoverable tail</span>
-        <div><h4>Truncated at the last seal</h4>
-          <p>A torn or valid-unsealed tail is discarded: the unfinished transaction never
-             happened. Exactly the old or the new state is visible, never a partial batch.</p></div>
-      </div>
-      <div class="row">
-        <span class="chip violated"><b>−</b>corrupt prefix</span>
-        <div><h4>Fails closed, evidence preserved</h4>
-          <p>Any integrity violation inside a structurally complete record returns no handle
-             and never modifies a byte. Corrupted evidence is preserved, not repaired.</p></div>
-      </div>
-      <div class="row">
-        <span class="chip hold"><b>0</b>I/O fault</span>
-        <div><h4>A fault is a fault</h4>
-          <p>A read error is never mistaken for end-of-file, so it can never authorize
-             truncation. Nothing is recovered and nothing is lost.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <span>Rendered from <span class="mono">demo/replay.json</span> — real runtime output, not sample data.</span>
-    <span class="mono">grammar 1 · abi 1.2 · blake3</span>
+  <noscript><section class="noscript-state"><h2>JavaScript is required to traverse this local snapshot</h2><p>The exact native receipts remain available in <code>ui/web/console/receipts/</code>. No scientific result has been inferred by this fallback.</p></section></noscript>
+  <footer class="footer">
+    <span>Verified replay snapshot · native values projected without recomputation.</span>
+    <span class="mono">cdc.u2.stability.v1 · grammar 1 · ABI 1.5 · BLAKE3</span>
   </footer>
-</div>
+</main>
 
-<!-- The runtime's own replay record. scripts/verify.sh asserts this block is
-     byte-identical to demo/replay.json, so the console can never drift from
-     what the runtime actually produced. -->
+<!-- Byte-identical to demo/replay.json; scripts/verify_ui.sh enforces the bind. -->
 <script type="application/json" id="replay-data">
 {
   "flow": {
@@ -333,159 +416,1476 @@ footer .mono{color:rgba(248,251,255,.46)}
 }
 </script>
 
-<script>
-(function () {
-  "use strict";
-  var data = JSON.parse(document.getElementById("replay-data").textContent);
-
-  function tritClass(ch) { return ch === "+" ? "t-p" : (ch === "-" ? "t-n" : "t-z"); }
-  function trits(word) {
-    return '<span class="trits">' + word.split("").map(function (c) {
-      return '<span class="' + tritClass(c) + '">' + (c === "-" ? "−" : c) + "</span>";
-    }).join("") + "</span>";
-  }
-  function chip(status, reason) {
-    var kind = status === "accepted" ? "commit" : (status === "held" ? "hold" : "violated");
-    var glyph = kind === "commit" ? "+" : (kind === "hold" ? "0" : "−");
-    var extra = (reason && reason !== "none") ? "<small>" + reason + "</small>" : "";
-    return '<span class="chip ' + kind + '"><b>' + glyph + "</b>" + status + extra + "</span>";
-  }
-  function kv(label, value) {
-    return '<span class="kv">' + label + " <b>" + value + "</b></span>";
-  }
-
-  // Reduction ladder — the three foundational steps plus the derived surface.
-  var rungs = [
-    ["flow", "continuous", kv("θ council.b", data.flow.thetaCouncilB) + kv("weight", data.flow.channelWeight)],
-    ["commit", "guarded", trits(data.commit.trits) + chip(data.commit.status, data.commit.reason) + kv("balance", data.commit.balance)],
-    ["commit", "held", trits(data.hold.trits) + chip(data.hold.status, data.hold.reason) + kv("balance", data.hold.balance)],
-    ["nest", "bidirectional", kv("up", data.nest.up) + kv("parent belief", data.nest.parentBelief) + kv("child prior", data.nest.childPrior)],
-    ["trace", "window-local", trits(data.trace.trits) + kv("events", data.trace.events)]
-  ];
-  document.getElementById("ladder").innerHTML = rungs.map(function (r) {
-    return '<div class="rung"><div class="verb">' + r[0] + "<span>" + r[1] +
-      '</span></div><div class="body">' + r[2] + "</div><div></div></div>";
-  }).join("");
-
-  // Double-cover legend — the acceptance facts the runtime checks.
-  var u = data.universal;
-  var legend = [
-    ["one turn", u.halfSheet, u.halfSheet === "restored"],
-    ["two turns", u.fullSheet, u.fullSheet === "restored"],
-    ["projection", u.fullProjection, u.fullProjection === "returned"],
-    ["holonomy", u.holonomy, true]
-  ];
-  document.getElementById("legend").innerHTML = legend.map(function (l) {
-    return "<div><dt>" + l[0] + '</dt><dd class="' + (l[2] ? "" : "pending") + '">' + l[1] + "</dd></div>";
-  }).join("");
-
-  // Closure — the equality that authorizes enactment.
-  var agree = u.recordCoordinate === u.decisionCoordinate;
-  document.getElementById("closure").innerHTML =
-    '<span class="coord"><em>recorded</em><strong>' + u.recordCoordinate + "</strong></span>" +
-    '<span class="equals">' + (agree ? "=" : "≠") + "</span>" +
-    '<span class="coord"><em>decided</em><strong>' + u.decisionCoordinate + "</strong></span>" +
-    chip(agree ? "accepted" : "violated", agree ? "none" : "coordinate-mismatch");
-  document.getElementById("verdict").textContent = agree
-    ? "What the organism recorded is what it decided, so the coordinate is enacted — written to source with an appended witness."
-    : "The record and the decision disagree. Nothing is enacted and no output is written.";
-
-  // Reciprocal cones — the angular budget that must balance.
-  document.getElementById("cones").innerHTML = [
-    ["receptive", u.receptiveAngle, "var(--indigo)"],
-    ["radiant", u.radiantAngle, "var(--electric)"],
-    ["holonomy", u.holonomy, "var(--cyan)"]
-  ].map(function (c) {
-    return '<div><strong style="color:' + c[2] + '">' + c[1] + "</strong><em>" + c[0] + "</em></div>";
-  }).join("");
-
-  // Bridge codebook — 64 cells. The projected occupancy (the bridge job's own
-  // coordinate) is filled; the operator's enacted coordinate is outlined. They
-  // are different addresses and the interface does not conflate them.
-  var projected = parseInt(data.bridge.index, 10);
-  var enacted = parseInt(u.enactedCoordinate || u.recordCoordinate, 2);
-  var cells = "";
-  for (var i = 0; i < 64; i++) {
-    var t = ((i >> 4) & 3).toString() + ((i >> 2) & 3).toString() + (i & 3).toString();
-    var klass = "cellx" + (i === projected ? " on" : "") + (i === enacted ? " enacted" : "");
-    var dy = i.toString(2);
-    while (dy.length < 6) { dy = "0" + dy; }
-    cells += '<div class="' + klass + '" title="index ' + i + " · dyadic " + dy +
-      " · triadic " + t + '">' + t + "</div>";
-  }
-  document.getElementById("bridge").innerHTML = cells;
-
-  document.getElementById("readouts").innerHTML = [
-    ["dyadic", data.bridge.dyadic],
-    ["triadic", data.bridge.triadic],
-    ["index", data.bridge.index],
-    ["enacted", u.enactedCoordinate || "—"]
-  ].map(function (r) {
-    return "<div><strong>" + r[1] + "</strong><em>" + r[0] + "</em></div>";
-  }).join("");
-
-  // ---- the double cover ---------------------------------------------------
-  // A real Möbius ribbon: the band's half twist makes the two edges exchange
-  // places once per turn, which is exactly why one turn inverts the sheet and
-  // two restore it. Drawn as depth-sorted quads so the crossing is legible.
-  var svg = document.getElementById("band");
-  var NS = "http://www.w3.org/2000/svg";
-  var SEGMENTS = 132, R = 40, HALF = 11, SQUASH = 0.42;
-  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  function point(theta, edge, phase) {
-    var twist = (theta + phase) / 2;
-    var w = HALF * edge;
-    var r = R + w * Math.cos(twist);
-    return {
-      x: r * Math.cos(theta),
-      y: r * Math.sin(theta) * SQUASH - w * Math.sin(twist) * 0.85,
-      depth: Math.sin(theta)
-    };
-  }
-
-  function render(phase) {
-    var quads = [];
-    for (var s = 0; s < SEGMENTS; s++) {
-      var t0 = (s / SEGMENTS) * Math.PI * 2;
-      var t1 = ((s + 1) / SEGMENTS) * Math.PI * 2;
-      var a = point(t0, 1, phase), b = point(t1, 1, phase);
-      var c = point(t1, -1, phase), d = point(t0, -1, phase);
-      quads.push({ pts: [a, b, c, d], depth: (a.depth + b.depth) / 2, t: t0 });
+<!-- Generated from fresh native receipts by generate-verified-snapshot.mjs. -->
+<script type="application/json" id="u2-snapshot-data">
+{
+  "schema": "cdc.ui.verified-replay.v1",
+  "snapshotKind": "verified replay snapshot",
+  "authoritativeDate": "2026-08-07",
+  "generatorPath": "ui/web/console/generate-verified-snapshot.mjs",
+  "toolchain": {
+    "major": 1,
+    "minor": 5,
+    "grammar": 1,
+    "sourcePath": "runtime/cdc_abi.h",
+    "sourceSha256": "2c69ca0c6814fd2bdd82620dfec21d46e2cffba6ab5d95e3e88482ba20b042b3"
+  },
+  "entries": [
+    {
+      "id": "canonical-held",
+      "label": "Canonical operator · full-state hold",
+      "role": "canonical-source",
+      "sourcePath": "framework_loop.cdc",
+      "sourceFileSha256": "96127924f1baf702d72ac0963369ed7f0524cff1b78d5388853a0b6d4eab7a28",
+      "receiptPath": "ui/web/console/receipts/canonical-held.txt",
+      "receiptFileSha256": "768be43646d0cdc6fb9c1abc013d3cdf78054844a73a2eaa5cd8b86510d9c1a4",
+      "receiptRecordIndex": 0,
+      "receiptHref": "receipts/canonical-held.txt",
+      "command": "build/u2/cdc_native_runtime stability framework_loop.cdc",
+      "claim": {
+        "maturity": "adversarially-verified",
+        "verdict": "held",
+        "scope": "framework_loop.cdc",
+        "ceiling": "U1 accepted. U2 tangent executed. Full-state recurrence held; no spectrum was emitted."
+      },
+      "receipt": {
+        "schema": "cdc.u2.stability.v1",
+        "orbit": "loop-u720-full",
+        "status": "held",
+        "reason": "recurrence-mode-mismatch",
+        "analysis": "tangent",
+        "runtimeIdentity": "cdc-native-u2-v1",
+        "sourceDigest": "blake3:6b902be106d69cb873498f82607d9b54f90dddea43db4f91af53dbc8a7639a37",
+        "sourceDigestSurface": "grammar-1-canonical",
+        "universal": {
+          "id": "loop-u720",
+          "status": "accepted",
+          "reason": "none",
+          "resultDigest": "blake3:bbeb2defb9abb244c657733a34a1ad51da5db48a67f3513c69f53c9c6da67597",
+          "receptiveAngle": "0.375000",
+          "radiantAngle": "-0.250000",
+          "holonomy": "0.125000",
+          "winding": 2
+        },
+        "manifestDigest": "blake3:762954abc33b8bfd0bd6184d9032fd6258b84c2977f5d0747e4f189bbcb36a51",
+        "methods": {
+          "flow": "explicit-euler-map",
+          "commit": "scheduled-fixed-mode-reset",
+          "nest": "fixed-trit-overwrite",
+          "guard": "unbound-no-saltation",
+          "spectrum": "validated-real-schur"
+        },
+        "methodDetail": {
+          "flow": {
+            "localMap": "explicit-euler-synchronous",
+            "jacobian": "analytic-exact",
+            "finiteDifferenceOracle": null
+          },
+          "commit": {
+            "kind": "scheduled-fixed-mode-reset",
+            "continuousDerivative": "identity-within-fixed-mode",
+            "saltation": "not-applicable"
+          },
+          "nest": {
+            "localMap": "fixed-trit-overwrite",
+            "jacobian": "analytic-exact",
+            "childPrior": "overwrite-parent-belief"
+          },
+          "guard": {
+            "binding": null,
+            "eventLocalization": null,
+            "saltation": null
+          },
+          "spectrum": {
+            "solver": "validated-real-schur",
+            "ordering": "sorted-multipliers"
+          }
+        },
+        "tolerances": {
+          "recurrenceAbsolute": 0.000001,
+          "recurrenceRelative": 0,
+          "neutral": 1e-9,
+          "schur": 1e-10
+        },
+        "finiteDifference": {
+          "status": "not-run",
+          "step": null,
+          "residual": null
+        },
+        "eventBudget": {
+          "status": "not-applicable",
+          "limit": null,
+          "used": null
+        },
+        "neutralModeRemoval": {
+          "status": "not-requested",
+          "generatorDigest": null,
+          "removedModes": null
+        },
+        "determinism": "source-order,row-major,canonical-float,sorted-multipliers",
+        "recurrence": {
+          "kind": "full",
+          "scope": "full",
+          "residual": 12.566370614359172,
+          "absoluteTolerance": 0.000001,
+          "relativeTolerance": 0,
+          "normalizedResidual": 12566370.614359174,
+          "verified": false,
+          "authorizesMonodromy": false,
+          "discreteStateVerified": false,
+          "restorationDerivativeApplied": false,
+          "restoration": null
+        },
+        "discreteState": {
+          "verified": false,
+          "initialDigest": "blake3:9f77bcaf6dc420ab508a822ce791a2cf75482131779b14883ab268bceb1f89bb",
+          "finalDigest": "blake3:2c6603ac9f9229f2111d23d5c6c6f12762719885bffd587feca38116f8b954fe",
+          "initial": [
+            {
+              "cell": "agent.a",
+              "coordinate": "agent.a.theta",
+              "sourceIndex": 0,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.b",
+              "coordinate": "agent.b.theta",
+              "sourceIndex": 1,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.c",
+              "coordinate": "agent.c.theta",
+              "sourceIndex": 2,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.a",
+              "coordinate": "context.a.theta",
+              "sourceIndex": 3,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.b",
+              "coordinate": "context.b.theta",
+              "sourceIndex": 4,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.c",
+              "coordinate": "context.c.theta",
+              "sourceIndex": 5,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "loop-cover.phase",
+              "coordinate": "loop-cover.phase.theta",
+              "sourceIndex": 6,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            }
+          ],
+          "final": [
+            {
+              "cell": "agent.a",
+              "coordinate": "agent.a.theta",
+              "sourceIndex": 0,
+              "hasLatch": true,
+              "latch": "+",
+              "mode": "latched:+"
+            },
+            {
+              "cell": "agent.b",
+              "coordinate": "agent.b.theta",
+              "sourceIndex": 1,
+              "hasLatch": true,
+              "latch": "+",
+              "mode": "latched:+"
+            },
+            {
+              "cell": "agent.c",
+              "coordinate": "agent.c.theta",
+              "sourceIndex": 2,
+              "hasLatch": true,
+              "latch": "0",
+              "mode": "latched:0"
+            },
+            {
+              "cell": "context.a",
+              "coordinate": "context.a.theta",
+              "sourceIndex": 3,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.b",
+              "coordinate": "context.b.theta",
+              "sourceIndex": 4,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.c",
+              "coordinate": "context.c.theta",
+              "sourceIndex": 5,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "loop-cover.phase",
+              "coordinate": "loop-cover.phase.theta",
+              "sourceIndex": 6,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            }
+          ]
+        },
+        "dimension": 13,
+        "coordinates": [
+          {
+            "name": "agent.a.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "agent.b.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "agent.c.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.a.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.b.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.c.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "loop-cover.phase.theta",
+            "period": 0
+          },
+          {
+            "name": "agent.belief",
+            "period": 0
+          },
+          {
+            "name": "agent.prior",
+            "period": 0
+          },
+          {
+            "name": "context.belief",
+            "period": 0
+          },
+          {
+            "name": "context.prior",
+            "period": 0
+          },
+          {
+            "name": "loop-cover.belief",
+            "period": 0
+          },
+          {
+            "name": "loop-cover.prior",
+            "period": 0
+          }
+        ],
+        "initialState": [
+          0,
+          0,
+          1.5707963267948966,
+          0,
+          1.5707963267948966,
+          3.141592653589793,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "finalState": [
+          0.018678040302759706,
+          0.49222810542766116,
+          1.5707963267948966,
+          0,
+          1.5513728365492507,
+          3.141592653589793,
+          12.566370614359172,
+          0,
+          1.3333333333333333,
+          1.3333333333333333,
+          0,
+          0,
+          0
+        ],
+        "events": [
+          {
+            "kind": "flow",
+            "time": 1,
+            "transverse": null
+          },
+          {
+            "kind": "scheduled-commit",
+            "time": 1,
+            "transverse": null
+          },
+          {
+            "kind": "nest",
+            "time": 1,
+            "transverse": null
+          },
+          {
+            "kind": "flow",
+            "time": 2,
+            "transverse": null
+          },
+          {
+            "kind": "flow",
+            "time": 3,
+            "transverse": null
+          },
+          {
+            "kind": "scheduled-commit",
+            "time": 3,
+            "transverse": null
+          },
+          {
+            "kind": "nest",
+            "time": 3,
+            "transverse": null
+          },
+          {
+            "kind": "flow",
+            "time": 4,
+            "transverse": null
+          }
+        ],
+        "pathTangentDigest": "blake3:c1f24514091a35cd04d3ed7caec141a83447ef68245fb3516cff82934c3bb2e3",
+        "monodromyDigest": null,
+        "monodromy": null,
+        "multipliers": null,
+        "spectrumDiagnostics": null,
+        "backend": null,
+        "classification": "held"
+      }
+    },
+    {
+      "id": "relative-fixture",
+      "label": "Calibration fixture · positive relative recurrence",
+      "role": "positive-relative-calibration-fixture",
+      "sourcePath": "tests/fixtures/u2/u720_true_relative_marginal.cdc",
+      "sourceFileSha256": "d2162f0a3c83e542c7c8b526ad33de1162bd7b6ee1d24c4543c279f99e1ee847",
+      "receiptPath": "ui/web/console/receipts/relative-calibration.txt",
+      "receiptFileSha256": "0fc88a82de84b79e6d90ae657a3c875283c254806f15771657fc3b087212ea67",
+      "receiptRecordIndex": 0,
+      "receiptHref": "receipts/relative-calibration.txt",
+      "command": "build/u2/cdc_native_runtime stability tests/fixtures/u2/u720_true_relative_marginal.cdc",
+      "claim": {
+        "maturity": "adversarially-verified",
+        "verdict": "accepted",
+        "scope": "tests/fixtures/u2/u720_true_relative_marginal.cdc",
+        "ceiling": "Relative recurrence accepted. Identity monodromy produced thirteen physical unit multipliers; classification marginal."
+      },
+      "receipt": {
+        "schema": "cdc.u2.stability.v1",
+        "orbit": "fixture-relative-orbit",
+        "status": "accepted",
+        "reason": "none",
+        "analysis": "monodromy",
+        "runtimeIdentity": "cdc-native-u2-v1",
+        "sourceDigest": "blake3:0f0e8acdd715a5135e8ab13d83891b58d4940cf4b856a3933061d4c638509328",
+        "sourceDigestSurface": "grammar-1-canonical",
+        "universal": {
+          "id": "fixture-u720",
+          "status": "accepted",
+          "reason": "none",
+          "resultDigest": "blake3:bd0578a92ba8d23a2c6ec31630c15b96d9659c2fa52750301a53d0b1a6323821",
+          "receptiveAngle": "0.375000",
+          "radiantAngle": "-0.250000",
+          "holonomy": "0.125000",
+          "winding": 2
+        },
+        "manifestDigest": "blake3:ed3fd94030cc5318cfea59233a17d224208fdfd26bfdf43cbe6466b38f074d5c",
+        "methods": {
+          "flow": "explicit-euler-map",
+          "commit": "scheduled-fixed-mode-reset",
+          "nest": "fixed-trit-overwrite",
+          "guard": "unbound-no-saltation",
+          "spectrum": "validated-real-schur"
+        },
+        "methodDetail": {
+          "flow": {
+            "localMap": "explicit-euler-synchronous",
+            "jacobian": "analytic-exact",
+            "finiteDifferenceOracle": null
+          },
+          "commit": {
+            "kind": "scheduled-fixed-mode-reset",
+            "continuousDerivative": "identity-within-fixed-mode",
+            "saltation": "not-applicable"
+          },
+          "nest": {
+            "localMap": "fixed-trit-overwrite",
+            "jacobian": "analytic-exact",
+            "childPrior": "overwrite-parent-belief"
+          },
+          "guard": {
+            "binding": null,
+            "eventLocalization": null,
+            "saltation": null
+          },
+          "spectrum": {
+            "solver": "validated-real-schur",
+            "ordering": "sorted-multipliers"
+          }
+        },
+        "tolerances": {
+          "recurrenceAbsolute": 0.000001,
+          "recurrenceRelative": 0,
+          "neutral": 1e-9,
+          "schur": 1e-10
+        },
+        "finiteDifference": {
+          "status": "not-run",
+          "step": null,
+          "residual": null
+        },
+        "eventBudget": {
+          "status": "not-applicable",
+          "limit": null,
+          "used": null
+        },
+        "neutralModeRemoval": {
+          "status": "not-requested",
+          "generatorDigest": null,
+          "removedModes": null
+        },
+        "determinism": "source-order,row-major,canonical-float,sorted-multipliers",
+        "recurrence": {
+          "kind": "relative",
+          "scope": "relative",
+          "residual": 0,
+          "absoluteTolerance": 0.000001,
+          "relativeTolerance": 0,
+          "normalizedResidual": 0,
+          "verified": true,
+          "authorizesMonodromy": true,
+          "discreteStateVerified": true,
+          "restorationDerivativeApplied": true,
+          "restoration": {
+            "action": "cover-phase-translation",
+            "coordinate": "cover.phase.theta",
+            "coordinateIndex": 6,
+            "displacement": 12.566370614359172,
+            "equivarianceWitness": {
+              "id": "isolated-affine-two-turn-cover",
+              "verified": true,
+              "fieldGain": 0,
+              "fieldCellCount": 1,
+              "incidentChannelCount": 0,
+              "mutatingStepCount": 0
+            },
+            "sectionWitness": {
+              "id": "u1-two-turn-returned-restored",
+              "verified": true,
+              "winding": 2,
+              "projection": "returned",
+              "sheet": "restored"
+            },
+            "derivativeRows": 13,
+            "derivativeColumns": 13,
+            "derivativeDigest": "blake3:737995db71af62fc1f0e0beb6b2153bd7ddd20eacb8b745eaf4a413060123223",
+            "derivative": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "discreteState": {
+          "verified": true,
+          "initialDigest": "blake3:f364aa9edbc5566ea842f224196cfbfc6b636a89d12fbe7c093c61b72be4f2d3",
+          "finalDigest": "blake3:f364aa9edbc5566ea842f224196cfbfc6b636a89d12fbe7c093c61b72be4f2d3",
+          "initial": [
+            {
+              "cell": "agent.a",
+              "coordinate": "agent.a.theta",
+              "sourceIndex": 0,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.b",
+              "coordinate": "agent.b.theta",
+              "sourceIndex": 1,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.c",
+              "coordinate": "agent.c.theta",
+              "sourceIndex": 2,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.a",
+              "coordinate": "context.a.theta",
+              "sourceIndex": 3,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.b",
+              "coordinate": "context.b.theta",
+              "sourceIndex": 4,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.c",
+              "coordinate": "context.c.theta",
+              "sourceIndex": 5,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "cover.phase",
+              "coordinate": "cover.phase.theta",
+              "sourceIndex": 6,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            }
+          ],
+          "final": [
+            {
+              "cell": "agent.a",
+              "coordinate": "agent.a.theta",
+              "sourceIndex": 0,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.b",
+              "coordinate": "agent.b.theta",
+              "sourceIndex": 1,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "agent.c",
+              "coordinate": "agent.c.theta",
+              "sourceIndex": 2,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.a",
+              "coordinate": "context.a.theta",
+              "sourceIndex": 3,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.b",
+              "coordinate": "context.b.theta",
+              "sourceIndex": 4,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "context.c",
+              "coordinate": "context.c.theta",
+              "sourceIndex": 5,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            },
+            {
+              "cell": "cover.phase",
+              "coordinate": "cover.phase.theta",
+              "sourceIndex": 6,
+              "hasLatch": false,
+              "latch": null,
+              "mode": "unlatched"
+            }
+          ]
+        },
+        "dimension": 13,
+        "coordinates": [
+          {
+            "name": "agent.a.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "agent.b.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "agent.c.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.a.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.b.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "context.c.theta",
+            "period": 6.283185307179586
+          },
+          {
+            "name": "cover.phase.theta",
+            "period": 0
+          },
+          {
+            "name": "agent.belief",
+            "period": 0
+          },
+          {
+            "name": "agent.prior",
+            "period": 0
+          },
+          {
+            "name": "context.belief",
+            "period": 0
+          },
+          {
+            "name": "context.prior",
+            "period": 0
+          },
+          {
+            "name": "cover.belief",
+            "period": 0
+          },
+          {
+            "name": "cover.prior",
+            "period": 0
+          }
+        ],
+        "initialState": [
+          0,
+          0,
+          1.5707963267948966,
+          0,
+          1.5707963267948966,
+          3.141592653589793,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "finalState": [
+          0,
+          0,
+          1.5707963267948966,
+          0,
+          1.5707963267948966,
+          3.141592653589793,
+          12.566370614359172,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "events": [
+          {
+            "kind": "flow",
+            "time": 1,
+            "transverse": null
+          },
+          {
+            "kind": "flow",
+            "time": 2,
+            "transverse": null
+          },
+          {
+            "kind": "flow",
+            "time": 3,
+            "transverse": null
+          },
+          {
+            "kind": "endpoint-restoration",
+            "time": 3,
+            "transverse": null
+          }
+        ],
+        "pathTangentDigest": "blake3:737995db71af62fc1f0e0beb6b2153bd7ddd20eacb8b745eaf4a413060123223",
+        "monodromyDigest": "blake3:737995db71af62fc1f0e0beb6b2153bd7ddd20eacb8b745eaf4a413060123223",
+        "monodromy": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        "multipliers": [
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          },
+          {
+            "real": 1,
+            "imag": 0,
+            "modulus": 1,
+            "mode": "physical"
+          }
+        ],
+        "spectrumDiagnostics": {
+          "spectralRadius": 1,
+          "schur": {
+            "reconstructionResidual": 0,
+            "orthogonalityResidual": 0,
+            "triangularResidual": 0,
+            "validationTolerance": 1e-10
+          }
+        },
+        "backend": "lapack-dgees",
+        "classification": "marginal"
+      }
     }
-    // paint far side first so the near side crosses over it
-    quads.sort(function (p, q) { return p.depth - q.depth; });
-    var parts = [];
-    quads.forEach(function (q) {
-      var lift = (q.depth + 1) / 2;                 // 0 far … 1 near
-      var hue = Math.abs(Math.cos((q.t + phase) / 2)); // sheet handedness
-      var fill = hue > 0.5 ? "49,226,231" : "112,125,221";
-      var alpha = (0.20 + lift * 0.62).toFixed(3);
-      var dAttr = "M" + q.pts.map(function (p) {
-        return p.x.toFixed(2) + " " + p.y.toFixed(2);
-      }).join("L") + "Z";
-      parts.push('<path d="' + dAttr + '" fill="rgba(' + fill + "," + alpha + ')"/>');
-    });
-    // leading edge highlight and the traveling incident
-    var head = point(-phase, 1, phase);
-    parts.push('<circle cx="' + head.x.toFixed(2) + '" cy="' + head.y.toFixed(2) +
-      '" r="3.2" fill="#f8fbff"/>');
-    svg.innerHTML =
-      '<circle r="' + (R + 20) + '" fill="none" stroke="#43f0ec" stroke-opacity=".2" ' +
-      'stroke-width="1" stroke-dasharray="2 7"/>' + parts.join("");
-  }
+  ]
+}
+</script>
 
-  if (reduce) {
-    render(Math.PI * 0.6);
-  } else {
-    var start = null;
-    requestAnimationFrame(function step(ts) {
-      if (start === null) { start = ts; }
-      // one full restoration (two turns) every 2.4s × 2, per the motion token
-      var turns = ((ts - start) / (2400 * 2)) % 1;
-      render(turns * Math.PI * 4);
-      requestAnimationFrame(step);
+<script>
+(function(){
+  "use strict";
+
+  const STAGES=["source","u1","tangent","recurrence","spectrum","receipt"];
+  const TITLES={source:"Source",u1:"U1 Closure",tangent:"Path Tangent",recurrence:"Recurrence",spectrum:"Floquet Spectrum",receipt:"Receipt / Paper"};
+  const SUMMARIES={
+    source:"Exact source boundary, canonical digest, runtime identity, and executable-path manifest.",
+    u1:"Lifted-cover closure remains distinct from full-state recurrence.",
+    tangent:"The source-bound linearized path and its executed event itinerary.",
+    recurrence:"Full, projected, or relative return is the gate before monodromy.",
+    spectrum:"Multipliers exist only when a verified recurrence authorizes monodromy.",
+    receipt:"Maturity, verdict, scope, exact receipt, and bounded public claims."
+  };
+  let snapshot,replay,selectedId="canonical-held",selectedStage="source";
+
+  function node(tag,className,text){
+    const element=document.createElement(tag);
+    if(className) element.className=className;
+    if(text!==undefined) element.textContent=String(text);
+    return element;
+  }
+  function clear(element){while(element.firstChild) element.removeChild(element.firstChild)}
+  function shortDigest(value){return value?value.slice(0,19)+"…"+value.slice(-8):"not emitted"}
+  function value(value){
+    if(value===null||value===undefined) return "not emitted";
+    if(value===true) return "verified";
+    if(value===false) return "not verified";
+    return String(value);
+  }
+  function glyph(state){return state==="accepted"?"+":state==="held"?"0":state==="violated"?"−":"∅"}
+  function stateText(state){return state==="not-emitted"?"not emitted":state}
+  function statusNode(state,detail){
+    const label=node("span","state-label state-"+state);
+    label.append(node("span","state-dot",glyph(state)));
+    label.append(document.createTextNode(detail||stateText(state)));
+    return label;
+  }
+  function factGrid(items){
+    const list=node("dl","fact-grid");
+    items.forEach(function(item){
+      const wrap=node("div","fact");
+      wrap.append(node("dt","",item[0]));
+      wrap.append(node("dd",item[2]===false?"":"mono",value(item[1])));
+      list.append(wrap);
     });
+    return list;
+  }
+  function evidenceSection(name,title,items){
+    const section=node("section","evidence-section");section.dataset.evidence=name;
+    section.append(node("h3","",title));section.append(factGrid(items));return section;
+  }
+  function callout(kind,title,copy){
+    const box=node("div","callout "+kind);
+    box.append(node("strong","",title));
+    box.append(node("p","",copy));
+    return box;
+  }
+  function table(captionText,headers,rows){
+    const wrap=node("div","local-scroll");
+    const tableNode=node("table");
+    tableNode.append(node("caption","",captionText));
+    const head=node("thead"),headRow=node("tr");
+    headers.forEach(function(header){headRow.append(node("th","",header))});
+    head.append(headRow);tableNode.append(head);
+    const body=node("tbody");
+    rows.forEach(function(row){
+      const tr=node("tr");row.forEach(function(cell){tr.append(node("td","mono",value(cell)))});body.append(tr);
+    });
+    tableNode.append(body);wrap.append(tableNode);return wrap;
+  }
+  function discreteChanges(discreteState){
+    if(!discreteState||!Array.isArray(discreteState.initial)||!Array.isArray(discreteState.final)) return [];
+    return discreteState.initial.map(function(initial,index){
+      const final=discreteState.final[index];
+      return !final||initial.mode===final.mode?null:{initial:initial,final:final};
+    }).filter(Boolean);
+  }
+  function validatesAnalysisBoundary(record){
+    if(!record||!record.recurrence) return false;
+    const recurrence=record.recurrence,currentSpectralHoldReasons=["spectral-backend-unavailable","spectral-backend-failed","variational-validation-failed"],currentTangentHoldReasons=["recurrence-mode-mismatch","recurrence-residual","undeclared-quotient"],digestPattern=/^blake3:[0-9a-f]{64}$/,identityDerivativeDigest="blake3:737995db71af62fc1f0e0beb6b2153bd7ddd20eacb8b745eaf4a413060123223";
+    function nearlyEqual(left,right){
+      if(!Number.isFinite(left)||!Number.isFinite(right)) return false;
+      const scale=Math.max(1,Math.abs(left),Math.abs(right));
+      return Math.abs(left-right)<=64*Number.EPSILON*scale;
+    }
+    function hasCurrentRelativeRestoration(candidate,restoration){
+      const coordinateIndex=restoration&&restoration.coordinateIndex,equivariant=restoration&&restoration.equivarianceWitness,section=restoration&&restoration.sectionWitness,dimension=candidate.dimension;
+      return Boolean(restoration&&restoration.action==="cover-phase-translation"&&Number.isInteger(coordinateIndex)&&coordinateIndex>=0&&coordinateIndex<dimension&&restoration.coordinate===candidate.coordinates[coordinateIndex].name&&candidate.coordinates[coordinateIndex].period===0&&nearlyEqual(restoration.displacement,4*Math.PI)&&equivariant&&equivariant.id==="isolated-affine-two-turn-cover"&&equivariant.verified===true&&equivariant.fieldGain===0&&equivariant.fieldCellCount===1&&equivariant.incidentChannelCount===0&&equivariant.mutatingStepCount===0&&section&&section.id==="u1-two-turn-returned-restored"&&section.verified===true&&section.winding===2&&candidate.universal&&candidate.universal.winding===section.winding&&section.projection==="returned"&&section.sheet==="restored"&&restoration.derivativeRows===dimension&&restoration.derivativeColumns===dimension&&restoration.derivativeDigest===identityDerivativeDigest&&Array.isArray(restoration.derivative)&&restoration.derivative.length===dimension*dimension&&restoration.derivative.every(function(value,index){const row=Math.floor(index/dimension),column=index%dimension;return value===(row===column?1:0)}));
+    }
+    function recurrenceMetrics(candidate){
+      const candidateRecurrence=candidate.recurrence,dimension=candidate.dimension;
+      if(!Number.isInteger(dimension)||dimension<=0||!Array.isArray(candidate.coordinates)||candidate.coordinates.length!==dimension||!Array.isArray(candidate.initialState)||candidate.initialState.length!==dimension||!Array.isArray(candidate.finalState)||candidate.finalState.length!==dimension||!candidate.initialState.every(function(value){return Number.isFinite(value)})||!candidate.finalState.every(function(value){return Number.isFinite(value)})||!candidate.coordinates.every(function(coordinate){return Boolean(coordinate&&typeof coordinate.name==="string"&&coordinate.name.length>0&&Number.isFinite(coordinate.period)&&coordinate.period>=0)})||!Number.isFinite(candidateRecurrence.absoluteTolerance)||candidateRecurrence.absoluteTolerance<=0||!Number.isFinite(candidateRecurrence.relativeTolerance)||candidateRecurrence.relativeTolerance<0||!nearlyEqual(candidateRecurrence.absoluteTolerance,candidate.tolerances&&candidate.tolerances.recurrenceAbsolute)||!nearlyEqual(candidateRecurrence.relativeTolerance,candidate.tolerances&&candidate.tolerances.recurrenceRelative)||typeof candidateRecurrence.discreteStateVerified!=="boolean"||!candidate.discreteState||candidate.discreteState.verified!==candidateRecurrence.discreteStateVerified) return null;
+      const restored=candidate.finalState.slice();
+      if(candidateRecurrence.kind==="relative"){
+        const restoration=candidateRecurrence.restoration;
+        if(candidateRecurrence.scope!=="relative"||!hasCurrentRelativeRestoration(candidate,restoration)) return null;
+        restored[restoration.coordinateIndex]-=restoration.displacement;
+      }else if(candidateRecurrence.kind!=="full"||candidateRecurrence.scope!=="full"||candidateRecurrence.restoration!==null) return null;
+      let residual=0,normalizedResidual=0;
+      for(let index=0;index<dimension;index+=1){
+        const period=candidate.coordinates[index].period;
+        let difference=restored[index]-candidate.initialState[index];
+        if(period>0){difference%=period;if(difference>0.5*period) difference-=period;else if(difference< -0.5*period) difference+=period}
+        const coordinateResidual=Math.abs(difference),allowed=candidateRecurrence.absoluteTolerance+candidateRecurrence.relativeTolerance*Math.max(Math.abs(restored[index]),Math.abs(candidate.initialState[index])),normalized=coordinateResidual/allowed;
+        residual=Math.max(residual,coordinateResidual);normalizedResidual=Math.max(normalizedResidual,normalized);
+      }
+      return {residual:residual,normalizedResidual:normalizedResidual,verified:normalizedResidual<=1&&candidateRecurrence.discreteStateVerified};
+    }
+    function hasRetainedMonodromy(candidate){return digestPattern.test(candidate.monodromyDigest)&&Number.isInteger(candidate.dimension)&&candidate.dimension>0&&Array.isArray(candidate.monodromy)&&candidate.monodromy.length===candidate.dimension*candidate.dimension&&candidate.monodromy.every(function(item){return Number.isFinite(item)})}
+    function hasAuthorizedRestoration(candidate){
+      const candidateRecurrence=candidate.recurrence;
+      if(candidateRecurrence.kind==="full") return candidateRecurrence.scope==="full"&&candidateRecurrence.restorationDerivativeApplied===false&&candidateRecurrence.restoration===null;
+      if(candidateRecurrence.kind!=="relative") return false;
+      const restoration=candidateRecurrence.restoration;
+      return Boolean(candidateRecurrence.scope==="relative"&&candidateRecurrence.restorationDerivativeApplied===true&&hasCurrentRelativeRestoration(candidate,restoration));
+    }
+    function hasBoundedPositiveSpectrum(candidate){
+      const tolerance=candidate.tolerances&&candidate.tolerances.schur,diagnostics=candidate.spectrumDiagnostics;
+      return Boolean(Number.isFinite(tolerance)&&tolerance>0&&candidate.dimension===13&&candidate.classification==="marginal"&&Array.isArray(candidate.multipliers)&&candidate.multipliers.length===13&&candidate.multipliers.every(function(multiplier){return multiplier.mode==="physical"&&Number.isFinite(multiplier.real)&&Number.isFinite(multiplier.imag)&&Number.isFinite(multiplier.modulus)&&Math.abs(multiplier.real-1)<=tolerance&&Math.abs(multiplier.imag)<=tolerance&&Math.abs(multiplier.modulus-1)<=tolerance})&&diagnostics&&Number.isFinite(diagnostics.spectralRadius)&&Math.abs(diagnostics.spectralRadius-1)<=tolerance);
+    }
+    const undeclaredHoldEnvelope=record.status==="held"&&record.reason==="undeclared-quotient"&&record.analysis==="tangent"&&recurrence.authorizesMonodromy===false&&recurrence.restorationDerivativeApplied===false&&recurrence.restoration===null&&typeof recurrence.discreteStateVerified==="boolean"&&record.discreteState&&record.discreteState.verified===recurrence.discreteStateVerified&&Number.isFinite(recurrence.absoluteTolerance)&&recurrence.absoluteTolerance>0&&Number.isFinite(recurrence.relativeTolerance)&&recurrence.relativeTolerance>=0&&nearlyEqual(recurrence.absoluteTolerance,record.tolerances&&record.tolerances.recurrenceAbsolute)&&nearlyEqual(recurrence.relativeTolerance,record.tolerances&&record.tolerances.recurrenceRelative);
+    const projectedHold=Boolean(recurrence.scope==="projected"&&undeclaredHoldEnvelope&&["full","relative"].includes(recurrence.kind)&&Number.isFinite(recurrence.residual)&&recurrence.residual>=0&&Number.isFinite(recurrence.normalizedResidual)&&recurrence.normalizedResidual>=0&&recurrence.verified===false&&!(recurrence.normalizedResidual<=1&&recurrence.discreteStateVerified));
+    const unexecutableRelativeHold=Boolean(recurrence.kind==="relative"&&recurrence.scope==="relative"&&undeclaredHoldEnvelope&&recurrence.residual===0&&recurrence.normalizedResidual===0&&recurrence.verified===false&&recurrence.discreteStateVerified===false);
+    const nonAuthoritativeUndeclaredHold=projectedHold||unexecutableRelativeHold;
+    if(recurrence.scope==="projected"){
+      if(!projectedHold) return false;
+    }else if(!unexecutableRelativeHold){
+      const derivedRecurrence=recurrenceMetrics(record);
+      if(!derivedRecurrence||!nearlyEqual(recurrence.residual,derivedRecurrence.residual)||!nearlyEqual(recurrence.normalizedResidual,derivedRecurrence.normalizedResidual)||recurrence.verified!==derivedRecurrence.verified||recurrence.authorizesMonodromy!==derivedRecurrence.verified) return false;
+    }
+    const noSpectrum=record.multipliers===null&&record.spectrumDiagnostics===null;
+    if(record.status==="accepted") return record.reason==="none"&&record.analysis==="monodromy"&&recurrence.verified===true&&recurrence.authorizesMonodromy===true&&recurrence.discreteStateVerified===true&&hasAuthorizedRestoration(record)&&hasRetainedMonodromy(record)&&hasBoundedPositiveSpectrum(record)&&typeof record.backend==="string"&&record.backend.length>0&&record.spectrumDiagnostics!==null;
+    if(record.status!=="held"||record.classification!=="held") return false;
+    const spectralHold=currentSpectralHoldReasons.includes(record.reason);
+    if(spectralHold) return record.analysis==="monodromy"&&recurrence.verified===true&&recurrence.authorizesMonodromy===true&&recurrence.discreteStateVerified===true&&hasAuthorizedRestoration(record)&&hasRetainedMonodromy(record)&&record.backend===null&&noSpectrum;
+    return currentTangentHoldReasons.includes(record.reason)&&record.analysis==="tangent"&&(nonAuthoritativeUndeclaredHold||recurrence.verified===false)&&recurrence.authorizesMonodromy===false&&record.monodromyDigest===null&&record.monodromy===null&&record.backend===null&&noSpectrum;
+  }
+  function entry(){return snapshot.entries.find(function(item){return item.id===selectedId})}
+  function stageState(stage,record){
+    if(stage==="source") return record.sourceDigest?"accepted":"violated";
+    if(stage==="u1") return record.universal.status;
+    if(stage==="tangent") return record.pathTangentDigest?"accepted":"not-emitted";
+    if(stage==="recurrence") return record.recurrence&&record.recurrence.verified?"accepted":record.status;
+    if(stage==="spectrum") return record.multipliers?"accepted":record.analysis==="monodromy"&&record.status==="held"?"held":"not-emitted";
+    return "accepted";
+  }
+  function validate(data){
+    if(!data||data.schema!=="cdc.ui.verified-replay.v1") throw new Error("unsupported snapshot schema");
+    if(!data.toolchain||data.toolchain.major!==1||data.toolchain.minor!==5||data.toolchain.grammar!==1) throw new Error("snapshot is not bound to ABI 1.5 / grammar 1");
+    if(!Array.isArray(data.entries)||data.entries.length<2) throw new Error("recorded analysis set is incomplete");
+    const canonical=data.entries.find(function(item){return item.id==="canonical-held"});
+    const relative=data.entries.find(function(item){return item.id==="relative-fixture"});
+    function hasMethodContract(record){
+      const method=record&&record.methodDetail;
+      return Boolean(method&&method.flow&&method.commit&&method.nest&&method.guard&&method.spectrum&&
+        method.flow.localMap==="explicit-euler-synchronous"&&method.flow.jacobian==="analytic-exact"&&method.flow.finiteDifferenceOracle===null&&
+        method.commit.kind==="scheduled-fixed-mode-reset"&&method.commit.continuousDerivative==="identity-within-fixed-mode"&&method.commit.saltation==="not-applicable"&&
+        method.nest.localMap==="fixed-trit-overwrite"&&method.nest.jacobian==="analytic-exact"&&method.nest.childPrior==="overwrite-parent-belief"&&
+        method.guard.binding===null&&method.guard.eventLocalization===null&&method.guard.saltation===null&&
+        method.spectrum.solver==="validated-real-schur"&&method.spectrum.ordering==="sorted-multipliers"&&
+        record.finiteDifference&&record.finiteDifference.status==="not-run"&&record.finiteDifference.step===null&&record.finiteDifference.residual===null&&
+        record.eventBudget&&record.eventBudget.status==="not-applicable"&&record.eventBudget.limit===null&&record.eventBudget.used===null&&
+        record.neutralModeRemoval&&record.neutralModeRemoval.status==="not-requested"&&record.neutralModeRemoval.generatorDigest===null&&record.neutralModeRemoval.removedModes===null);
+    }
+    function hasDiscreteShape(record){
+      const state=record&&record.discreteState;
+      return Boolean(state&&typeof state.initialDigest==="string"&&typeof state.finalDigest==="string"&&Array.isArray(state.initial)&&Array.isArray(state.final)&&state.initial.length>0&&state.initial.length===state.final.length&&state.initial.every(function(initial,index){const final=state.final[index];return final&&typeof initial.cell==="string"&&initial.cell===final.cell&&typeof initial.mode==="string"&&typeof final.mode==="string"}));
+    }
+    if(!canonical||canonical.sourcePath!=="framework_loop.cdc") throw new Error("canonical source record missing");
+    if(!hasMethodContract(canonical.receipt)||!hasDiscreteShape(canonical.receipt)) throw new Error("canonical method or discrete-state contract missing");
+    const canonicalState=canonical.receipt.discreteState,canonicalChanges=discreteChanges(canonicalState);
+    if(!validatesAnalysisBoundary(canonical.receipt)||canonical.receipt.status!=="held"||canonical.receipt.reason!=="recurrence-mode-mismatch"||canonical.receipt.recurrence.authorizesMonodromy!==false||canonical.receipt.recurrence.discreteStateVerified!==false||canonicalState.verified!==false||canonicalState.initialDigest===canonicalState.finalDigest||canonicalChanges.length!==3||canonicalChanges.map(function(change){return change.initial.cell}).join(",")!=="agent.a,agent.b,agent.c"||canonical.receipt.multipliers!==null||canonical.receipt.spectrumDiagnostics!==null) throw new Error("canonical receipt illegally authorizes or obscures a discrete-state hold");
+    if(!relative||relative.role!=="positive-relative-calibration-fixture"||!hasMethodContract(relative.receipt)||!hasDiscreteShape(relative.receipt)) throw new Error("positive relative calibration receipt missing");
+    const relativeRecord=relative.receipt,relativeState=relativeRecord.discreteState,diagnostics=relativeRecord.spectrumDiagnostics,schur=diagnostics&&diagnostics.schur;
+    if(!validatesAnalysisBoundary(relativeRecord)||relativeRecord.status!=="accepted"||relativeRecord.recurrence.discreteStateVerified!==true||relativeState.verified!==true||relativeState.initialDigest!==relativeState.finalDigest||discreteChanges(relativeState).length!==0||!Array.isArray(relativeRecord.multipliers)||relativeRecord.multipliers.length!==13||!diagnostics||diagnostics.spectralRadius!==1||!schur||!Number.isFinite(schur.validationTolerance)||schur.validationTolerance<=0||![schur.reconstructionResidual,schur.orthogonalityResidual,schur.triangularResidual].every(function(residual){return Number.isFinite(residual)&&residual>=0&&residual<=schur.validationTolerance})) throw new Error("positive relative calibration diagnostics missing or invalid");
+  }
+  function renderClaim(item){
+    const isFixture=item.role==="positive-relative-calibration-fixture";
+    document.getElementById("claim-title").innerHTML=isFixture?"Relative calibration <em>accepted</em>":"Canonical tangent earned; <em>recurrence held</em>";
+    document.getElementById("claim-copy").textContent=item.claim.ceiling+(isFixture?" This is a bounded calibration fixture, not a promoted canonical claim.":"");
+    document.getElementById("claim-maturity").textContent=item.claim.maturity;
+    document.getElementById("claim-verdict").textContent=item.claim.verdict;
+    document.getElementById("claim-verdict").className="state-"+item.claim.verdict;
+    document.getElementById("claim-scope").textContent=item.claim.scope;
+    document.getElementById("claim-receipt").textContent=shortDigest(item.receiptFileSha256);
+  }
+  function renderRail(item){
+    document.querySelectorAll(".source-option").forEach(function(button){button.setAttribute("aria-checked",String(button.dataset.source===selectedId))});
+    document.getElementById("runtime-id").textContent=item.receipt.runtimeIdentity;
+    document.getElementById("snapshot-date").textContent=snapshot.authoritativeDate;
+    document.getElementById("raw-receipt-link").href=item.receiptHref;
+    document.getElementById("provenance-command").textContent=item.command;
+    document.getElementById("provenance-source").textContent=item.receipt.sourceDigest;
+    document.getElementById("provenance-manifest").textContent=item.receipt.manifestDigest;
+    document.getElementById("provenance-receipt").textContent=item.receiptFileSha256;
+  }
+  function renderFoundation(){
+    const target=document.getElementById("foundation-grid");clear(target);
+    [["flow θ council.b",replay.flow.thetaCouncilB],["commit",replay.commit.trits+" · "+replay.commit.status],["U1 cover",replay.universal.fullProjection+" / "+replay.universal.fullSheet],["bridge",replay.bridge.dyadic+" ↔ "+replay.bridge.triadic]].forEach(function(pair){target.append(node("span","",pair[0]));target.append(node("span","",pair[1]))});
+  }
+  function renderTabs(record){
+    document.querySelectorAll(".orbit-tab").forEach(function(tab){
+      const stage=tab.dataset.stage,state=stageState(stage,record),selected=stage===selectedStage;
+      tab.setAttribute("aria-selected",String(selected));tab.tabIndex=selected?0:-1;
+      tab.setAttribute("aria-label",TITLES[stage]+", "+stateText(state));
+      const target=tab.querySelector(".stage-state");clear(target);target.className="stage-state state-"+state;
+      target.append(node("span","state-dot",glyph(state)));target.append(document.createTextNode(stateText(state)));
+    });
+    document.getElementById("evidence-stage").setAttribute("aria-labelledby","tab-"+selectedStage);
+  }
+  function renderSource(body,item,record){
+    body.append(callout("accepted","Source transport verified","The browser is presenting a generated projection of a fresh native receipt. The grammar-1 canonical digest and executable-path manifest remain the runtime's values."));
+    body.append(factGrid([
+      ["Selected source",item.sourcePath],["Canonical source digest",record.sourceDigest],["Digest surface",record.sourceDigestSurface],["Source file SHA-256",item.sourceFileSha256],
+      ["Executable-path manifest",record.manifestDigest],["Runtime identity",record.runtimeIdentity],["Toolchain","ABI 1.5 · grammar 1",false],["Snapshot kind",snapshot.snapshotKind,false]
+    ]));
+  }
+  function renderU1(body,record){
+    const u=record.universal,layout=node("div","cover-stage");
+    const figure=node("figure","cover-figure");figure.setAttribute("role","img");figure.setAttribute("aria-label","Double cover receipt: one turn inverts the sheet and two turns restore it with winding "+u.winding+".");
+    figure.innerHTML='<svg viewBox="0 0 320 210" aria-hidden="true"><ellipse cx="160" cy="105" rx="116" ry="55" fill="none" stroke="#1d356b" stroke-width="2"/><path d="M44 105c35-75 198-75 232 0-34 75-197 75-232 0Z" fill="none" stroke="#31e2e7" stroke-width="7" stroke-linecap="round"/><path d="M44 105c35 75 198 75 232 0" fill="none" stroke="#707ddd" stroke-width="7" stroke-linecap="round"/><circle cx="160" cy="105" r="5" fill="#f8fbff"/><text x="160" y="30" fill="#707ddd" text-anchor="middle" font-size="12">one turn · sheet inverted</text><text x="160" y="194" fill="#31e2e7" text-anchor="middle" font-size="12">two turns · sheet restored</text></svg>';
+    figure.append(node("figcaption","","Static receipt state; motion is not used to imply analysis activity."));layout.append(figure);
+    layout.append(factGrid([["Universal",u.id],["U1 verdict",u.status+" · "+u.reason,false],["Winding",u.winding],["Receptive angle",u.receptiveAngle],["Radiant angle",u.radiantAngle],["Residual holonomy",u.holonomy],["Result digest",u.resultDigest]]));body.append(layout);
+  }
+  function renderTangent(body,record){
+    body.append(callout("accepted","Path tangent executed","A tangent is earned before recurrence. Its existence does not authorize a monodromy matrix or Floquet spectrum."));
+    body.append(factGrid([["Dimension",record.dimension],["Path tangent digest",record.pathTangentDigest],["Flow method",record.methods.flow],["Commit method",record.methods.commit],["Nest method",record.methods.nest],["Guard method",record.methods.guard],["Determinism",record.determinism]]));
+    body.append(table("Coordinate manifest — "+record.coordinates.length+" state coordinates",["#","coordinate","period"],record.coordinates.map(function(coordinate,index){return[index+1,coordinate.name,coordinate.period]})));
+    const timeline=node("div","timeline");record.events.forEach(function(event){const item=node("div","event");item.append(node("strong","",event.kind));item.append(node("span","","t = "+event.time+(event.transverse===null?" · scheduled":" · transverse")));timeline.append(item)});body.append(timeline);
+  }
+  function renderRecurrence(body,record){
+    const recurrence=record.recurrence;
+    if(!recurrence){body.append(callout("held","No recurrence record emitted","The primal U1 result held, so downstream U2 state is absent."));return}
+    if(!recurrence.verified){body.append(callout("held","Full-state recurrence held · "+record.reason,"U1 accepted and the tangent executed, but the discrete mode changed at three canonical cells. Monodromy remains unauthorized."))}
+    else{body.append(callout("accepted","Relative recurrence verified","The explicit restoration and discrete-mode identity are both verified for this calibration fixture. Neither can be silently generalized to the canonical source."))}
+    body.append(factGrid([["Kind",recurrence.kind],["Scope",recurrence.scope],["Residual",recurrence.residual],["Absolute tolerance",recurrence.absoluteTolerance],["Normalized residual",recurrence.normalizedResidual],["Verified",recurrence.verified],["Authorizes monodromy",recurrence.authorizesMonodromy],["Restoration derivative",recurrence.restorationDerivativeApplied?"applied":"not applied",false]]));
+    const discrete=record.discreteState,changes=discreteChanges(discrete);
+    body.append(evidenceSection("discrete-state","Discrete-mode recurrence receipt",[["Recurrence verified",recurrence.verified],["Discrete-mode verified",recurrence.discreteStateVerified],["Discrete-state receipt",discrete.verified],["Digest relation",discrete.initialDigest===discrete.finalDigest?"identical":"changed",false],["Initial discrete digest",discrete.initialDigest],["Final discrete digest",discrete.finalDigest]]));
+    if(changes.length){
+      const changesTable=table("Discrete-mode changes",["cell","initial mode","final mode","latch"],changes.map(function(change){return[change.initial.cell,change.initial.mode,change.final.mode,(change.initial.latch===null?"none":change.initial.latch)+" → "+(change.final.latch===null?"none":change.final.latch)]}));
+      changesTable.dataset.evidence="discrete-changes";body.append(changesTable);
+    }
+    if(recurrence.restoration){const r=recurrence.restoration;body.append(callout("accepted","Explicit restoration · "+r.action,"Equivariance and U1 section witnesses are verified before Dρ is applied."));body.append(factGrid([["Coordinate",r.coordinate],["Displacement",r.displacement],["Equivariance witness",r.equivarianceWitness.id+" · "+value(r.equivarianceWitness.verified)],["Section witness",r.sectionWitness.id+" · "+value(r.sectionWitness.verified)],["Dρ shape",r.derivativeRows+" × "+r.derivativeColumns,false],["Dρ digest",r.derivativeDigest]]))}
+  }
+  function renderSpectrum(body,record){
+    if(!record.multipliers){
+      const authorized=record.recurrence&&record.recurrence.authorizesMonodromy;
+      body.append(authorized?callout("held","Spectrum held · "+record.reason,"Recurrence authorized monodromy, but the spectral stage held. Any retained monodromy remains tangent evidence; no Floquet multipliers or stability spectrum were emitted."):callout("held","Spectrum not emitted","Recurrence did not authorize monodromy. No Floquet plot, multiplier table, backend result, or stability classification exists for this run."));
+      body.append(factGrid([["Analysis carrier",record.analysis,false],["Recurrence authorization",record.recurrence.authorizesMonodromy],["Monodromy digest",record.monodromyDigest],["Multipliers",record.multipliers],["Backend",record.backend],["Classification",record.classification,false]]));return
+    }
+    body.append(callout("accepted","Accepted analysis · marginal classification","Marginal is a scientific classification, not a transport warning. All thirteen physical multipliers are exactly on the unit circle in this fixture receipt."));
+    const layout=node("div","spectrum-layout"),figure=node("figure","unit-figure");figure.setAttribute("role","img");figure.setAttribute("aria-label","Unit circle multiplier plot: thirteen physical multipliers coincide at real one, imaginary zero.");
+    figure.innerHTML='<svg viewBox="0 0 260 260" aria-hidden="true"><line x1="24" y1="130" x2="236" y2="130" stroke="#1d356b"/><line x1="130" y1="24" x2="130" y2="236" stroke="#1d356b"/><circle cx="130" cy="130" r="88" fill="none" stroke="#707ddd" stroke-width="2"/><circle cx="218" cy="130" r="8" fill="#31e2e7" stroke="#f8fbff" stroke-width="2"/><text x="206" y="116" fill="#f8fbff" font-size="13">×13</text><text x="236" y="146" fill="#707ddd" text-anchor="end" font-size="10">Re λ</text><text x="138" y="34" fill="#707ddd" font-size="10">Im λ</text></svg>';
+    figure.append(node("figcaption","","Equivalent table provided; point overlap is labeled ×13."));layout.append(figure);
+    layout.append(table("Floquet multipliers",["#","Re","Im","|λ|","mode"],record.multipliers.map(function(multiplier,index){return[index+1,multiplier.real,multiplier.imag,multiplier.modulus,multiplier.mode]})));body.append(layout);
+    body.append(factGrid([["Monodromy digest",record.monodromyDigest],["Backend",record.backend],["Classification",record.classification,false],["Dimension",record.dimension]]));
+    const diagnostics=record.spectrumDiagnostics,schur=diagnostics.schur;
+    body.append(evidenceSection("spectrum-diagnostics","Validated Schur diagnostics",[["Spectral radius",diagnostics.spectralRadius],["Reconstruction residual",schur.reconstructionResidual],["Orthogonality residual",schur.orthogonalityResidual],["Triangular residual",schur.triangularResidual],["Validation tolerance",schur.validationTolerance]]));
+  }
+  function renderReceipt(body,item,record){
+    body.append(callout(record.status==="accepted"?"accepted":"held","Claim remains four-coordinate","Maturity, verdict, exact scope, and receipt travel together. A held result is useful evidence and does not erase the executed tangent."));
+    const openObligation=record.multipliers?"canonical promotion forbidden; fixture remains bounded":record.recurrence&&record.recurrence.authorizesMonodromy?"resolve spectral hold before multiplier claims":"qualifying recurrence before monodromy";
+    body.append(factGrid([["Maturity",item.claim.maturity,false],["Verdict",item.claim.verdict,false],["Scope",item.claim.scope],["Receipt schema",record.schema],["Receipt file",item.receiptPath],["Receipt file SHA-256",item.receiptFileSha256],["Runtime command",item.command],["Open obligation",openObligation,false]]));
+    const method=record.methodDetail,details=node("details","method-contract");details.dataset.evidence="method-contract";details.append(node("summary","","Method and placeholder contract"));
+    details.append(factGrid([["Flow local map",method.flow.localMap,false],["Flow Jacobian",method.flow.jacobian,false],["Finite-difference oracle",record.finiteDifference.status,false],["Commit map",method.commit.kind,false],["Commit continuous derivative",method.commit.continuousDerivative,false],["Commit saltation",method.commit.saltation,false],["Nest local map",method.nest.localMap,false],["Nest Jacobian",method.nest.jacobian,false],["Nest child prior",method.nest.childPrior,false],["Guard binding",method.guard.binding===null?"none · explicit placeholder":method.guard.binding,false],["Guard event localization",method.guard.eventLocalization===null?"none · explicit placeholder":method.guard.eventLocalization,false],["Guard saltation",method.guard.saltation===null?"none · explicit placeholder":method.guard.saltation,false],["Event budget",record.eventBudget.status,false],["Neutral-mode removal",record.neutralModeRemoval.status,false],["Spectrum solver",method.spectrum.solver,false],["Multiplier ordering",method.spectrum.ordering,false]]));body.append(details);
+    const actions=node("div","proof-actions");const raw=node("a","action","Open exact receipt");raw.href=item.receiptHref;actions.append(raw);
+    const copy=node("button","action secondary","Copy runtime command");copy.type="button";copy.addEventListener("click",function(){copyText(item.command,copy)});actions.append(copy);
+    const note=node("span","copy-note","The console does not rewrite or recompute the native receipt.");actions.append(note);body.append(actions);
+  }
+  async function copyText(text,button){
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+      else{const area=node("textarea");area.value=text;area.setAttribute("readonly","");area.style.position="fixed";area.style.opacity="0";document.body.append(area);area.select();if(!document.execCommand("copy")) throw new Error("copy unavailable");area.remove()}
+      button.textContent="Command copied";window.setTimeout(function(){button.textContent="Copy runtime command"},1600);
+    }catch(error){button.textContent="Copy unavailable · select command above"}
+  }
+  function renderStage(item){
+    const record=item.receipt,state=stageState(selectedStage,record),statusTarget=document.getElementById("stage-status"),body=document.getElementById("stage-body");
+    document.getElementById("stage-title").textContent=TITLES[selectedStage];document.getElementById("stage-summary").textContent=SUMMARIES[selectedStage];statusTarget.replaceWith(statusNode(state,stateText(state)));const fresh=document.querySelector(".stage-head .state-label");fresh.id="stage-status";clear(body);
+    if(selectedStage==="source") renderSource(body,item,record);else if(selectedStage==="u1") renderU1(body,record);else if(selectedStage==="tangent") renderTangent(body,record);else if(selectedStage==="recurrence") renderRecurrence(body,record);else if(selectedStage==="spectrum") renderSpectrum(body,record);else renderReceipt(body,item,record);
+  }
+  function render(){const item=entry();renderClaim(item);renderRail(item);renderTabs(item.receipt);renderStage(item)}
+  function chooseSource(id){selectedId=id;selectedStage="source";render();document.getElementById("tab-source").focus()}
+  function chooseStage(stage,moveFocus){selectedStage=stage;render();if(moveFocus)document.getElementById("tab-"+stage).focus()}
+  function wire(){
+    document.querySelectorAll(".source-option").forEach(function(button){button.addEventListener("click",function(){chooseSource(button.dataset.source)})});
+    document.querySelectorAll(".orbit-tab").forEach(function(tab){
+      tab.addEventListener("click",function(){chooseStage(tab.dataset.stage,false)});
+      tab.addEventListener("keydown",function(event){let index=STAGES.indexOf(tab.dataset.stage);if(event.key==="ArrowRight")index=(index+1)%STAGES.length;else if(event.key==="ArrowLeft")index=(index+STAGES.length-1)%STAGES.length;else if(event.key==="Home")index=0;else if(event.key==="End")index=STAGES.length-1;else return;event.preventDefault();chooseStage(STAGES[index],true)});
+    });
+  }
+  try{
+    replay=JSON.parse(document.getElementById("replay-data").textContent);snapshot=JSON.parse(document.getElementById("u2-snapshot-data").textContent);validate(snapshot);renderFoundation();wire();render();
+  }catch(error){
+    document.getElementById("evidence-shell").hidden=true;document.getElementById("claim-title").textContent="No scientific claim emitted";document.getElementById("claim-copy").textContent="The replay transport failed validation.";document.getElementById("fatal-reason").textContent=error instanceof Error?error.message:String(error);document.getElementById("fatal-state").hidden=false;
   }
 }());
 </script>

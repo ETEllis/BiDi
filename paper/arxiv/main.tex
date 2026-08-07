@@ -1,471 +1,484 @@
 \documentclass[11pt]{article}
 
 \usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{amsmath,amssymb,mathtools}
 \usepackage[margin=1in]{geometry}
 \usepackage[hidelinks]{hyperref}
 \usepackage{booktabs}
+\usepackage{tabularx}
 \usepackage{xcolor}
 \usepackage{listings}
 
+\setlength{\emergencystretch}{2em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \lstset{
   basicstyle=\ttfamily\small,
   breaklines=true,
   columns=fullflexible,
   frame=single,
   keepspaces=true,
-  keywordstyle=\bfseries,
   commentstyle=\itshape\color{gray}
 }
 
-\newtheorem{definition}{Definition}
-\newtheorem{proposition}{Proposition}
-\newtheorem{claim}{Claim}
-
 \newcommand{\CDC}{BiDi Coherence-Delta Calculus}
-\newcommand{\C}{\mathcal{C}}
+\newcommand{\Uop}{\mathcal{U}}
 \newcommand{\eps}{\varepsilon}
-\newcommand{\flow}[1]{\xrightarrow{#1}_{d}}
-\newcommand{\commit}{\xrightarrow{\beta}}
-\newcommand{\parcomp}{\mathbin{\|}}
-\newcommand{\rot}{\circlearrowright}
-\newcommand{\botv}{\bot}
-\newcommand{\bidi}{\mathrm{bidi}\gamma\Delta}
-\newcommand{\nest}[1]{\mathopen{[\![}#1\mathclose{]\!]}}
+\newcommand{\R}{\mathbb{R}}
 
-\title{\CDC:\\A Compact Executable Calculus for Hybrid Continuous-Discrete Coherence}
+\title{\CDC:\\Receipt-Bound Hybrid Reduction and\\Recurrence-Gated Variational Analysis}
 \author{Edward Ellis\\Independent Researcher}
-\date{June 18, 2026}
+\date{August 7, 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We introduce \CDC, a small formal substrate for systems that combine continuous
-dynamics, event-triggered balanced-ternary commitments, delayed angular coupling, local
-invariants, nested reference frames, and belief/error minimization. The calculus
-uses five canonical primitives---cells, channels, modules, fields, and
-commits---plus a bidirectional coherence-delta operator for coupling nested
-scales and path endpoints. Its current artifact includes a native source
-language (\texttt{.cdc}), one minimal Python bootloader, non-Python bridge and
-reducer runtimes, generated higher-arity bridge codebooks, native law witnesses,
-a finite proof checker, Lean/Coq finite carrier and algebraic law mirrors, and
-capability witnesses for hybrid flow, off-grid commits, delay lines,
-angle-biased relation channels, multirate nesting, predictive belief updates,
-local plasticity, local trace-order windows, balanced-ternary trace/window measurement, and a two-counter
-universality construction. The artifact includes a mechanized finite-carrier
-proof layer for the n=6 balanced-ternary walk spectrum plus finite algebraic
-law checks, while continuous-reduction proof obligations remain staged explicitly.
+We present \CDC, a source language and executable reference system for
+guarded hybrid state evolution. Its semantic center contains three primitive
+reductions: synchronous phase flow, balanced-ternary commit, and nested
+belief/prior exchange. Derived layers provide local observation, durable
+effects, a guarded Universal Operator (U1), and a variational Universal
+Operator (U2). U1 accepts a lifted double-cover closure only when reciprocal
+relation roles, sheet restoration, holonomy, local commits, record/decision
+agreement, and effect gating all pass. U2 differentiates that exact executed
+path, then independently verifies complete or explicitly restored recurrence
+before constructing a monodromy operator or emitting characteristic
+multipliers. This distinction is operational: the canonical two-turn task loop
+accepts U1 and yields a source-bound 13-coordinate tangent, but complete native
+state recurrence is held because latch mode, belief, prior, and unwrapped phase
+do not all return. Consequently, no canonical-loop multipliers are emitted. A
+separate calibration fixture with an explicit $4\pi$ endpoint restoration and
+complete derivative yields $M_{\mathrm{rel}}=I_{13}$ and a marginal spectrum.
+The artifact binds results to canonical-source, state-manifest, tangent, return,
+and spectrum receipts; exercises analytic, numerical, negative, sanitizer, and
+permanent-mutant gates; and mechanizes only its precisely named finite
+carrier, event-order, cone, sheet, aperture, and barrier statements in Lean and
+Rocq. Richer continuous semantics and physical interpretations remain explicit
+obligations rather than inferred conclusions.
 \end{abstract}
 
-\section{Motivation}
+\section{Introduction}
 
-Software systems that model embodied agents, mixed-reality worlds, adaptive
-interfaces, simulations, and reactive infrastructure often need several regimes
-at once: continuous flow, discrete state transitions, delayed influence,
-invariants, nested scale, belief updates, and local policy gates. These regimes
-are usually split across unrelated tools: dynamical systems, event buses, state
-machines, workflow runtimes, neural models, policy engines, and dataflow graphs.
+Hybrid software often needs continuous evolution, discrete admissibility,
+nested reference frames, local observation, and effects in one auditable object.
+Classical hybrid-automata theory supplies a rigorous setting for continuous
+modes and discrete transitions \cite{henzinger1996}. CDC narrows that ambition to
+a compact executable source contract whose higher-order claims are controlled by
+receipts.
 
-\CDC\ is an attempt to compress these regimes into one executable formal object.
-The goal is not to replace every specialized runtime. The goal is to give hybrid
-systems one shared semantic spine:
+The contribution is not merely another syntax for a state machine. It is a
+claim-preserving chain:
 \[
-\begin{aligned}
-\text{carrier algebra} &\to \text{terms} \to \text{congruence}\\
-&\to \text{flow/commit reduction} \to \text{operator algebra}\\
-&\to \text{native witnesses}.
-\end{aligned}
+\texttt{.cdc source}
+\longrightarrow \text{typed state path}
+\longrightarrow \Uop_1
+\longrightarrow D\Uop_1
+\longrightarrow \text{return gate}
+\longrightarrow \text{spectrum}.
 \]
+Every arrow can hold without manufacturing the artifact to its right.
 
-Related trace-order programs model observation through observer windows over
-Markov kernels and treat observer time as local ordered experience rather than a
-detached global clock \cite{hoffman2024traces,hoffman2014time}. \CDC\ does not
-adopt that ontology. It only preserves the engineering constraint that
-observation is a bounded role over a trace, not a privileged external primitive.
-
-\paragraph{Expository order.}
-The presentation keeps the formal object, source notation, and native witness
-suite close to one another. Definitions are introduced where their native witnesses
-first become visible, so the reader can follow the calculus as both a mathematical
-specification and a running artifact.
-
-\section{Carrier Algebra}
-
-\begin{definition}[Coherence algebra]
-A coherence algebra is a structure
-\[
-\C = (C,\oplus,\botv,\rot,|\cdot|,\kappa)
-\]
-where $(C,\oplus,\botv)$ is a commutative monoid, $\rot_\phi:C\to C$ is a circle
-action by $\oplus$-automorphisms, $|\cdot|:C\to\mathbb{R}_{\geq 0}$ is an
-amplitude seminorm, and $\kappa:C\to[-1,1]$ is a commitment coordinate.
-\end{definition}
-
-The standard model specified by the native witness suite is $C=\mathbb{R}^2 \simeq
-\mathbb{C}$, $\oplus$ is vector addition, $\botv=0$, $\rot_\phi$ is phase
-rotation, and $\kappa(x)$ is the cosine coordinate of $x$ when $x\ne 0$.
-For a fixed deadband $\delta\in(0,1)$, define the runtime trit
-\[
-\tau(x)=
-\begin{cases}
-+ & \kappa(x)>\delta,\\
-- & \kappa(x)<-\delta,\\
-0 & \text{otherwise,}
-\end{cases}
-\]
-and the boundary openness
-\[
-\chi(x)=\max(0,1-|\kappa(x)|/\delta).
-\]
-
-\section{Terms}
-
-Fields are generated by five constructors:
-\[
-F,G ::= 0
-  \mid m[\bar v;\bar b]
-  \mid F\parcomp G
-  \mid p \triangleright \langle w,t,\alpha,L\rangle p'
-  \mid m\nest{F} .
-\]
-
-Here $m[\bar v;\bar b]$ is a module containing a cell vector $\bar v\in C^n$ and
-belief vector $\bar b\in\mathbb{R}^n$; $F\parcomp G$ is parallel composition;
-$p\triangleright\langle w,t,\alpha,L\rangle p'$ is a delayed weighted relation
-from source path $p$ to destination path $p'$, with angular phase bias $\alpha$
-and optional target-line projection $L$; and $m\nest{F}$ is nested field
-structure.
-
-Structural congruence makes $(F,\parcomp,0)$ a commutative monoid and treats
-channels as an order-free multiset. This is the compositional backbone: parallel
-order is not semantic order.
-
-\section{Hybrid Reduction}
-
-Computation is an interleaving of continuous flow and guarded discrete commits.
-
-\paragraph{Flow.}
-$F\xrightarrow{d}F'$ evolves phases, amplitudes, beliefs, and plastic weights for
-real duration $d\geq 0$ under an afferent-driven vector field. Each incoming
-relation reads its source path at delay $t$, rotates that phasor by $\alpha$ into
-the destination frame, optionally projects it to target lines $L$, and gates it
-by source and target openness before superposition. A future reducer may choose
-RK4, Euler, or another realization method, but numerical realization is not the
-definition of the calculus.
-
-\paragraph{Commit.}
-$F\commit F'$ applies an evented guarded update to a module:
+The release makes four contributions:
 \begin{enumerate}
-\item phase cells snap fractionally toward committed poles;
-\item a nonnegative prefix-walk invariant is enforced over trits;
-\item belief steps toward local evidence;
-\item the update is accepted or held with an explicit commit-time status;
-\item committed nonzero trits latch persistent poles.
+\item a grammar-1 source and native runtime organized around exactly three
+  primitive reductions;
+\item U1, a guarded lifted-cover closure that is explicitly weaker than
+  complete-state periodicity;
+\item U2, a source-bound tangent and recurrence protocol that distinguishes path
+  derivatives, projected returns, relative returns, monodromy, and Floquet
+  multipliers; and
+\item a two-axis evidence discipline separating evidence maturity from execution
+  verdict, backed by deterministic receipts, counterexamples, and finite proof
+  mirrors.
 \end{enumerate}
 
-The local objective is
+\section{Evidence convention}
+
+Each claim is reported as
 \[
-\Phi_m =
-\sum_i \left[
-\frac{1}{2}\pi(\operatorname{Re}\hat A_i-b_i)^2
-+\frac{1}{2}(b_i-b_i^0)^2
--|\hat A_i|\cos(\arg\hat A_i-\theta_i)
-\right].
+(\text{scope},\ \text{maturity},\ \text{verdict},\
+ \text{receipt or obligation}).
 \]
+Maturity is one of \emph{specified}, \emph{executed},
+\emph{adversarially verified}, or \emph{mechanized finite}. Verdict is one of
+\emph{accepted}, \emph{held}, \emph{violated}, or \emph{not emitted}. These are
+independent axes. A recurrence hold may be adversarially verified when the
+implementation reliably refuses a false periodic-orbit claim. Conversely, a
+mechanized finite involution says nothing by itself about a continuous physical
+system.
 
-\paragraph{Trace windows and measurement.}
-A window is a derived path/line/angle-bounded projection over a field. A trace
-records phase-time and event-time through that window without changing dynamics.
-A committing measurement is a windowed commit record: it uses the existing
-guarded commit, reports a balanced-ternary outcome vector in
-$\{-1,0,+1\}^n$, and must not increase $\Phi_m$. Thus observer, participant,
-and measurement interface are roles over windows, not new primitive entities.
-Trace order is local to the window: smooth phase motion can accumulate with zero
-commit events, and different windows can see different event densities over one
-field.
+The authority order is executed machine receipt, permanent verification gate,
+versioned language/ABI contract, mathematical specification, and finally
+presentation. A declaration, diagram, or screen cannot promote itself above its
+receipt.
 
-\paragraph{Nested reference frames.}
-For $m\nest{F}$, \CDC\ couples parent and child by bidirectional
-coherence-delta, written $\bidi$: parent context is carried downward and child
-coherence contributes afferent evidence upward. Operationally these are the
-neutral $\alpha=0$ aggregate relations of the same path-channel operator.
-Nonzero $\alpha$ represents angled reference-frame transfer; projected $L$ names
-the destination dimensions participating in the relation. Distinct nesting paths
-are distinct reference frames.
+\section{Language and semantic partition}
 
-\section{Operator Algebra}
+The grammar contains declarations for fields, modules, cells, channels,
+observers, effects, frameworks, U1, and U2. Its operational core remains:
+\[
+\operatorname{flow}(d),\qquad
+\operatorname{commit}(m),\qquad
+\operatorname{nest}(p,c).
+\]
+Trace/windows, councils, persistence, U1, and U2 are derived jobs.
 
-The invariant registry has thirteen keys. Four pin the finite bridge/carrier,
-existence, and trace-order layers, and four are algebraic invariants over the
-standard carrier:
+CDC distinguishes a richer calculus specification from audited native
+realization v1. The specification may name amplitude relaxation, delayed
+history, belief flow, plasticity, projected relations, and localized events.
+The current executor mutates a narrower state. For a selected U1 path, its U2
+continuous vector is
+\begin{equation}
+x=
+(\theta_1,\ldots,\theta_{N_c},
+ b_1,p_1,\ldots,b_{N_m},p_{N_m})\in\R^n,
+\label{eq:state}
+\end{equation}
+ordered by source declaration. The discrete mode is
+\[
+q=(h_1,\sigma_1,\ldots,h_{N_c},\sigma_{N_c},
+   \text{event itinerary}),
+\]
+where $h_i$ records latch presence and
+$\sigma_i\in\{-1,0,+1\}$ is the latch value.
 
-\begin{center}
-\begin{tabular}{llll}
-\toprule
-Operator & Symbol & Meaning & Witnessed laws\\
-\midrule
-balanced carrier & $\{-1,0,+1\}$ & equilibrium-centered commits & finite codomain\\
-dyadic/triadic bridge & $2^6=4^3$ & 64-state codebook & finite bijection\\
-existence viability & $E_0$ & bounded coherent continuity & agency spectrum\\
-trace-order locality & $T_6$ & local trace time & no global event tick\\
-gate & $\odot$ & phase composition & abelian group on $\mathbb{T}^n$\\
-interfere & $\oplus$ & superposition & commutative monoid\\
-rotation & $\rot_\phi$ & global phase action & linear over $\oplus$\\
-core-fold & $\partial$ & latent projection & linear and equivariant\\
-\bottomrule
-\end{tabular}
-\end{center}
+Amplitude, intrinsic frequency, precision, action gain, field constants, and
+channel parameters are frozen for this tangent calculation. Source topology,
+jobs, readout, and effect paths are fixed structure. Projected phase, winding,
+sheet, and declared holonomy are derived values rather than hidden tangent
+coordinates. The coordinate manifest closes over exactly the executed path;
+unreferenced declaration islands cannot add inert unit multipliers.
 
-\section{Native Reduction Witnesses}
+\section{The audited native reductions}
 
-The remaining five registry keys are reduction and metatheorem invariants. They
-are intentionally phrased as native witness declarations rather than completed
-proof-assistant theorems.
+\subsection{Synchronous phase flow}
 
-\begin{center}
+Native v1 executes one synchronous finite-duration map. For a cell $i$ in the
+selected field,
+\begin{equation}
+\theta_i' = \theta_i+\omega_i d
+ +Gd\sum_{e:\,t(e)=i}w_e
+ \sin(\theta_{s(e)}+\alpha_e-\theta_i),
+\label{eq:flow}
+\end{equation}
+where only same-field channels contribute. Its exact phase Jacobian is
+\begin{equation}
+\frac{\partial\theta_i'}{\partial\theta_\ell}
+=\delta_{i\ell}+Gd\sum_{e:\,t(e)=i}w_e
+\cos(\theta_{s(e)}+\alpha_e-\theta_i)
+(\delta_{s(e)\ell}-\delta_{i\ell}).
+\label{eq:flow-jacobian}
+\end{equation}
+All right sides read the same pre-step state. Beliefs and priors are unchanged.
+Equation~\eqref{eq:flow} is the implemented map, not an asserted exact solution
+of an idealized differential equation.
+
+\subsection{Balanced-ternary commit}
+
+With deadband $\delta$, the current quantizer is
+\begin{equation}
+\tau(\theta)=
+\begin{cases}
++1,&\cos\theta>\delta,\\
+-1,&\cos\theta<-\delta,\\
+0,&\text{otherwise}.
+\end{cases}
+\label{eq:trit}
+\end{equation}
+The ordered trit walk is accepted only when every prefix sum is nonnegative. An
+accepted commit writes latches but does not change phase, belief, or prior. In a
+fixed accepted trit/mode itinerary its continuous reset derivative is therefore
+identity. A held commit terminates the accepted U1 path. At a quantization
+boundary, or when a perturbation changes trits or event order, U2 holds rather
+than differentiating across incompatible modes.
+
+\subsection{Nested exchange}
+
+Let $u(q)$ be the child mean trit selected from latches when present and current
+quantization otherwise. Native v1 executes
+\begin{equation}
+b_p'=b_p+G u(q),\qquad p_c'=b_p'.
+\label{eq:nest}
+\end{equation}
+Within one discrete mode, $u(q)$ is constant. Thus
+\[
+\frac{\partial b_p'}{\partial b_p}=1,\qquad
+\frac{\partial p_c'}{\partial b_p}=1,\qquad
+\frac{\partial p_c'}{\partial p_c}=0.
+\]
+The overwritten child-prior row is not identity. The release includes a
+finite-difference oracle and a permanent mutant that substitutes an attractive
+but unexecuted theoretical derivative.
+
+\subsection{Specified but not yet executed semantics}
+
+The source language can declare delay, amplitude, line projection, precision,
+and richer guards. Native v1 does not dynamically update amplitude or channel
+weight, does not carry delay history, does not apply line projection or openness
+to Equation~\eqref{eq:flow}, and does not localize a guard crossing between
+scheduled operations. These remain specified obligations. In particular,
+nonzero delay requires an explicit history state, and the current source guard
+cannot silently authorize saltation.
+
+\section{Universal Operator U1}
+
+U1 is a derived guarded composition of the three reductions. Let its state
+component be
+\[
+\Uop_X:(q_0,x_0)\longmapsto(q_T,x_T).
+\]
+An accepted U1 requires reversed-endpoint receptive and radiant channels with a
+shared pair identity, one-turn projection return with sheet inversion, two-turn
+projection return with sheet restoration, holonomy agreement, accepted local
+commits, equality of the computed record and decision coordinates, and
+enactment of only that accepted coordinate.
+
+This earns \emph{lifted-cover closure}. It does not imply
+$(q_T,x_T)=(q_0,x_0)$. The distinction is material in the canonical example:
+the cover projection and sheet close after two turns, while latches populate,
+context belief and child prior accumulate, and the unwrapped cover phase advances
+by $4\pi$.
+
+\section{Variational Universal Operator U2}
+
+\subsection{Path tangent}
+
+For an accepted path with a stable mode itinerary, U2 may emit
+\[
+D\Uop_X(x_0):T_{x_0}X_{q_0}\longrightarrow T_{x_T}X_{q_T}.
+\]
+For column perturbations, operation Jacobians left-multiply in execution order.
+For smooth segments $\Phi_k$ and event maps $S_k$,
+\begin{equation}
+D\Uop_X=\Phi_{N+1}S_N\Phi_N\cdots S_1\Phi_1.
+\label{eq:path-tangent}
+\end{equation}
+The implementation updates $A\leftarrow J_kA$ from $A=I$. Noncommuting-event
+fixtures and a reversed-product permanent mutant protect this convention.
+
+\subsection{Reset and saltation boundary}
+
+Scheduled commits use their reset Jacobian. A state-triggered hybrid event would
+instead require the sensitivity jump \cite{hiskens2000,kong2024}
+\begin{equation}
+S_e=D_xR_e+
+\frac{(f^+-D_xR_e f^- -\partial_tR_e)n^\top}
+     {n^\top f^-+\partial_tg_e},
+\qquad n^\top=D_xg_e.
+\label{eq:saltation}
+\end{equation}
+CDC's generic U2 tests exercise this formula, including transversality and event
+order. The canonical source path reports its guard method as
+\texttt{unbound-no-saltation}, because its guard is not yet a localized
+transition surface. This is a deliberate realization boundary, not missing
+metadata.
+
+\subsection{Recurrence before monodromy}
+
+Absolute recurrence requires restored discrete mode, the same coordinate
+manifest, a compatible itinerary class, and
+\begin{equation}
+\lVert x_T-x_0\rVert_W\leq\eps
+\label{eq:absolute-return}
+\end{equation}
+under recorded absolute and relative tolerances. Lifted coordinates use
+unwrapped distance; a sheet restoration cannot substitute for the continuous
+residual.
+
+Relative recurrence requires an explicit executable endpoint restoration
+$\rho_\gamma:X_{q_T}\to X_{q_0}$, with
+\begin{equation}
+\lVert\rho_\gamma(x_T)-x_0\rVert_W\leq\eps.
+\label{eq:relative-return}
+\end{equation}
+The receipt must bind the restoration action, complete derivative, and
+equivariance/section witnesses. Omitting changed coordinates is only a projected
+return and cannot authorize Floquet language.
+
+Only a verified return constructs
+\begin{equation}
+M=D\Uop_X(x_0),\qquad
+M_{\mathrm{rel}}=D\rho_\gamma(x_T)D\Uop_X(x_0).
+\label{eq:monodromy}
+\end{equation}
+Characteristic multipliers are eigenvalues $\mu_i$ of the resulting square
+operator \cite{dacunha2009}. After independently verified neutral modes are
+removed, the release classifies a return as stable when all
+$|\mu_i|<1-\tau$, unstable when some $|\mu_i|>1+\tau$, and marginal otherwise
+when at least one mode lies in the unit band. A unit multiplier is not labeled
+gauge by proximity alone; it requires a declared generator and section
+alignment.
+
+\section{Apertured oriented reciprocity}
+
+CDC contains several compatible but distinct oriented structures:
+\begin{enumerate}
+\item carrier inversion exchanges $-1$ and $+1$ while fixing the aperture $0$;
+\item receptive and radiant are reversed roles of directed relations;
+\item path orientation may reverse angular direction; and
+\item one turn flips double-cover sheet parity while two turns restore it.
+\end{enumerate}
+We call the U-level structure \emph{apertured oriented reciprocity}. It is more
+precise than a global binary-polarity assertion: reciprocal channels need not
+cancel, and their residual angular mismatch is retained as holonomy.
+
+The distinctions are necessary. The two-symbol walk $+-$ passes the
+nonnegative-prefix barrier, while its naive pointwise sign inverse $-+$ fails at
+the first prefix. Carrier inversion is therefore not a global commit-safety
+symmetry.
+
+The implemented generic covariance gate accepts a supplied involution only when
+it fixes the aperture and satisfies both
+\begin{equation}
+\rho_1\Uop_X(x)=\Uop_X^\rho(\rho_0x),\qquad
+D\rho_1D\Uop_X=D\Uop_X^\rho D\rho_0.
+\label{eq:polarity}
+\end{equation}
+Its analytic fixture and permanent mutants establish the mechanism. No current
+\texttt{.cdc} form binds a conjugate operator to the canonical loop, and no
+physical polarity law follows.
+
+\section{Executable results}
+
+Table~\ref{tab:results} reports the release's current decision surface. The
+machine authority is the deterministic line beginning \texttt{u2-json=} with
+schema \texttt{cdc.u2.stability.v1}.
+
+\begin{table}[ht]
+\centering
 \small
-\begin{tabular}{lll}
+\caption{Receipt-bound U1/U2 results in version 0.3.0.}
+\label{tab:results}
+\begin{tabularx}{\textwidth}{@{}
+  >{\raggedright\arraybackslash}p{0.24\textwidth}
+  >{\raggedright\arraybackslash}p{0.22\textwidth}
+  Y@{}}
 \toprule
-Status & Check & Current surface\\
+Scope & Verdict & Evidence and consequence\\
 \midrule
-proved & mechanized or exhaustive & $n=6$ counts; finite Lean/Rocq mirrors\\
-witnessed & native \texttt{.cdc} link & law registry; trace/window; reducer links\\
-runtime-checked & repository gate execution & bridge; accepted/held commits; paper\\
-queued & future proof or parity & continuous flow; arbitrary $n=3k$; live WASM\\
+Canonical U1 & accepted & Reciprocal cones, two-turn lifted-cover closure,
+holonomy, record/decision equality, and guarded enactment pass.\\
+Canonical U2 tangent & accepted & A source-bound, source-ordered
+13-coordinate path tangent is emitted.\\
+Canonical full recurrence & held & \texttt{recurrence-mode-mismatch}; initial
+and final state/mode remain in the receipt.\\
+Canonical monodromy and multipliers & not emitted & The recurrence gate leaves
+matrix and spectrum fields null.\\
+Projected cover return & held & \texttt{undeclared-quotient}; projection is not
+relative recurrence.\\
+Explicit $4\pi$ relative fixture & accepted, marginal & Complete restoration
+and $D\rho=I$ yield $M_{\mathrm{rel}}=I_{13}$ and thirteen retained
+\texttt{physical} unit multipliers.\\
+No spectral backend & held & \texttt{spectral-backend-unavailable}; no
+eigenvalues are fabricated.\\
 \bottomrule
-\end{tabular}
-\end{center}
+\end{tabularx}
+\end{table}
 
-\begin{claim}[Preservation]
-Every accepted guarded commit produces an admissible committed module: the
-prefix walk of runtime trits never goes negative. A balance-violating proposal is
-held and reported with an explicit reason rather than repaired into state.
-\end{claim}
+The root source registry reports 262 accepted expectations, 20 terms, 22 rules,
+16 invariants, 46 capabilities, six framework contracts, and 4831 native
+witnesses. These are declaration/closure counts, not theorem totals.
 
-The native witness registry records both the carrier enumeration obligation and
-the commit-preservation obligation.
+\section{Verification and formal layer}
 
-\begin{claim}[Commit soundness]
-Commit-time guard soundness is separated from continuous numerical trajectory
-error: accepted commits latch only checked proposals, while rejected proposals
-hold instead of mutating state. The broader free-energy Lyapunov theorem remains
-witnessed for staged guard/subset obligations rather than claimed as a completed
-continuous proof.
-\end{claim}
+The repository-wide gate rebuilds the grammar frontend, native runtime, unified
+driver, store, and real-Schur path. It checks parser/registry parity,
+canonical-source identity, replay and generated artifacts, U1 positive and
+negative cases, U2 analytic and finite-difference oracles, deterministic
+receipts, effect purity, sanitizers, persistence concurrency, and formal/paper
+freshness.
 
-\begin{claim}[Local confluence]
-Commits on modules with disjoint channel footprints commute.
-\end{claim}
+The focused U2 gate includes eight permanent mutation families: reversed
+product order, omitted saltation, omitted endpoint-restoration derivative,
+invented nest derivative, false recurrence acceptance, ignored aperture,
+skipped tangent covariance, and false polarity acceptance. Each mutant must be
+killed by the same tests that accept the unmodified implementation.
 
-\begin{claim}[Flow additivity]
-For off-grid split durations in a conforming reducer,
-$\xrightarrow{d_1};\xrightarrow{d_2}$ agrees with $\xrightarrow{d_1+d_2}$
-within numerical realization tolerance.
-\end{claim}
+The finite Lean and Rocq mirrors establish only their named statements:
+balanced-ternary counts and finite algebra; tangent identity and associative
+composition; observable order of two finite noncommuting maps; carrier, cone,
+and sheet involutions; fixed aperture; and the $+-/-+$ barrier counterexample.
+They do not prove the runtime Jacobian, recurrence, numerical spectrum,
+source-bound covariance, continuous holonomy, or a physical theory.
 
-\begin{claim}[Trace-order locality]
-Smooth phase-time can flow through a bounded window with zero commit events, and
-event order remains local to the observing window rather than a universal tick.
-\end{claim}
+\section{Artifact surface}
 
-\begin{claim}[Normal forms]
-Committed irreducible localized modules correspond to closed nonnegative walks.
-For $n=6$, the saturated localized count is Catalan $C_3=5$ and the crossing-
-permitting localized count is $51$.
-\end{claim}
-
-Together, the four bridge/carrier/existence/trace invariants, four algebraic
-invariants, and five reduction invariants make the 13-key semantic registry
-exercised by the native bootloader. The witness suite reports 14/14 invariant
-keys, 238/238 native \texttt{.cdc} expectations, 4811/4811 native witnesses,
-38/38 capability declarations, and 5/5 framework role contracts enforced for
-completeness, uniqueness, closure, and role-primitive compatibility. The bridge
-runtime also compiles as C and consumes
-\texttt{bridge64.cdc} for lookup, trace-coordinate projection, generated
-higher-arity codebook checks, source-declared bridge jobs, and interactive grid
-generation. The verified bootstrap bridge is \texttt{n=6}; \texttt{n=9} and
-\texttt{n=12} are generated and runtime-checked bridge surfaces, while arbitrary
-$n=3k$ generation is queued as a future proof/generator obligation. The native reducer runtime consumes \nolinkurl{native_reducer.cdc}
-for flow, commit, nest, compile-IR, IR interpretation, and finite proof jobs,
-consumes \nolinkurl{native_surface.cdc} for guard, trace, measure, policy,
-bridge, and counter jobs,
-and consumes \nolinkurl{council_bridge.cdc} for council deliberation plus
-bridge-coordinate source evolution. The same runtime also executes the native
-task-framework layer: \nolinkurl{framework_transition.cdc},
-\nolinkurl{framework_procedural.cdc}, \nolinkurl{framework_episodic.cdc}, and
-\nolinkurl{framework_deliberative.cdc} bind state-change, procedural-memory,
-episodic-memory, and decision patterns onto executed kernel jobs under
-bootloader-enforced role contracts, and \nolinkurl{framework_loop.cdc} runs
-the generic task loop as one continuous composition -- two sense/act/integrate
-cycles over one shared state object whose second-cycle expectations are
-reachable only through carried state, followed by record, recall, decision,
-and enactment jobs over the same source. The same file is the first executable
-instance of the Universal Operator: the \texttt{universal} runtime mode holds
-one live runtime object through reducer execution, trace/bridge projection,
-council decision, closure validation, and enactment, accepting only when
-reciprocal angularly biased receptive/radiant causal cones are concurrently
-active, a lifted double-cover frame (projected phase modulo $2\pi$, winding
-count, $\mathbb{Z}_2$ sheet, accumulated holonomy) returns its projection with
-an inverted sheet after one turn and restores both only after $720^{\circ}$,
-measured holonomy matches the declaration, and the runtime-computed record
-coordinate equals the runtime-computed decision coordinate that is then
-enacted. Three negative fixtures hold with precise reasons and create no
-evolved output. The operator is derived over flow/commit/nest rather than a
-fourth foundational reduction; the finite sheet-parity facts are mechanized in
-the Lean and Coq mirrors; the M\"obius/double-cover picture is a topological
-realization of the return path, not a physical spinor claim; and a physical
-light-cone reading, a continuous holonomy theorem, and any gravity
-application remain explicitly queued obligations, since the generic calculus
-speaks only of causal cones without a metric or null-propagation constraints.
-\texttt{runtime/cdc\_source.c} factors the shared native \texttt{.cdc}
-line parser, typed attribute reader, and primitive expectation checks used by
-the bridge and reducer runtimes; this is not yet full bootloader parity.
-\texttt{runtime/cdc\_wasm\_exports.c} compile-checks a C ABI for the native
-replay JSON path and links a live WASM module when Emscripten is available; live
-browser WASM execution and full bootloader parity remain queued.
-
-\section{Native Source Language}
-
-\CDC\ includes a compact source language, \texttt{.cdc}. A source file declares a
-field, modules, channels, reductions, compile jobs, finite proof jobs, counter
-programs, and assertions.
-
-\begin{lstlisting}[language={},caption={A small .cdc program.}]
-field reducer-field dt=0.125 gain=1.0 deadband=0.5
-module council field=reducer-field belief=0.0 prior=0.0
-cell council.a module=council theta=1.5707963267948966 omega=0.0
-cell council.b module=council theta=0.0 omega=0.0
-channel council.a -> council.b weight=0.25 delay=0.0 angle=0.0 lines=1
-flow reducer-flow field=reducer-field duration=1.0 expect-theta=council.b:0.25
-commit reducer-commit module=council expect-trits=0+- expect-balance=admissible expect-status=accepted expect-reason=none
-commit reducer-hold module=holdcase expect-trits=-+0 expect-balance=violated expect-status=held expect-reason=balance-violation
-compile reducer-ir source=native_reducer.cdc expect-ops=4
-interpret reducer-ir-exec source=native_reducer.cdc expect-ops=4
-proof trit-walk-n6 carrier=balanced-ternary arity=6 expect-admissible=267
-end
-\end{lstlisting}
-
-The loader \texttt{cdc\_boot.py} reads native declarations and verifies
-expectations. The C native runtime consumes the reducer source for execution,
-IR emission, IR interpretation, and finite proof checking; Python remains a
-declaration checker.
-
-\section{Universality and Boundaries}
-
-The artifact includes a two-counter construction expressed through generic
-instruction modules and commits. This witnesses standard register-machine
-expressivity in the Minsky sense. It should be read as an expressivity result,
-not as a claim that the current reducer is a production compiler.
-
-Likewise, the neural-dynamics witnesses demonstrate native support for recurrent
-continuous dynamics, predictive belief updates, action-style correction, Hebbian
-weight adaptation, and nested multiscale feedback. They are not claims of
-state-of-the-art biological modeling or training efficiency.
-
-\section{Implementation Artifact}
-
-The repository contains:
+The release is intentionally source-centered:
 \begin{itemize}
-\item formal core: \nolinkurl{BIDI_CALCULUS_CORE.md};
-\item semantic spine: AST, runtime-state, reduction, and invariant-spine contract;
-\item native self-hosting mandate: one-file bootloader boundary and native
-\texttt{.cdc} self-hosting path;
-\item verification matrix: claim-to-witness-to-proof tracking;
-\item source language: \nolinkurl{CDC_LANGUAGE.md};
-\item \texttt{kernel.cdc}: native self-hosting contract;
-\item \texttt{cdc\_boot.py}: minimal \texttt{.cdc} bootloader/checker;
-\item \texttt{laws.cdc}: native invariant and law/metatheorem witnesses;
-\item \texttt{bridge64.cdc}: explicit 64-row dyadic/triadic bridge codebook;
-\item \texttt{bridge\_codebooks.cdc}: higher-arity bridge declarations;
-\item \texttt{bridge512.cdc}: full generated \texttt{n=9}, $2^9=8^3=512$ bridge codebook rows;
-\item \texttt{bridge4096.cdc}: full generated \texttt{n=12}, $2^{12}=16^3=4096$ bridge codebook rows;
-\item \texttt{bridge\_jobs.cdc}: source-declared bridge-coordinate jobs;
-\item \texttt{native\_reducer.cdc}: source-declared reducer, compile, interpret, and finite proof jobs;
-\item \texttt{native\_surface.cdc}: source-declared guard, trace, measure, policy, bridge, and counter jobs;
-\item \texttt{council\_bridge.cdc}: source-declared council deliberation and bridge-coordinate source-evolution jobs;
-\item task frameworks (\nolinkurl{FRAMEWORKS.md}): \texttt{framework\_transition.cdc}, \texttt{framework\_procedural.cdc}, \texttt{framework\_episodic.cdc}, and \texttt{framework\_deliberative.cdc} with bootloader-enforced role contracts;
-\item \texttt{framework\_loop.cdc}: the generic task loop executed as one two-cycle composition over shared state, and the first executable Universal Operator instance with 720-degree lifted-frame closure, holonomy check, and guarded enactment;
-\item shared native source core: common \texttt{.cdc} line/attribute parser and primitive expectation assertions;
-\item bridge runtime: verifies codebooks and emits the interactive SVG;
-\item native runtime: runs reducer, IR, proof, council, evolution, and replay jobs;
-\item WASM export surface: compile-checked C ABI for native replay JSON;
-\item Lean/Coq mirrors: finite carrier and algebraic law checks;
-\item \texttt{system.cdc}: native capability witnesses;
-\item \texttt{relations.cdc}: angular/path relation witnesses;
-\item \texttt{trace\_windows.cdc}: balanced-ternary observer-window witnesses.
+\item \path{kernel.cdc} and \path{laws.cdc} declare the language contract and
+  16-key invariant registry;
+\item \path{framework_loop.cdc} binds H5, U1, and the canonical U2 chain;
+\item \path{runtime/cdc_native_runtime.c} executes primal, U1, persistence, and
+  U2 source jobs;
+\item \path{runtime/cdc_variational.c} and \path{runtime/cdc_linalg.c} implement
+  tangent, recurrence, restoration, polarity, and validated real-Schur logic;
+\item \path{tests/u2/} and \path{tests/fixtures/u2/} contain executable positive,
+  negative, numerical, receipt, and purity cases; and
+\item \path{formal/lean/} and \path{formal/coq/} contain the finite proof
+  mirrors with explicit claim ceilings.
 \end{itemize}
 
-\section{Semantic Spine}
+Within the language/runtime/semantic execution boundary, the one Python file,
+\path{cdc_boot.py}, is a declaration/expectation oracle; separate
+asset-generation utilities do not participate in execution;
+it is not the reducer. The shipped native ABI is 1.5 and the source grammar is
+version 1.
 
-The artifact is organized around one semantic spine rather than parallel
-descriptions. \texttt{.cdc} source is parsed into a source AST; execution is
-understood against a runtime state tuple; reductions are classified as flow,
-commit, or nesting steps; and law checks discharge named invariant records. The
-source language, paper, and witness suite are kept close enough to be audited as
-projections of the same object. The self-hosting target is stronger: move the
-parser state, reducer state, witness state, and trace/window state into native
-\texttt{.cdc} terms until even the bootloader can be replaced.
+\section{Limitations and research boundary}
 
-This makes the theorem-prover lift narrow and explicit. The finite discrete
-layer now has a native C checker plus Lean and Coq source mirrors for the n=6
-balanced-ternary walk spectrum: total states, prefix admissibility, localized
-closures, saturated walks, and Catalan closures. Lean and Coq also check finite
-algebraic laws for gate, interference, and rotation over the finite carrier. The
-next proof target is commit-barrier preservation over the same carrier, followed
-by continuous-carrier algebra and continuous-flow assumptions around the same
-invariant table.
+Version 0.3.0 does not establish global nonlinear stability, robustness outside
+the tested neighborhood, arbitrary off-grid event execution, nonzero-delay
+history dynamics, or parity between prose semantics and unimplemented primal
+fields. The positive relative fixture validates a return-analysis mechanism; it
+does not make the canonical loop recurrent.
+
+The artifact is deterministic classical machinery. It provides neither a
+physical constitutive law nor empirical evidence for spinorial matter,
+nonlocality, gravity, plasma identity, biological identity, cosmology, quantum
+hardware, or quantum advantage. Any such specialization requires a
+domain-specific state map, units, constitutive grounding, calibration data,
+competing models, and discriminating experiments. U2 makes those future claims
+more engineerable and falsifiable; it does not pre-validate them.
 
 \section{Conclusion}
 
-\CDC\ is a compact executable calculus for hybrid continuous-discrete coherence.
-Its contribution is a unified semantic vocabulary and working witness suite for
-systems that must flow continuously, commit discretely, preserve local
-invariants, and couple nested reference frames bidirectionally.
+CDC demonstrates that an ambitious hybrid calculus can preserve its full
+research target while making the implemented claim boundary executable. U1
+binds lifted closure to reciprocal relations, topology, record agreement, and
+effect gating. U2 binds first-order analysis to the exact executed path and
+refuses monodromy until state recurrence is independently earned. The result is
+not merely a numerical pipeline: it is a language-level discipline in which
+accepted, held, mechanized, and exploratory statements remain distinct enough
+to support both engineering and future formal or empirical specialization.
 
-\begin{thebibliography}{11}
+\begin{thebibliography}{9}
 
 \bibitem{henzinger1996}
 T. A. Henzinger.
 \newblock The theory of hybrid automata.
 \newblock In \emph{Proceedings of the 11th Annual IEEE Symposium on Logic in
-Computer Science}, 1996.
+Computer Science}, pages 278--292, 1996.
 
-\bibitem{milner1989}
-R. Milner.
-\newblock \emph{Communication and Concurrency}.
-\newblock Prentice-Hall, 1989.
+\bibitem{hiskens2000}
+I. A. Hiskens and M. A. Pai.
+\newblock Trajectory sensitivity analysis of hybrid systems.
+\newblock \emph{IEEE Transactions on Circuits and Systems I},
+47(2):204--220, 2000.
+\newblock \href{https://doi.org/10.1109/81.828574}{doi:10.1109/81.828574}.
 
-\bibitem{minsky1967}
-M. L. Minsky.
-\newblock \emph{Computation: Finite and Infinite Machines}.
-\newblock Prentice-Hall, 1967.
+\bibitem{kong2024}
+N. J. Kong, J. J. Payne, J. Zhu, and A. M. Johnson.
+\newblock Saltation matrices: The essential tool for linearizing hybrid
+dynamical systems.
+\newblock \emph{Proceedings of the IEEE}, 2024.
+\newblock \href{https://doi.org/10.1109/JPROC.2024.3440211}%
+{doi:10.1109/JPROC.2024.3440211}.
 
-\bibitem{friston2010}
-K. Friston.
-\newblock The free-energy principle: a unified brain theory?
-\newblock \emph{Nature Reviews Neuroscience}, 11:127--138, 2010.
-
-\bibitem{knuth1984lp}
-D. E. Knuth.
-\newblock Literate programming.
-\newblock \emph{The Computer Journal}, 27(2):97--111, 1984.
-
-\bibitem{knuth1984texbook}
-D. E. Knuth.
-\newblock \emph{The TeXbook}.
-\newblock Addison-Wesley, 1984.
-
-\bibitem{hoffman2024traces}
-D. D. Hoffman, C. Prakash, and S. Chattopadhyay.
-\newblock Traces of consciousness.
-\newblock Preprints.org, 2024. DOI: 10.20944/preprints202410.1305.v1.
-
-\bibitem{hoffman2014time}
-D. D. Hoffman.
-\newblock The origin of time in conscious agents.
-\newblock Manuscript, University of California, Irvine, 2014.
+\bibitem{dacunha2009}
+J. J. DaCunha and J. M. Davis.
+\newblock A unified Floquet theory for discrete, continuous, and hybrid periodic
+linear systems.
+\newblock \href{https://arxiv.org/abs/0901.3841}{arXiv:0901.3841}, 2009.
 
 \end{thebibliography}
 

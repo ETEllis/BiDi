@@ -1,264 +1,402 @@
 # Formal Semantic Spine
 
-This document pins the next formalization pass to one canonical object. CDC is
-the language; this spine is the semantic kernel that keeps `.cdc`, the paper,
-the bootloader, and the witnesses from drifting into parallel descriptions.
+This document pins the language, executable runtime, U1/U2 analysis, paper, and
+formal artifacts to one claim-preserving object. CDC is the language. The spine
+is the typed path from source to state mutation to receipt to exactly scoped
+proof obligation.
 
-## Principle
-
-Every artifact should become a projection of the same semantic spine:
-
-```text
-.cdc source
-  -> typed AST
-  -> runtime state tuple
-  -> small-step relation
-  -> invariant table
-  -> native witnesses
-  -> finite proof artifacts
-  -> theorem-prover obligations
-```
-
-The current repository has a native `.cdc` contract/witness suite and one minimal
-Python bootloader. The refinement is to make the formal spine explicit enough
-that future reducer code and proofs can be generated from, or audited against,
-the same native source.
-
-Trace/window semantics are derived from this spine. They do not add a fourth
-foundational step kind. They name causal observer windows, trace spans, and
-measurement records over `flow`, `commit`, and `nest`.
-
-## AST
-
-The AST should represent only the canonical calculus primitives:
-
-- `CellTerm`: phase, amplitude, intrinsic frequency, plasticity, optional latch.
-- `ModuleTerm`: named cell vector plus belief, prior, precision, and action gain.
-- `ChannelTerm`: source path, destination path, weight, delay, angular phase bias,
-  optional line projection, and plasticity flag.
-- `FieldTerm`: modules, channels, child fields, timestep, gain, deadband, gating.
-- `CounterTerm`: register-machine witness term for universality.
-- `WindowSpec`, `TraceSpan`, `ObserverSpec`, `MeasurementRecord`,
-  `WindowPolicy`, `AgencySummary`, and `IncidenceSpec`: derived observer,
-  measurement, local-counter, and policy records over the same field state.
-
-`kernel.cdc` now declares the canonical term surface. The native target is for
-the same spine to continue growing as `.cdc` terms and transition rules while
-`cdc_boot.py` remains only mechanical bootstrap code. See
-`NATIVE_SELF_HOSTING_MANDATE.md`.
-
-## Runtime State Tuple
-
-A runtime state is:
+## Authority and claim shape
 
 ```text
-S = (t, modules, channels, child_fields, inbound_relations, deadband, dt, gain, gated)
+.cdc canonical source
+  -> grammar-1 AST
+  -> selected executable state and ordered program
+  -> flow / commit / nest reductions
+  -> U1 acceptance and effect receipt
+  -> U2 path tangent and recurrence receipt
+  -> monodromy and multipliers only when authorized
+  -> finite formal facts and open obligations
 ```
 
-Each module state carries:
+Every public claim is a tuple:
 
 ```text
-M = (name, cells, belief, prior, precision, action_gain, child)
+(scope, maturity, verdict, receipt-or-obligation)
 ```
 
-Each cell state carries:
+Maturity and verdict are separate.
+
+| Maturity | Meaning |
+|---|---|
+| `specified` | defined in source or mathematics but not necessarily consumed by the current executor |
+| `executed` | consumed by native code and bound to an execution receipt |
+| `adversarially-verified` | positive, negative, oracle, or permanent-mutant gates distinguish the mechanism from shortcuts |
+| `mechanized-finite` | Lean or Rocq/Coq proves the exact finite statement named |
+
+| Verdict | Meaning |
+|---|---|
+| `accepted` | all prerequisites for that scoped result passed |
+| `held` | a typed dynamical or semantic prerequisite did not pass; no stronger result is emitted |
+| `violated` | an asserted contract or invariant failed |
+| `not-emitted` | a downstream artifact was not authorized |
+
+A held recurrence can be adversarially verified. A mechanized finite involution
+does not establish a continuous symmetry. A source declaration is not an
+execution receipt.
+
+## One language, two semantic layers
+
+CDC preserves both a calculus-level target and an audited native realization.
+They are related, but they are not interchangeable.
+
+### Specified state, `S_spec`
+
+The calculus-level state may include:
 
 ```text
-x = (theta, amplitude, plasticity, omega, sigma, memory)
+S_spec = (
+  time,
+  nested fields and modules,
+  cell phase / amplitude / frequency / plasticity / latch / memory,
+  module belief / prior / precision / action gain,
+  weighted delayed angular and projected channels,
+  event surfaces and resets,
+  trace windows, local counters, policies, and durable effects
+)
 ```
 
-This tuple is the intended bridge between mathematical notation and future
-native reducer code. The semantic spine names the immutable shape the native
-runtime must instantiate.
+This is the intended formal vocabulary. A field appearing in `S_spec` does not
+mean native realization v1 updates it.
 
-## Small-Step Relation
+### Audited native state, `S_native-v1`
 
-The canonical reduction relation has three step kinds:
+For the current executor, the real-valued dynamic coordinates selected by a U1
+path are exactly:
 
-| step | source form | meaning |
+```text
+x = (
+  theta for each selected cell in source order,
+  belief and prior for each selected module in source order
+)
+```
+
+The discrete mode is:
+
+```text
+q = (has_latch, latch for each selected cell, ordered event itinerary)
+```
+
+The frozen parameters and fixed structure are:
+
+```text
+xi = (
+  cell amplitude and omega,
+  module precision and action_gain,
+  field dt, gain, and deadband,
+  channel weight, delay, angle, lines, endpoints, cone, and pair,
+  source topology, jobs, expectations, council/readout/effect declarations
+)
+```
+
+`omega` drives phase but is not itself updated. Projected phase, winding, and
+sheet are derived from the unwrapped cover-cell phase. Holonomy is currently the
+declared reciprocal channel-angle sum. None is silently appended to the tangent
+vector.
+
+The coordinate manifest closes mechanically over the exact accepted U1 path.
+Unreferenced declaration islands do not add inert unit multipliers.
+
+## The three primitive reductions
+
+The only primitive state reductions are `flow`, `commit`, and `nest`.
+
+### `flow(d)`
+
+The calculus may specify continuous dynamics. Native v1 executes one
+synchronous finite-duration phase map. For cell `i` in the selected field:
+
+```text
+theta_i' = theta_i + omega_i d
+           + G d sum_(e: target(e)=i)
+             w_e sin(theta_source(e) + alpha_e - theta_i)
+```
+
+Only channels whose source and target share the field contribute. Every right
+side reads the same pre-step state. Belief and prior are unchanged. The exact
+native phase Jacobian is therefore:
+
+```text
+d theta_i' / d theta_l
+  = delta_il
+    + G d sum_e w_e cos(theta_source(e) + alpha_e - theta_i)
+      (delta_source(e),l - delta_i,l)
+```
+
+This is not an exact ODE solution. Amplitude relaxation, belief flow,
+plasticity, projected-line dynamics, and delay history remain specified
+obligations until the primal executor consumes them.
+
+### `commit(module)`
+
+Native v1 quantizes each selected phase:
+
+```text
+tau(theta) = +1  if cos(theta) > deadband
+             -1  if cos(theta) < -deadband
+              0  otherwise
+```
+
+The ordered trit walk is accepted only when every prefix sum is nonnegative. An
+accepted commit populates latches but leaves continuous phase, belief, and prior
+unchanged; inside one fixed trit/mode itinerary its continuous reset derivative
+is identity. A held commit terminates the accepted path and has no accepted
+tangent result.
+
+Quantization boundaries are nonsmooth. A perturbation that changes trits,
+barrier verdict, or event order must hold U2 rather than report a derivative
+across incompatible modes.
+
+### `nest(parent, child)`
+
+Let `u(q)` be the child mean trit from latches when present and current
+quantization otherwise. Native v1 executes:
+
+```text
+parent.belief' = parent.belief + G u(q)
+child.prior'   = parent.belief'
+```
+
+All other continuous coordinates are unchanged. Inside a fixed mode,
+`u(q)` is constant, so:
+
+```text
+d parent.belief' / d parent.belief = 1
+d child.prior'   / d parent.belief = 1
+d child.prior'   / d child.prior   = 0
+```
+
+The last row is an overwrite, not identity. Analytic-versus-finite-difference
+and permanent-mutant tests protect this exact implementation detail.
+
+## Derived observation, frameworks, and persistence
+
+Trace, window, measurement, bridge, council, and framework forms observe or
+compose the same primitive reductions; they do not add state-reduction kinds.
+
+Trace time is local to a bounded observer window:
+
+```text
+phase time   continuous motion
+event time   ordered guarded commits
+trace time   selected phase/event history through a window
+```
+
+Passive observation does not mutate primal state. A committing measurement
+still routes through the guarded balanced-ternary commit semantics.
+
+Persistence is a typed effect layer. `persist op=append` traverses the same
+barrier as an in-memory commit, and a held decision has no path to durable
+mutation. Durable-byte identity and replay-state identity are distinct, so
+compaction can change representation while preserving semantic history.
+
+## Universal Operator U1
+
+U1 is a derived guarded composition over one live native state. Acceptance
+requires:
+
+1. reversed-endpoint receptive and radiant channels with a shared pair identity,
+   both active in the selected frame evaluation;
+2. one-turn projected return with sheet inversion;
+3. two-turn projected return with sheet restoration at winding two;
+4. declared and observed holonomy agreement;
+5. accepted local commits;
+6. runtime-computed record/decision coordinate equality; and
+7. enactment of only that computed coordinate after acceptance.
+
+Write the accepted state map as:
+
+```text
+U_X : (q_0, x_0) -> (q_T, x_T)
+```
+
+Trace, bridge, council, and enactment are readout, acceptance, and effect layers
+around `U_X`. U1 earns **lifted-cover closure**. It does not assert
+`(q_T, x_T) = (q_0, x_0)`.
+
+The canonical `loop-u720` U1 accepts. Its full native state does not recur:
+latches populate, context belief and child prior accumulate, and the unwrapped
+cover phase advances by `4 pi`.
+
+## Variational Universal Operator U2
+
+U2 differentiates the exact selected U1 path. It does not add a primitive
+reduction.
+
+For an accepted path with a stable event itinerary:
+
+```text
+D U_X(x_0) : T_(x_0) X_(q_0) -> T_(x_T) X_(q_T)
+```
+
+This path tangent is meaningful even without recurrence. Ordered Jacobians act
+on column perturbations by left multiplication:
+
+```text
+A_0 = I
+A_(k+1) = J_k A_k
+```
+
+For a hybrid itinerary of smooth segments and events:
+
+```text
+D U_X = Phi_(N+1) S_N Phi_N ... S_1 Phi_1
+```
+
+Scheduled native commits are fixed-time resets and use `D R`, not a saltation
+correction. A true state-triggered event requires an explicit guard `g`, reset
+`R`, crossing direction, event localizer, and transversality receipt. Only then
+is the saltation matrix authorized:
+
+```text
+S = D R + ((f+ - D R f- - d_t R) n^T) / (n^T f- + d_t g)
+```
+
+Grazing, ambiguous simultaneous events, divergent itineraries, missing
+derivatives, and exhausted event budgets are typed holds.
+
+### Recurrence gate
+
+Absolute recurrence requires the same continuous manifest, restored discrete
+mode and itinerary class, and a weighted endpoint residual inside explicit
+absolute-plus-relative tolerances:
+
+```text
+q_T = q_0
+norm_W(x_T - x_0) <= epsilon
+```
+
+Topology is coordinate-specific: a lifted cover phase uses unwrapped distance;
+ordinary declared circle coordinates may use shortest-circle distance.
+
+Relative recurrence additionally requires an explicit executable endpoint
+restoration:
+
+```text
+rho_gamma : X_(q_T) -> X_(q_0)
+norm_W(rho_gamma(x_T) - x_0) <= epsilon
+```
+
+The receipt must bind `rho_gamma`, its complete derivative, and executable
+equivariance/section witnesses. Hiding changed coordinates is projection, not
+relative recurrence.
+
+Only after recurrence may U2 construct:
+
+```text
+M     = D U_X(x_0)                        absolute return
+M_rel = D rho_gamma(x_T) D U_X(x_0)      relative return
+```
+
+Characteristic multipliers are eigenvalues of this verified square return
+operator. A real-Schur backend must validate the decomposition and residuals.
+Absent recurrence or backend, no multipliers are emitted. A near-`+1`
+multiplier remains physical unless a declared symmetry generator and section
+prove it is a removable neutral/gauge mode.
+
+The canonical source-bound U2 result is:
+
+| Scope | Maturity | Verdict |
 |---|---|---|
-| `flow(d)` | `F ->_d F'` | evolve phase, amplitude, belief, and plasticity for duration `d` |
-| `commit(m)` | `F ->_beta F'` | guarded quantize/barrier/belief/latch update for module `m` |
-| `nest(m)` | `m[[F]]` | exchange parent context downward and child coherence upward |
+| U1 lifted-cover closure | executed + adversarially verified | accepted |
+| 13-coordinate U2 path tangent | executed + adversarially verified | accepted |
+| complete native-state recurrence | executed + adversarially verified | held: `recurrence-mode-mismatch` |
+| canonical monodromy and multipliers | gated downstream result | not emitted |
 
-Operationally, nesting is represented as two automatically installed
-path-aware relations at angular bias `alpha=0`: one aggregate child-to-parent
-up-cone and one aggregate parent-to-child down-cone for each child module.
-General channels may use nonzero `alpha` and projected `lines`, so the original
-parent/child cone is the neutral case of the same relation operator.
+The isolated relative-return fixture explicitly restores the `4 pi` cover
+translation, binds complete `D rho = I`, and earns `M_rel = I_13`, thirteen
+`physical`-labeled unit multipliers, and a `marginal` classification. It
+validates the machinery, not recurrence of `loop-u720` or a physical system.
 
-A future reducer may integrate flow numerically, but the semantic relation is
-the source of truth. Numerical choices should be recorded as realization
-parameters, not confused with the calculus definition.
+## Apertured oriented reciprocity
 
-## Derived Trace/Window Layer
+The strongest non-forced polarity structure currently earned at U level is
+**apertured oriented reciprocity**:
 
-The trace/window layer records how a bounded observer window sees a field:
+- balanced-ternary sign reversal exchanges `-1` and `+1` while fixing `0`;
+- receptive/radiant channels are reversed relation roles;
+- path orientation may reverse angular direction; and
+- double-cover sheet parity flips after one turn and restores after two.
 
-```text
-phase-time      continuous flow and rotation
-event-time      ordered guarded commits
-trace-time      phase/event history through a window
-```
+These live in different types. They may be related by an explicitly declared
+specialization but cannot be identified by rhetoric. In particular, `+-` passes
+the oriented prefix barrier while the naive pointwise sign inverse `-+` fails.
+Thus carrier inversion is not a global safety symmetry.
 
-Trace-time is local. Smooth phase motion can accumulate with zero commit events,
-and event density can differ by window. A global tick is a realization detail,
-not part of the semantic spine.
-
-The discrete outcome space is balanced ternary: `-1`, `0`, `+1`. The middle
-value is resting equilibrium and a real crossing/aperture state, not binary
-false. A committing measurement is a guarded balanced-ternary commit plus a
-`MeasurementRecord`; passive observation produces a `TraceSpan` and leaves field
-dynamics unchanged.
-
-Window policy is recursive but not foundational. It can update the sampling,
-commit, adaptation, or projected-state policy for a bounded window while still
-reducing through `flow`, `commit`, and `nest`.
-
-## Derived Universal Closure
-
-`universal-close` is a derived rule, not a fourth step kind. Its state record
-is the **lifted frame**:
+The generic executable polarity-covariance checker accepts only when a supplied
+source/target involution fixes its aperture and satisfies both primal and
+tangent conjugacy:
 
 ```text
-lifted-frame       (projected-phase mod 2*pi, winding count, Z2 sheet, holonomy)
-universal-record   the bridge coordinate computed from the closed frame's trace
+rho_1 U_X(x) = U_X^rho(rho_0 x)
+D rho_1 D U_X = D U_X^rho D rho_0
 ```
 
-The rule composes the three foundational steps with trace projection, council
-decision, and source evolution under one acceptance guard: reciprocal
-receptive/radiant cones active in one flow evaluation, half-turn projection
-return with sheet inversion, full 720-degree return with sheet restoration and
-winding two, holonomy agreement, accepted local commits, and record/decision
-coordinate equality — enacting only the runtime-computed record. The finite
-sheet-parity lemmas (one turn inverts the Z2 sheet, two turns restore it) are
-mechanized in `formal/lean/CDCFinite.lean` and `formal/coq/CDCFinite.v`;
-continuous frame transport and holonomy preservation remain queued.
+This mechanism is adversarially verified and its finite component facts are
+mechanized. It is not yet source-bound to `loop-u720`, does not establish
+recurrent conjugate spectra, and is not a universal physical law.
 
-## Typed Invariant Table
+## Invariant registry
 
-Each invariant should have:
+`laws.cdc` declares 16 invariant keys. Their presence and witness linkage are
+checked by the registry; their mathematical maturity differs by statement.
 
-- a stable key;
-- a mathematical statement;
-- the witness file and witness name;
-- a finite proof artifact where one exists and a theorem-prover target where it
-  remains open.
+| Cluster | Stable keys |
+|---|---|
+| carrier and bridge | `balanced-ternary-carrier`, `dyadic-triadic-closure` |
+| viability and locality | `existence-viability`, `trace-order-locality` |
+| algebra | `gate-abelian`, `interfere-monoid`, `rotation-linear`, `corefold-morphism` |
+| reduction | `preservation`, `soundness`, `local-confluence`, `flow-additivity`, `normalforms` |
+| lifted closure | `universal-closure` |
+| durable state | `durable-latch-or-hold`, `replay-identity` |
 
-`laws.cdc` now declares invariant keys and witness links for:
+Registry membership means “declared and linked,” not “universally proved.” The
+verification matrix records the maturity, verdict, receipt, and remaining
+obligation for each cluster.
 
-- `gate-abelian`;
-- `interfere-monoid`;
-- `rotation-linear`;
-- `corefold-morphism`;
-- `balanced-ternary-carrier`;
-- `dyadic-triadic-closure`;
-- `existence-viability`;
-- `trace-order-locality`;
-- `preservation`;
-- `soundness`;
-- `local-confluence`;
-- `flow-additivity`;
-- `normalforms`;
-- `universal-closure`.
+## Formal artifacts and exact ceilings
 
-## Projection Targets
+The native finite checker plus `formal/lean/CDCFinite.lean` and
+`formal/coq/CDCFinite.v` cover the named finite balanced-ternary counts and
+algebraic facts. `formal/lean/U2VariationalFinite.lean` and
+`formal/coq/U2VariationalFinite.v` cover only:
 
-### `.cdc`
+1. identity and associative composition of finite tangent maps;
+2. observable order for two noncommuting finite event maps;
+3. carrier inversion with fixed aperture;
+4. distinct cone-role and sheet involutions; and
+5. the concrete `+-` accepted / `-+` held barrier counterexample.
 
-The native reducer pilot now parses `native_reducer.cdc` into an executable
-runtime state and emits a small reducer IR for source-declared `flow`, `commit`,
-and `nest` jobs. The broader parser should eventually produce the AST directly
-rather than executing line by line. The current `cdc_boot.py` can then become:
+They do **not** prove the native runtime Jacobian, full-state recurrence,
+saltation implementation, a numerical eigensystem, source-bound polarity
+covariance, a continuous holonomy theorem, or any empirical interpretation.
 
-```text
-parse .cdc -> ProgramTerm -> initialize RuntimeState -> reduce -> check expects
-```
+## Synchronization obligations
 
-The stronger self-hosting target is:
+The spine stays authoritative only while all of the following remain gated:
 
-```text
-parse .cdc -> native kernel terms -> native reducer transitions -> native expects
-```
+- the grammar-1 frontend and canonical serialization match native/Python
+  declaration behavior;
+- source forms and witness links remain closed and typed;
+- current native mutations are documented separately from richer specified
+  semantics;
+- U1 acceptance never aliases full-state recurrence;
+- U2 never emits monodromy or multipliers after a recurrence hold;
+- relative return always applies the declared restoration derivative;
+- product order, nest overwrite, saltation, false recurrence, and polarity
+  shortcuts are killed by permanent mutants;
+- formal prose names only the exact finite statements in the proof files; and
+- paper, README, language reference, product surfaces, and receipts agree on
+  versions, counts, ABI, and claim ceilings.
 
-At that point a host language is no longer the semantic center; it is only one
-replaceable loader for a language that can describe itself.
-
-### `cdc_boot.py`
-
-The bootloader must remain a loader/checker only: read `.cdc`, collect
-declarations, verify expectations, and report. It must not grow reducer
-semantics back into Python.
-
-### Native Witness Files
-
-`laws.cdc`, `bridge64.cdc`, `bridge_codebooks.cdc`, `bridge512.cdc`,
-`bridge4096.cdc`, `bridge_jobs.cdc`, `native_reducer.cdc`,
-`native_surface.cdc`, `council_bridge.cdc`, `system.cdc`, `relations.cdc`, and
-`trace_windows.cdc` should remain the native
-witness surface. Each witness declares the invariant or capability it discharges.
-
-`runtime/cdc_bridge_runtime.c` is the first operational consumer outside Python:
-it reads `bridge64.cdc`, validates the finite table, performs lookup, projects
-trace occupancy into bridge coordinates, executes source-declared jobs from
-`bridge_jobs.cdc`, regenerates/verifies the `bridge512.cdc` and `bridge4096.cdc`
-higher-arity codebooks, and emits the visible interactive 64-cell grid.
-
-`runtime/cdc_native_runtime.c` is the first operational reducer consumer outside
-Python: it reads `native_reducer.cdc`, executes source-declared flow, commit,
-and nest jobs, emits reducer IR, interprets that IR, and checks the finite n=6
-balanced-ternary walk spectrum. It also consumes `native_surface.cdc` to
-exercise guard, trace, measure, policy, bridge, and counter clauses, and consumes
-`council_bridge.cdc` to exercise source-declared council deliberation and
-bridge-coordinate source evolution.
-
-### Paper
-
-The paper should present the same AST/state/reduction/invariant table, then
-state which parts are currently native witness declarations and which parts are
-future formal proof obligations.
-
-### Lean/Coq/Kani
-
-The first formal target is now represented three ways: native C proof checking,
-Lean source, and Coq source for the finite n=6 balanced-ternary carrier layer
-plus finite algebraic laws. The checked finite layer covers:
-
-1. trit quantization;
-2. prefix-walk admissibility;
-3. commit barrier preservation;
-4. localized normal forms;
-5. finite gate associativity/commutativity/identity/inverse;
-6. finite interference associativity/commutativity/unit;
-7. finite rotation linearity.
-
-The next formal step is to extend those artifacts from finite carrier and
-finite-algebra witnesses into commit-barrier preservation, then the flow
-relation under explicit Lipschitz/determinism assumptions.
-
-## Acceptance Criteria For The Next Pass
-
-- `.cdc` grows from declaration parsing into `ProgramTerm`.
-- `cdc_boot.py` remains a minimal loader/checker and does not accumulate reducer semantics.
-- `native_reducer.cdc` and `native_surface.cdc` keep executable flow/commit/nest,
-  guard, trace, measure, policy, bridge, and counter clauses synchronized with
-  the native runtime.
-- `bridge64.cdc` stays as the explicit finite bootstrap codebook and the C
-  bridge runtime stays a verified consumer of that source.
-- `bridge_codebooks.cdc` records the higher-arity growth rule for `n=9` and
-  `n=12`; `bridge512.cdc` and `bridge4096.cdc` contain the full generated rows
-  and must match runtime regeneration.
-- relation witnesses cover angular phase, dimension projection, path endpoints,
-  and `.cdc` nesting auto-cone installation.
-- trace/window witnesses cover passive observation, committing measurement,
-  trace additivity, causal windows, observer roles, incidence projections,
-  local counters, recursive window policy, coupled observation, agency summaries,
-  trace-order locality, and projected higher-order boundaries.
-- every witness in `.cdc` references an invariant or capability key.
-- the paper's invariant table matches `laws.cdc`.
-- deleted host files stay deleted; replacements live in `.cdc`.
-- `scripts/verify.sh` proves code, `.cdc`, witnesses, native reducer execution,
-  finite proof checks, and semantic registry stay synchronized.
-
-This is the path from native contract calculus to theorem-prover-ready calculus
-without losing the working system.
+`./scripts/verify.sh` is the repository-wide authority. `./scripts/verify_u2.sh`
+is the focused analytic, numerical, receipt, and mutant authority for U2.

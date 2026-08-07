@@ -1,29 +1,37 @@
 # Paper
 
-`arxiv/main.tex` is the intentionally flattened arXiv-oriented source for the
-BiDi Coherence-Delta Calculus paper.
+[`arxiv/main.tex`](arxiv/main.tex) is the flattened, dependency-light source for
+the BiDi Coherence-Delta Calculus 0.3.0 paper.
 
-The source is conservative LaTeX and avoids figures, external BibTeX, shell
-escape, minted, and custom classes.
+The paper is reconciled to the executable release boundary:
 
-The style is intentionally Knuth-adjacent: compact Computer Modern/TeX
-presentation, literate-programming structure, and source fragments treated as
-part of the exposition rather than decorative examples.
+- exactly three primitive reductions: `flow`, `commit`, and `nest`;
+- U1 lifted-cover closure is distinct from complete-state recurrence;
+- U2 path tangent is distinct from monodromy and multipliers;
+- full or explicit relative recurrence gates every return spectrum;
+- the current native-v1 mutations are separated from richer specified
+  semantics; and
+- finite formal claims, generic polarity covariance, canonical-loop results,
+  and physical interpretations retain separate scopes.
 
-Compile when TeX is available:
+The bundle avoids figures, external BibTeX, shell escape, minted, and custom
+classes. It uses an inline bibliography and standard LaTeX packages.
 
-```bash
-cd paper/arxiv
-pdflatex main.tex
-pdflatex main.tex
-```
-
-Or with Tectonic:
+Compile with Tectonic:
 
 ```bash
 cd paper/arxiv
 tectonic main.tex
 ```
 
-For arXiv submission, upload the TeX source from `paper/arxiv/`. Select the
-license intentionally during arXiv submission.
+Or with pdfLaTeX:
+
+```bash
+cd paper/arxiv
+pdflatex main.tex
+pdflatex main.tex
+```
+
+The repository release gate compiles this source and rejects stale public
+claims through the surrounding source/receipt checks. For arXiv submission,
+upload the contents of `paper/arxiv/` and select the license intentionally.

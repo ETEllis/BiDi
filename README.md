@@ -2,445 +2,397 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/identity/renders/mobius-wordmark-static.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-wordmark-light.svg">
-    <img src="assets/identity/mobius-u-wordmark-light.svg" alt="Möbi𝒰s identity wordmark" width="560">
+    <img src="assets/identity/mobius-u-wordmark-light.svg" alt="Möbius Universal Operator identity" width="560">
   </picture>
 </p>
 
 # BiDi Coherence-Delta Calculus
 
 <p align="center">
-  <strong>A native language with a formal coherence-calculus kernel</strong><br>
-  Continuous flow • Balanced-ternary commits • Delayed angular channels • Operational bridge coordinates • Trace/window measurement
+  <strong>A native language for guarded hybrid state evolution and receipt-bound return analysis</strong><br>
+  phase flow · balanced-ternary commit · nested exchange · lifted closure · recurrence-gated variation
 </p>
 
-BiDi Coherence-Delta Calculus is a native `.cdc` language whose semantic kernel
-is a compact coherence calculus. It models computation as nested boundary
-modules of phase-state cells, connected by delayed weighted channels that may
-also carry angular phase bias, dimension projection, and path-aware cross-scale
-endpoints. Fields evolve through continuous flow and periodically commit through
-event-triggered balanced-ternary invariant gates. A derived trace/window layer
-lets any module, relation, or projected boundary act as observer, participant,
-or measurement interface without adding a binary observer primitive.
+BiDi Coherence-Delta Calculus (CDC) is a native `.cdc` language and executable
+reference implementation for systems that combine continuous phase evolution,
+guarded discrete commitment, nested reference frames, local observation, and
+durable effects. Its semantic center is deliberately small: `flow`, `commit`,
+and `nest` are the three primitive reductions. Trace windows, task frameworks,
+the Universal Operator U1, and the variational Universal Operator U2 are derived
+layers over those reductions.
 
-## Center Of Gravity
+Version **0.3.0** makes the claim boundary executable. U1 can accept a
+lifted-cover closure without pretending the complete runtime state returned. U2
+then differentiates that exact accepted path and independently checks recurrence
+before it will construct a monodromy operator or emit characteristic
+multipliers. A non-return is a typed result, not a missing success screen.
 
-CDC is the language. The calculus is the kernel semantics.
+## What is earned now
 
-The repository now also carries a non-breaking **Möbi𝒰s identity candidate**:
-Möbius is the embodied product, `𝒰_` is the complete executable Universal
-Operator sigil, `𝒰` is its reduced mathematical body, and CDC remains the
-formal kernel and canonical `.cdc` source contract. A validated Blender
-master seats the connected eye-bearing Möbius body inside the static `ö`, opens
-that same topology into `𝒰`, restores `i𝒰 → UI → 의`, and visibly evacuates the
-name's central `BI` before projecting it into reflected `BIDI`; only then do
-three type-derived strokes close `Δ`, after which the parent `BI` returns. The
-identity assets and motion study do not rename the package or syntax. Start at
-the [`docs/identity` source-of-truth and handoff index](docs/identity/README.md),
-then open [`demo/mobius-identity.html`](demo/mobius-identity.html) locally for
-the interactive one-turn/two-turn study.
+CDC reports evidence maturity and execution verdict separately. `held` is not a
+weak proof rung: a mechanism can be adversarially verified precisely because it
+correctly refuses an unsupported result.
 
-That gives the project two separate success stories:
+| Scope | Maturity | Verdict | Authority |
+|---|---|---|---|
+| grammar-1 source and native contract | executed + adversarially verified | accepted | `cdc_boot.py`, native registry parity, parser counterexamples |
+| `framework_loop.cdc` U1 | executed + adversarially verified | accepted | reciprocal cones, 720-degree lifted-cover closure, record/decision equality, guarded enactment |
+| `framework_loop.cdc` U2 tangent | executed + adversarially verified | accepted | source-bound coordinate manifest and `D U` receipt |
+| `framework_loop.cdc` full recurrence | executed + adversarially verified | **held: `recurrence-mode-mismatch`** | latches, belief, prior, and lifted phase do not all return |
+| canonical-loop monodromy and multipliers | not authorized | not emitted | recurrence gate |
+| isolated `4 pi` relative-return fixture | adversarially verified | accepted, marginal | explicit endpoint restoration, complete `D rho`, real-Schur spectrum |
+| finite carrier, event order, cone role, and sheet facts | mechanized finite | accepted | Lean and Rocq/Coq mirrors |
+| physical or quantum interpretation | exploratory | not evidenced | requires domain state, units, calibration, alternatives, and discriminating experiments |
 
-- **Language success:** developers can install `cdc`, write `.cdc`, run `.cdc`,
-  test `.cdc`, and eventually build/package `.cdc` programs without touching the
-  construction host.
-- **Calculus success:** the language kernel has explicit terms, reductions,
-  invariants, witnesses, and theorem-prover obligations.
+For any claim, read the tuple:
 
-The only Python file left is `cdc_boot.py`, a minimal bootloader that reads
-native `.cdc` declarations and verifies expectations. It is not the calculus.
-The 64-state bridge has a separate non-Python runtime in
-`runtime/cdc_bridge_runtime.c` that consumes `bridge64.cdc` as a lookup table,
-  generates and verifies the `n=9` and `n=12` higher-arity codebooks, and emits
-the interactive bridge SVG. The native reducer runtime lives in
-`runtime/cdc_native_runtime.c` and executes source-declared `.cdc` `flow`,
-`commit`, `nest`, `guard`, `trace`, `measure`, `policy`, `bridge`, `counter`,
-`interpret`, `council`, `evolve`, and `replay` jobs from `native_reducer.cdc`,
-`native_surface.cdc`, and `council_bridge.cdc`. Both C runtimes share
-`runtime/cdc_source.c` / `runtime/cdc_source.h` for `.cdc` line parsing,
-attribute extraction, typed attributes, and primitive expectation assertions.
+```text
+(scope, maturity, verdict, receipt-or-obligation)
+```
 
-## Native Status
+That prevents a declaration from becoming an implementation claim, a numerical
+fixture from becoming a physical law, or an attractive product surface from
+outrunning its source receipt.
 
-This repository is on a native `.cdc` self-hosting track. The removal plan is
-explicit in `NATIVE_SELF_HOSTING_MANDATE.md`: all current host behavior must be
-replaced by native `.cdc` semantics and witnesses before host files are deleted
-without breaking verification.
+## Five-minute path
 
-The practical bootloader decision for this release is now enforced by the repo:
-Python is allowed only as `cdc_boot.py`. `.cdc` owns the source terms, declared
-reducer rules, proof obligations, capability witnesses, and self-hosting
-contract.
-
-## Installation & Exploration
-
-Requires Python >= 3.10 and a C compiler (`cc`) for the full verification gate.
-There are no package dependencies.
+Requires Python 3.10+, a C99 compiler, and the platform BLAS/LAPACK backend used
+by the U2 real-Schur path. The strict formal gate additionally requires Lean,
+Rocq/Coq, and Tectonic.
 
 ```bash
 git clone https://github.com/ETEllis/bidi-coherence-delta-calculus.git
 cd bidi-coherence-delta-calculus
-./scripts/verify.sh          # Full local verification gate (start here)
-./scripts/verify.sh --require-formal  # CI-equivalent gate requiring Lean, Rocq/Coq, and Tectonic
-python3 cdc_boot.py          # Native .cdc contract/witness verification
+
+./scripts/verify.sh
+./build/cdc version
+./build/cdc run framework_loop.cdc
+./build/cdc stability framework_loop.cdc
+
+# CI-equivalent formal, native, generated-artifact, UI-source, and paper gate
+./scripts/verify.sh --require-formal
 ```
 
-Editable install:
+The canonical stability command currently returns:
+
+```text
+U1             accepted
+analysis       tangent
+recurrence     held: recurrence-mode-mismatch
+monodromy      not emitted
+multipliers    not emitted
+```
+
+The complete machine record is the line beginning `u2-json=`. Human-readable
+lines are never the acceptance authority.
+
+Editable Python-package installation remains available for the minimal
+bootloader:
 
 ```bash
 pip install -e .
 ```
 
-### Reference-frame topological coherence crucible
+## One semantic spine
 
-The repository includes a deliberately classical rapid crucible for the
-logical-cell layer between phase flow and guarded commit. It tests seven
-independent mechanisms: synchronization onset, preservation of an oriented
-winding sector, distinct microstates behind one macroscopic boundary,
-bidirectional macro/micro recovery, typed packet-threshold admissibility,
-redundant record closure, and a causal cut that rejects ordinary cluster
-communication as evidence of nonclassicality.
+```mermaid
+flowchart LR
+    Source[".cdc source"] --> AST["grammar-1 typed AST"]
+    AST --> State["native runtime state"]
+    State --> Reduce["flow · commit · nest"]
+    Reduce --> U1["U1 lifted-cover acceptance"]
+    U1 --> Tangent["U2 path tangent"]
+    Tangent --> Return{"recurrence verified?"}
+    Return -->|no| Hold["typed hold · no spectrum"]
+    Return -->|full or explicit relative| Mono["monodromy"]
+    Mono --> Spectrum["characteristic multipliers"]
+```
+
+Every higher layer remains a projection of the same object:
+
+```text
+.cdc source
+  -> typed AST
+  -> executable state and ordered itinerary
+  -> primitive reductions
+  -> acceptance and effect receipts
+  -> tangent and recurrence receipts
+  -> finite formal statements and open obligations
+```
+
+Within the language/runtime/semantic execution boundary, Python is limited to
+`cdc_boot.py`, the declaration/expectation bootloader. The native grammar,
+registry, reducer, toolchain, store, U1, and U2 implementations live in C and
+consume the same `.cdc` source. Separate Blender asset-generation utilities
+under `tools/` are outside that execution boundary.
+
+## Primitive reductions: specified and executed
+
+The calculus specifies a richer semantic target than native realization v1.
+The distinction is intentional and public.
+
+| Reduction | Calculus-level specification | Audited native v1 mutation |
+|---|---|---|
+| `flow(d)` | continuous state evolution with channel influence | one synchronous explicit phase map using `omega`, duration, field gain, channel weight, and angle |
+| `commit(m)` | guarded balanced-ternary event update | quantize phase, enforce the nonnegative-prefix barrier, and populate latches; accepted commits do not change phase, belief, or prior |
+| `nest(parent, child)` | bidirectional cross-scale exchange | add the fixed child mean trit to parent belief and overwrite child prior with that new belief |
+
+The source language can declare amplitude, delay, projected lines, precision,
+action gain, and richer semantic witnesses. In native v1:
+
+- amplitude and channel weights are not dynamically updated;
+- delay has no declared history state and cannot silently enter U2;
+- line projection and openness do not alter the current phase executor;
+- guards report state but are not localized off-grid transition surfaces;
+- scheduled commits therefore use reset Jacobians, not saltation matrices; and
+- richer amplitude, belief-flow, plasticity, snapping, and off-grid semantics
+  remain specified obligations until the primal executor consumes them.
+
+See [FORMAL_SEMANTIC_SPINE.md](FORMAL_SEMANTIC_SPINE.md) for the paired
+specification/realization model and [docs/u2/U2_SEMANTICS.md](docs/u2/U2_SEMANTICS.md)
+for the normative U2 contract.
+
+## Balanced ternary and apertured oriented reciprocity
+
+The committed carrier is centered, not binary:
+
+```text
+-1  inward localization / contraction
+ 0  resting equilibrium / open aperture
++1  outward expansion / dissipation
+```
+
+The aperture `0` is a real state. It is not false, null, failure, or an omitted
+bit.
+
+CDC's earned U-level polarity structure is **apertured oriented reciprocity**.
+It keeps four related structures distinct:
+
+1. carrier polarity exchanges `-1` and `+1` while fixing the aperture;
+2. channel roles exchange receptive and radiant endpoints;
+3. path orientation may reverse angular direction; and
+4. double-cover sheet parity flips after one turn and restores after two.
+
+Lean and Rocq mechanize the finite involutions and the concrete counterexample
+that `+-` is prefix-admissible while its naive pointwise sign inverse `-+` is
+held. The runtime also adversarially checks a generic, scoped primal-and-tangent
+polarity covariance interface. Those facts do **not** make every CDC realization
+polarity symmetric, do not establish covariance of `loop-u720`, and do not imply
+a universal physical polarity law. A source-bound conjugate operator and its
+independent recurrence receipt are still required for any stronger instance.
+
+## Universal Operator U1
+
+`universal` is a derived job, not a fourth reduction. It keeps one live state
+through the selected reducer itinerary and accepts only when all of the
+following agree:
+
+- the receptive and radiant channels reverse endpoints and are active in the
+  same field evaluation;
+- one lifted turn returns the projection with the sheet inverted;
+- two turns return the projection with the sheet restored at winding two;
+- the observed holonomy matches the source declaration;
+- every local commit accepts;
+- the runtime-computed record coordinate equals the runtime-computed council
+  decision coordinate; and
+- only that computed coordinate is enacted.
+
+U1 earns **lifted-cover closure**. It does not, by itself, earn recurrence of
+every phase, belief, prior, latch, or event mode in the runtime state.
+
+```bash
+./build/cdc universal framework_loop.cdc
+```
+
+Negative fixtures hold for one-turn-only closure, nonreciprocal cones, and
+record/decision mismatch; none creates an evolved output.
+
+## Variational Universal Operator U2
+
+U2 derives a first-order analysis from the accepted native U1 path:
+
+1. close the coordinate manifest over exactly the executed path;
+2. differentiate each executed phase, commit, and nest map in source order;
+3. retain the complete initial/final states, discrete mode, and event itinerary;
+4. verify full recurrence or apply an explicit, witnessed relative restoration;
+5. construct `M = D U` or `M_rel = D rho D U` only after recurrence; and
+6. obtain deterministically ordered multipliers from a validated real-Schur
+   backend.
+
+The canonical `framework_loop.cdc` path produces a 13-coordinate tangent but
+holds full recurrence because latches populate, context belief and child prior
+accumulate, and the lifted cover advances by `4 pi`. Its receipt contains no
+monodromy and no multipliers.
+
+The positive calibration fixture isolates the lifted cover and declares the
+endpoint action `rho(theta) = theta - 4 pi` with complete `D rho = I`. It earns
+relative recurrence, `M_rel = I_13`, thirteen `physical`-labeled unit multipliers, and a
+`marginal` classification. It demonstrates the mechanism; it is not a stability
+claim about the canonical task loop or a physical system.
+
+```bash
+./scripts/verify_u2.sh
+./build/cdc stability tests/fixtures/u2/u720_true_relative_marginal.cdc
+```
+
+Eight permanent mutant families gate product order, saltation, endpoint
+restoration, native nest differentiation, false recurrence, and the independent
+polarity obligations. A missing LAPACK backend produces
+`held: spectral-backend-unavailable`; it never fabricates eigenvalues.
+
+## Native language and toolchain
+
+The checked language includes fields, modules, cells, channels, guards,
+reducers, traces, measurements, policies, bridges, counters, compilation,
+interpretation, finite proofs, councils, source evolution, persistence, U1, and
+the U2 `orbit` / `variational` / `spectrum` chain.
+
+```cdc
+field loop-cover-field dt=0.125 gain=0.0 deadband=0.5
+module loop-cover field=loop-cover-field belief=0.0 prior=0.0
+cell loop-cover.phase module=loop-cover theta=0.0 amplitude=1.0 omega=6.283185307179586
+
+universal loop-u720 frame=agent cover-cell=loop-cover.phase cover=double ...
+orbit loop-u720-full universal=loop-u720 coordinates=all quotient=none tolerance=0.000001
+variational loop-u720-tangent orbit=loop-u720-full
+spectrum loop-u720-spectrum variational=loop-u720-tangent
+```
+
+The unified driver exposes the production toolchain surface:
+
+```bash
+./build/cdc verify --contract *.cdc
+./build/cdc verify --vectors *.cdc
+./build/cdc run framework_loop.cdc
+./build/cdc test --gate *.cdc
+./build/cdc stability framework_loop.cdc
+./build/cdc build *.cdc
+./build/cdc install <package-dir>
+./build/cdc x <package> <entry.cdc>
+```
+
+`cdc build` emits a canonical bundle and manifest only for a green corpus.
+`cdc install` journals and atomically latches a complete package. `cdc x`
+re-digests each member before trusted-local execution. `cdc x` is not a hostile
+package sandbox; network registries, signing, and a sealed capability environment
+remain explicit obligations.
+
+## Task frameworks and durable state
+
+Six source-level frameworks bind practical vocabulary to the primitive
+reductions:
+
+- `H1` transition;
+- `H2` procedural;
+- `H3` episodic;
+- `H4` deliberative;
+- `H5` continuous task-loop composition and U1/U2 source instance; and
+- `H6` barrier-gated durable persistence.
+
+Each declares required roles, permitted primitives, and exactly one executable
+binding for each role. The bootloader rejects missing, duplicate, orphaned, or
+incompatible bindings.
+
+Persistence routes `op=append` through the same balanced-ternary barrier as an
+in-memory commit. A held decision cannot reach the store. Durable-byte identity
+and semantic replay identity remain distinct, which is why compaction can report
+`durable=yes replay=stable` without contradiction.
+
+## Verification status: 0.3.0
+
+The current root `.cdc` corpus is checked as:
+
+```text
+262/262 expectations
+20 terms · 22 rules · 16 invariants
+46 capabilities · 6 frameworks · 4831 native witnesses
+```
+
+Those aggregates are registry facts, not proof totals. The gate separately
+checks:
+
+- Python/native parser and contract parity;
+- canonical AST and ABI 1.5 behavior;
+- bridge lookup, higher-arity regeneration, and source-bound replay;
+- native reducer, IR, council, framework, persistence, U1, and U2 paths;
+- positive, negative, sanitizer, concurrency, and permanent-mutant cases;
+- finite Lean and Rocq obligations with explicit claim ceilings;
+- deterministic bundles, manifests, installation, and execution receipts;
+- product-source integrity and macOS compilation where available; and
+- warning-clean flattened paper compilation.
+
+The detailed claim-to-receipt inventory is
+[VERIFICATION_OBLIGATION_MATRIX.md](VERIFICATION_OBLIGATION_MATRIX.md).
+
+## Product surfaces
+
+[CDC Studio](ui/README.md) and the self-contained Möbius console are operator
+surfaces over runtime receipts. Their dark navy instrument field, cyan/violet
+signal language, balanced-ternary controls, and double-cover geometry belong to
+the product identity; their authority still comes from source, build, runtime,
+and receipt data. A screen, animation, or green counter is never execution proof.
+
+## Reference-frame research lane
+
+The repository also carries the classical Reference-Frame Topological Coherence
+(RFTC) crucible and ABI 1.5 local control kernel. The rapid crucible tests seven
+mechanisms spanning synchronization, oriented winding, hidden-state provenance,
+macro/micro recovery, admissibility, record closure, and a causal cut.
 
 ```bash
 ./scripts/verify_rftc.sh
-build/rftc/rftc_crucible --profile rapid \
+./build/rftc/rftc_crucible --profile rapid \
   --json build/rftc/verdict-rapid.json \
   --csv build/rftc/metrics-rapid.csv
 ```
 
-Open [`experiments/rftc/ui/index.html`](experiments/rftc/ui/index.html) for the
-self-contained evidence surface. The exact witness contract is in
-[`experiments/rftc/CRUCIBLE_CONTRACT.md`](experiments/rftc/CRUCIBLE_CONTRACT.md);
-the production architecture, authority model, distributed lifecycle, claim
-ladder, stress matrix, and gated execution sequence are in
-[`docs/rftc/RFTC_FULL_BUILD_SPEC.md`](docs/rftc/RFTC_FULL_BUILD_SPEC.md). The
-field-computation, physics, neuroscience, systems, and polymath convergence is
-captured in
-[`docs/rftc/SPECIALIST_SYNTHESIS.md`](docs/rftc/SPECIALIST_SYNTHESIS.md).
-The six C3 language forms and their non-colliding R1-R6 capabilities live in
-[`rftc.cdc`](rftc.cdc). ABI 1.5 exposes the D36-D37 execution kernel:
-canonical keyed-BLAKE3 envelopes, scoped/versioned authority, causal replay
-defense, typed accept/hold/reject supervision, canonical oriented frame and
-topology reduction, provenance-preserving recursive logical cells, a sealed
-bounded deterministic scheduler, and a durable journal that re-authenticates
-exact uncompacted history before restart replay. The rapid gate exercises
-release, ASan/UBSan, and ThreadSanitizer lanes for those components.
+This is deterministic classical local machinery. It is not a deployed
+multi-host C3 session, a physical qubit, entanglement, nonlocality, or quantum
+advantage. The exact boundary lives in
+[docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md).
 
-This is a classical local durable execution kernel using shared-key
-authenticity. It is not Ed25519/mTLS identity, non-repudiation, a deployed
-multi-host session, cross-host C3 evidence, a physical qubit, entanglement, or
-quantum advantage. The exact implementation-to-claim boundary is tracked in
-[`docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md`](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md).
-The separately gated physical/cosmological program begins at
-[`docs/rftc/COSMOLOGICAL_RECORD_CLOSURE.md`](docs/rftc/COSMOLOGICAL_RECORD_CLOSURE.md),
-with the quantum crucible, Born derivation, horizon-foundry/atlas, and
-biological-transductive observer specifications linked from the full build
-spec. These are executable research obligations, not claims promoted by the
-classical kernel.
-The complete dependency graph and parallel baton policy are in
-[`docs/rftc/RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md`](docs/rftc/RELATIONAL_CLOSURE_END_STATE_EXECUTION_PLAN.md).
+## Formal layer and paper
 
-## Core Architecture
+The finite formal layer lives in `formal/lean/` and `formal/coq/`. It proves the
+exact finite carrier/algebra, event-order, cone-role, sheet, aperture, and
+prefix-barrier statements named in those files. It does not prove a continuous
+Jacobian, recurrence of `loop-u720`, a numerical eigensystem, or any physical
+interpretation.
 
-```mermaid
-flowchart TD
-    subgraph M["Module (nested boundary)"]
-        Cells["Phase-state cells<br/>+ latched committed poles"]
-        Channels["Delayed angular channels<br/>(weight × delay × angle × lines)"]
-        Cells --> Channels
-    end
-
-    Flow["⟶_d  Continuous Flow<br/>(Lipschitz vector field<br/>+ belief / weight update)"]
-    Commit["⟶_β  Commit<br/>(Guard fires → accepted/held trit-walk barrier<br/>+ commit-time guard status)"]
-    Bidi["γΔ  bidiγΔ coupling<br/>Path-aware relations across nested frames<br/>α=0 cone: parent ↔ child"]
-
-    Channels --> Flow
-    Flow --> Commit
-    Commit --> Bidi
-    Bidi --> Cells
-
-    style Commit fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
-    style Bidi fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
-    style Flow fill:#fff8e1,stroke:#f9a825
-```
-
-**Canonical vocabulary**
-- `cell` — continuous phase-state carrier with latched pole
-- `channel` — directed influence with delay, weight, angular phase, and optional line projection
-- `module` — bounded group with read/write cones, belief, prior
-- `field` — graph of modules + channels under monoidal composition
-- `commit` — discrete update enforcing a balanced-ternary nonnegative balance invariant
-- `bidiγΔ` — bidirectional coherence-delta across nested reference frames and path endpoints
-- `window` — derived observer projection over a field, producing ternary traces and measurement records
-
-## Why This Substrate Exists
-
-Modern hybrid systems routinely combine continuous simulation or control, evented transitions, delayed feedback, policy invariants, local learning, predictive belief updates, and nested scale coupling — usually implemented in fragmented toolkits.
-
-This calculus supplies one shared, executable vocabulary and verified reference semantics for all of them under a single coherence-preserving spine.
-
-## Novelty at a Glance
-
-- **`bidiγΔ` operator** — first-class bidirectional coherence exchange across distinct reference frames; nesting is the `α=0` special case of the same relation operator.
-- **Angular/path channels** — channels can rotate incoming phase by `angle=`, project onto selected `lines=`, and connect paths such as `P/c -> P`.
-- **Trace/window observer layer** — any module, relation, or projected boundary can hold a causal window; committing measurements are guarded balanced-ternary commits.
-- **Trace-order locality** — phase-time can flow smoothly while event-time remains local to the observing window; there is no required global tick.
-- **Recursive window policy** — observer windows can carry local counters and projection/update policy without adding a binary observer or global clock.
-- **Balanced-ternary carrier** — committed values are `-1 / 0 / +1` around real equilibrium, not binary false/true labels.
-- **Existence viability** — frames persist by preserving bounded coherent continuity while retaining mode-appropriate transition capacity.
-- **64-state dyadic/triadic bridge** — `bridge64.cdc` declares every `2^6 = 4^3 = 64` codebook row for bootstrap/runtime bridge design.
-- **Generated higher-arity codebooks** — `bridge512.cdc` and `bridge4096.cdc` contain the full generated rows for `n=9` and `n=12`, with runtime regeneration checks. The verified bootstrap arity is `n=6`; arbitrary `n=3k` generation is still a future proof/generator obligation.
-- **Operational bridge runtime** — `runtime/cdc_bridge_runtime.c` parses `bridge64.cdc`, verifies bijection, performs dyadic/triadic lookup, projects trace trits into bridge coordinates, verifies generated codebooks, and emits an interactive 64-cell SVG.
-- **Operational native reducer** — `runtime/cdc_native_runtime.c` parses `native_reducer.cdc` and executes source-declared flow, accepted commit, held commit, and nest transitions.
-- **Shared native source core** — `runtime/cdc_source.c` / `runtime/cdc_source.h` provide the common `.cdc` parser helpers and expectation checks used by the bridge, reducer, replay, and WASM export paths.
-- **Native full-surface runtime** — `native_surface.cdc` exercises guard, trace, measure, policy, bridge, and counter forms through the same C runtime.
-- **Native compile/interpreter/proof path** — the same runtime emits reducer IR, executes that IR through an interpreter path, and exhaustively checks the finite n=6 balanced-ternary walk spectrum.
-- **Council + self-evolution scenario** — `council_bridge.cdc` deliberates across modules into a bridge coordinate and writes a bridge-coordinate witness into an evolved `.cdc` source copy.
-- **Native task frameworks** — `framework_transition.cdc`, `framework_procedural.cdc`, `framework_episodic.cdc`, and `framework_deliberative.cdc` bind state-change, procedural-memory, episodic-memory, and decision patterns onto executed kernel jobs, registered as capabilities `H1`–`H4` (see `FRAMEWORKS.md`).
-
-- **BiDi-gated durable persistence** — `framework_persistence.cdc` (`H6`) makes a crash-durable, replayable store a first-class source form whose append path is governed by the commit barrier itself, so a held decision has no code path on which it could write.
-- **Typed framework contracts** — each framework declares `requires=` roles and `permits=` primitives; `expect framework <key> complete` enforces role completeness, uniqueness, orphan closure, and role-primitive compatibility in the bootloader.
-- **Executed task-loop composition** — `framework_loop.cdc` (`H5`) runs the sense → act → integrate loop twice over one shared state object, with second-cycle expectations reachable only through carried state, then records, recalls, decides, and enacts from the same source.
-- **Universal Operator `𝒰_`** — the guarded, scale-relative closure of `bidiγΔ`; `𝒰` is its reduced mathematical body when the live horizon is omitted from inline notation. Where `bidiγΔ` is open bidirectional transport between reference frames, `universal` is its closed lifted return — reciprocal receptive/radiant angularly biased causal cones active in one flow evaluation, internal flow/commit/nest reductions, a double-cover lifted frame (projected phase mod 2π, winding, Z2 sheet, holonomy) that closes only after 720°, and enactment of the runtime-computed record. Derived over `flow`/`commit`/`nest` — not a fourth foundational reduction. The finite sheet-parity claims (one turn inverts, two turns restore) are mechanized in Lean and Coq; the Möbius/double-cover picture is a topological realization, not a claim that carrier states are physical spinors.
-- **Trit-walk barrier + nonnegative balance** — clean discrete guard preventing rank violation on continuous-to-discrete quantization.
-- **Native guard witnesses** — commit-time guards report `accepted`, `held`, or `degraded` status plus a reason such as `none`, `balance-violation`, `energy-increase`, or `deadband-jitter`; continuous free-energy descent remains scoped to witnessed subset obligations.
-- **`.cdc` literate DSL** — single source format declaring fields, modules, channels, guards, flows, and proof obligations.
-- **Native kernel contract** — `kernel.cdc` starts the self-hosting path by declaring calculus terms, reducer rules, capabilities, and the shrinking bootloader boundary.
-- **Minimal bootloader** — `cdc_boot.py` only loads `.cdc`, checks declarations, and reports expectations.
-
-Core metatheorems and bridge invariants are witnessed by native `.cdc`. The
-finite discrete layer now has an executable C proof check plus Lean and Coq
-source mirrors for the same n=6 carrier spectrum.
-
-## Verification Status (v0.2.4)
-
-The package passes 100% through `./scripts/verify.sh`. CI runs the stricter
-`./scripts/verify.sh --require-formal` gate in `.github/workflows/ci.yml`:
-
-- 1/1 Python bootloader file: `cdc_boot.py`
-- 238/238 native `.cdc` expectations
-- 14/14 native invariant declarations
-- 38/38 native capability declarations
-- 5/5 native framework contracts with enforced role completeness
-- 4811/4811 native witness declarations
-- C bridge runtime compile, lookup, trace-coordinate, generated higher-arity codebook, and interactive grid/SVG checks
-- C native reducer runtime run/compile/interpret/proof/surface/council/evolve/replay checks, including explicit accepted and held commit statuses
-- C native task-framework checks: transition, procedural, episodic (with bidirectional codebook recall), and deliberative exemplars from the four `framework_*.cdc` files
-- C native task-loop composition: `framework_loop.cdc` executes two sense/act/integrate cycles over one shared state object, then proceduralizes, records, recalls, decides, and enacts from the same source
-- Bootloader-enforced framework role contracts: `framework` declarations with `requires=`/`permits=` checked for completeness, uniqueness, closure, and role-primitive compatibility
-- Universal Operator closure: the `universal` runtime mode runs the whole loop over one live state object, checks reciprocal receptive/radiant cones, 720-degree lifted-frame closure with holonomy 0.125, record/decision coordinate agreement, and enacts only after acceptance — with three held negative fixtures (360-only, nonreciprocal cone, coordinate mismatch)
-- Shared C `.cdc` parser/expectation core linked into both native runtimes and compile-checked for the WASM export path
-- Native replay JSON freshness for `demo/replay.json` and the one-screen demo embed
-- WASM replay export surface compile check, with live `emcc` link when Emscripten is available
-- Lean and Rocq/Coq finite carrier and algebraic law proof checks
-- Paper compile through `tectonic`
-- CI installs Lean 4.31.0, Rocq/Coq 9.1.1, and Tectonic 0.16.9 and treats the native contract, C runtimes, generated artifact freshness, finite proof mirrors, and paper compile as one required gate
-
-Run the full gate anytime:
+The dependency-light arXiv source is [paper/arxiv/main.tex](paper/arxiv/main.tex).
+Compile it with:
 
 ```bash
-./scripts/verify.sh
-./scripts/verify.sh --require-formal
+tectonic paper/arxiv/main.tex
 ```
 
-## Layered Value Proposition
+## Identity and history
 
-- **Language layer:** `.cdc` is the source of record for fields, modules, channels, reducers, witnesses, and expectations.
-- **Runtime layer:** C runtimes execute the bridge, reducer, surface, council, and source-evolution jobs directly from `.cdc` through a shared native parser/expectation core.
-- **Formal layer:** Lean, Rocq/Coq, and native finite checkers cover the `n=6` carrier/algebra bootstrap while larger continuous proofs remain explicitly queued.
-- **Product layer:** generated bridge assets and native replay JSON expose the runtime trace as an inspectable demo without claiming live WASM or `cdc_boot.py` parity yet.
+Möbius is the embodied product identity; `U_` denotes the complete executable
+Universal Operator sigil and `U` its reduced mathematical body. CDC remains the
+language and canonical source contract. Identity construction, motion, renders,
+and handoff material live under [docs/identity](docs/identity/README.md), with the
+interactive one-turn/two-turn study at
+[demo/mobius-identity.html](demo/mobius-identity.html).
 
-## Native `.cdc` Example
+Identity assets illustrate the operator's topology. They are not proof of
+runtime behavior or of a physical Möbius/spinorial ontology.
 
-```cdc
-kernel bidi stage=2 target=cdc
-  term cell channel module field counter trace window measurement bridge policy
-  rule flow commit nest relation trace trace-order window measure adapt synchronize
-  provides native-witness-suite native-capability-suite
-  bootloader read-source parse-lines collect-native-declarations verify-expectations report
-  expect native substrate == cdc
-  expect python-files == 1
-  expect witnesses >= 4811
-end
-```
+Earlier public specifications, formal-core proposals, self-hosting mandates,
+and branch build ledgers remain in the repository as explicitly labeled
+historical snapshots. They preserve provenance; the current release authority
+is this README together with the language reference, semantic spine,
+verification matrix, source, and executable receipts.
 
-## Operational Bridge
+## Boundaries
 
-<p align="center">
-  <img src="assets/bridge64-grid.svg" alt="bridge64 dyadic and triadic codebook grid" width="760">
-</p>
+CDC 0.3.0 delivers a compact executable language, native reference runtime,
+guarded effect system, recurrence-gated variational analysis, finite formal
+mirrors, and adversarial evidence. It does not deliver production scaling,
+biological completeness, empirical physics, a continuous holonomy theorem,
+arbitrary distributed deployment, or quantum hardware evidence.
 
-The bridge is operational, not only declared:
+## License and citation
 
-```bash
-build/cdc_bridge_runtime verify bridge64.cdc
-build/cdc_bridge_runtime lookup-dyadic bridge64.cdc 101011
-build/cdc_bridge_runtime lookup-triadic bridge64.cdc 223
-build/cdc_bridge_runtime project-trits bridge64.cdc '+0-+0-' council
-build/cdc_bridge_runtime run-jobs bridge64.cdc bridge_jobs.cdc
-build/cdc_bridge_runtime verify-codebook bridge512.cdc 9
-build/cdc_bridge_runtime verify-codebook bridge4096.cdc 12
-build/cdc_bridge_runtime emit-codebook 9
-build/cdc_bridge_runtime emit-codebook 12
-build/cdc_bridge_runtime grid-svg bridge64.cdc
-```
-
-`./scripts/verify.sh` compiles the runtime, runs those checks, and confirms that
-the tracked 64-cell interactive SVG and the generated `bridge512.cdc` and
-`bridge4096.cdc` files match runtime output. Details are in `BRIDGE_RUNTIME.md`.
-
-## Native Reducer Runtime
-
-The reducer is no longer only a target described in prose. `native_reducer.cdc`
-declares a small field with modules, cells, an angular channel, and four
-source-level reducer jobs:
-
-```bash
-build/cdc_native_runtime run native_reducer.cdc
-build/cdc_native_runtime compile native_reducer.cdc
-build/cdc_native_runtime interpret native_reducer.cdc
-build/cdc_native_runtime prove native_reducer.cdc
-build/cdc_native_runtime surface native_surface.cdc
-build/cdc_native_runtime council council_bridge.cdc
-build/cdc_native_runtime evolve council_bridge.cdc
-build/cdc_native_runtime replay native_reducer.cdc native_surface.cdc
-```
-
-The C runtime consumes that source and executes:
-
-- `flow`: continuous phase evolution plus angular channel coupling;
-- `commit`: balanced-ternary quantization with explicit `accepted` or `held` status;
-- `nest`: child coherence upward and parent context downward.
-- `compile`: reducer source to a small IR listing;
-- `interpret`: execute the compiled reducer IR as an IR path rather than only printing it;
-- `prove`: exhaustive n=6 trit-walk counts: `729 / 267 / 51 / 20 / 5`.
-- `surface`: guard, trace, measurement, policy, bridge-coordinate, and counter clauses;
-- `council`: deliberate across source-declared council members into a bridge coordinate;
-- `evolve`: write a bridge-coordinate witness into a copied `.cdc` source.
-- `replay`: emit the Flow -> Commit -> Nest -> Trace -> Bridge JSON used by `demo/replay.json` and `demo/index.html`.
-
-`runtime/cdc_source.c` / `runtime/cdc_source.h` factor the shared native
-`.cdc` line parser, attribute reader, typed attribute accessors, and primitive
-expectation checks used by both C runtimes. This is a native parser/expectation
-core, not full `cdc_boot.py` parity; repo-wide declaration checking remains
-queued until the C/WASM path covers the bootloader's whole contract surface.
-
-`runtime/cdc_wasm_exports.c` wraps the replay path with a C ABI suitable for an
-Emscripten build. The verification gate always compiles that export surface as
-C, and links a live WASM replay module when `emcc` is installed. Full browser
-WASM execution and repo-wide `cdc_boot.py` parity remain queued rather than
-claimed.
-
-`cdc_boot.py` only indexes those declarations and verifies their witness links;
-it does not execute the reducer.
-
-## Task Frameworks
-
-Six generalizable task frameworks bind practical task vocabulary onto the
-kernel primitives — each is a `.cdc` file with a capability registry entry,
-binding witnesses linked to executed jobs, and a deterministic exemplar
-checked by the verification gate:
-
-```bash
-build/cdc_native_runtime run framework_transition.cdc        # state change: guard, act, fire, block, lift
-build/cdc_native_runtime surface framework_transition.cdc
-build/cdc_native_runtime compile framework_procedural.cdc    # skills: declarative source -> reducer IR
-build/cdc_native_runtime interpret framework_procedural.cdc  # skilled execution through the IR path
-build/cdc_native_runtime run framework_episodic.cdc          # episodes: live, record, consolidate
-build/cdc_native_runtime surface framework_episodic.cdc      # recall, key, ordinal
-build/cdc_native_runtime council framework_deliberative.cdc  # options -> quorum -> decision coordinate
-build/cdc_native_runtime evolve framework_deliberative.cdc   # decision enacted as source memory
-build/cdc_native_runtime run framework_loop.cdc              # the whole loop: two cycles, one state object
-build/cdc_native_runtime interpret framework_loop.cdc        # the whole loop re-executed as compiled IR
-build/cdc_native_runtime universal framework_loop.cdc        # U720 closure: one live state through reduce,
-                                                             # record, decide, closure checks, and enactment
-build/cdc_native_runtime persist framework_persistence.cdc   # durable state, gated by the commit barrier
-```
-
-The unified `cdc` driver carries the full toolchain surface:
-
-```bash
-build/cdc verify --contract *.cdc     # bootloader-parity contract report
-build/cdc verify --vectors *.cdc      # ordered per-check parity vectors
-build/cdc run framework_loop.cdc      # fused single-process executor
-build/cdc test --gate *.cdc           # typed ternary test runner (receipts)
-build/cdc build *.cdc                 # proof-carrying canonical bundle + manifest
-build/cdc install <package-dir>       # crash-durable install, journaled on cdc_store
-build/cdc x <package> <entry.cdc>     # manifest-verified execution (trusted-local-only)
-```
-
-`cdc build` refuses a red corpus and never emits a bundle that does not
-re-verify with the sources' own verdicts. `cdc install` seals each install
-as one durable store transaction — the journal IS the install record — and
-latches the directory atomically, so a crash leaves either no package or a
-complete one. `cdc x` re-digests every member against the install manifest
-before anything executes; it is trusted-local-only until the CT5
-hostile-package gates land, and that boundary is stated rather than
-sandboxed around.
-
-Persistence is a language form, not a host service the source reaches
-around the language to call. `store` declares a durable log the way `field`
-declares a continuum; `persist ... op=append` runs the **identical**
-balanced-ternary barrier that `commit` runs, and only an accepted decision
-may reach the log. A violated prefix balance holds — nothing is staged,
-nothing is committed, and the sealed bytes do not move:
-
-```text
-persist=journal-latch  op=append trits=0+- balance=admissible status=accepted durable=yes replay=changed
-persist=journal-hold   op=append trits=-+0 balance=violated  status=held     durable=no  replay=stable
-persist=journal-compact op=compact                           status=accepted durable=yes replay=stable
-```
-
-Both observations are read back from the store rather than taken from the
-declaration, and the gate proves the middle line externally: it copies the
-sealed log, replays three violating appends over the same store, and
-byte-compares. The third line is the point of separating the two
-identities — compaction rewrites layout without rewriting history.
-
-Each framework also declares a typed contract (`framework <key> requires=...
-permits=...`) that the bootloader enforces through `expect framework <key>
-complete`: every required role bound exactly once, every binding linked to a
-declared executable job, every linked primitive permitted, and no orphan
-framework bindings anywhere in the tree (`expect frameworks closed`).
-
-The binding tables, the generic task loop, the contract semantics, and the
-explicitly queued obligations are documented in `FRAMEWORKS.md`.
-
-Lean and Coq mirrors of the finite carrier and algebraic law proof live in
-`formal/lean/CDCFinite.lean` and `formal/coq/CDCFinite.v`. `./scripts/verify.sh`
-runs them automatically when the corresponding toolchain is installed.
-
-## Paper
-
-Knuth-inspired, dependency-light literate paper:
-
-- Source: `paper/arxiv/main.tex`
-- The checked source tree is the current paper source; `./scripts/verify.sh` compiles it when `tectonic` is available.
-
-Compile locally (TeX toolchain):
-
-```bash
-cd paper/arxiv && pdflatex main.tex && pdflatex main.tex
-```
-
-## Boundaries & Next
-
-The finite carrier layer and finite algebraic laws now have executable proof
-checks. The broader formalization spine (immutable runtime state tuple,
-small-step relations for flow/commit/nest, and expanded Lean/Coq/Kani proofs) is in
-`FORMAL_SEMANTIC_SPINE.md`.
-
-Claim-to-witness-to-proof tracking is in `VERIFICATION_OBLIGATION_MATRIX.md`.
-The observer/measurement extension is documented in `TERNARY_TRACE_WINDOW_SEMANTICS.md`.
-The native self-hosting mandate is documented in `NATIVE_SELF_HOSTING_MANDATE.md`.
-The task-framework layer is documented in `FRAMEWORKS.md`.
-
-Current work delivers a compact, verified substrate — not production scaling, biological completeness, or a finished physics theory.
-
-## License
-
-MIT License. See `LICENSE`.
-
----
-
-If this substrate proves useful, cite via `CITATION.cff` or the paper.
+MIT License. See [LICENSE](LICENSE). Cite the release through
+[CITATION.cff](CITATION.cff) or the accompanying paper.

@@ -4,6 +4,14 @@ Date: 2026-06-18
 
 Status: public engineering specification, v0.2.4.
 
+> **Historical snapshot — not current release authority.** This document is
+> preserved as the v0.2.4 public engineering record. Current release truth is
+> defined by [`README.md`](README.md), [`CDC_LANGUAGE.md`](CDC_LANGUAGE.md),
+> [`FORMAL_SEMANTIC_SPINE.md`](FORMAL_SEMANTIC_SPINE.md), and
+> [`VERIFICATION_OBLIGATION_MATRIX.md`](VERIFICATION_OBLIGATION_MATRIX.md).
+> Counts and implementation claims below must be read at their stated v0.2.4
+> date; they do not describe CDC 0.3.0.
+
 BiDi Coherence-Delta Calculus is a native `.cdc` language with a formal
 coherence-calculus kernel for hybrid systems that need continuous dynamics,
 balanced-ternary commitments, delayed coupling, local invariants, nested

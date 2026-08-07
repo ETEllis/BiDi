@@ -7,6 +7,7 @@ static const char *const FORM_DIRECTIVES[] = {
     "counter", "flow",    "commit",  "nest",    "trace",
     "measure", "policy",  "bridge",  "compile", "interpret",
     "proof",   "council", "deliberate", "evolve", "universal",
+    "orbit",   "variational", "spectrum",
     "store",   "persist", "frame",   "reduce",  "complex",
     "topology", "authority", "transport",
 };

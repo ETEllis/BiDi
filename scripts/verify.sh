@@ -74,6 +74,16 @@ assert_fresh_file() {
 
 mkdir -p build
 
+# The shipped native driver carries the real-Schur backend. The WASM replay
+# surface deliberately omits it and therefore retains the typed
+# spectral-backend-unavailable hold for stability work.
+U2_SPECTRAL_CFLAGS=(-DCDC_U2_LAPACK_DGEES)
+if [ "$(uname -s)" = "Darwin" ]; then
+  U2_SPECTRAL_LIBS=(-framework Accelerate)
+else
+  U2_SPECTRAL_LIBS=(-llapack -lblas)
+fi
+
 echo "== Minimal Python bootloader syntax =="
 python3 - <<'PY'
 import py_compile
@@ -312,6 +322,7 @@ echo
 echo "== Stable ABI and unified driver skeleton [gate CT2 seed] =="
 rm -f build/cdc
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
+  "${U2_SPECTRAL_CFLAGS[@]}" \
   runtime/toolchain/main.c \
   runtime/toolchain/cmd_verify.c \
   runtime/toolchain/cmd_test.c \
@@ -338,6 +349,8 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_diagnostic.c \
   -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
   runtime/cdc_native_runtime.c \
+  runtime/cdc_variational.c \
+  runtime/cdc_linalg.c \
   runtime/cdc_bridge_runtime.c \
   runtime/cdc_source.c \
   runtime/cdc_store.c \
@@ -346,9 +359,14 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_receipt.c \
   runtime/cdc_shared_record.c \
   -lm \
+  "${U2_SPECTRAL_LIBS[@]}" \
   -o build/cdc
 run_step ./build/cdc version
 ./build/cdc version | grep -q "abi=1.5 grammar=1"
+run_step ./build/cdc verify --parse \
+  tests/fixtures/u2/u720_projection_hold.cdc \
+  tests/fixtures/u2/u720_primal_hold.cdc \
+  tests/fixtures/u2/u720_true_relative_marginal.cdc
 nm build/cdc > build/cdc_symbols.txt
 grep -q "cdc_supervisor_admit" build/cdc_symbols.txt
 grep -q "cdc_supervisor_admit_ex" build/cdc_symbols.txt
@@ -477,11 +495,14 @@ echo "== Unified driver passthrough parity [gate CT2] =="
 # late — they are compiled here if absent).
 rm -f build/cdc_native_runtime build/cdc_bridge_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
-  runtime/cdc_native_runtime.c runtime/cdc_source.c \
+  "${U2_SPECTRAL_CFLAGS[@]}" \
+  runtime/cdc_native_runtime.c runtime/cdc_variational.c \
+  runtime/cdc_linalg.c runtime/cdc_source.c \
   runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
   runtime/cdc_receipt.c \
   runtime/cdc_parser.c runtime/cdc_ast.c runtime/cdc_lexer.c \
   runtime/cdc_diagnostic.c -lm \
+  "${U2_SPECTRAL_LIBS[@]}" \
   -o build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_bridge_runtime.c runtime/cdc_source.c \
@@ -509,6 +530,8 @@ surface native_surface.cdc
 council council_bridge.cdc
 evolve council_bridge.cdc
 universal framework_loop.cdc
+stability tests/fixtures/u2/u720_projection_hold.cdc
+stability tests/fixtures/u2/u720_true_relative_marginal.cdc
 fused framework_loop.cdc
 fused native_reducer.cdc
 fused council_bridge.cdc
@@ -1057,6 +1080,7 @@ mkdir -p build/repro_round_a build/repro_round_b
 for ROUND in a b; do
   # shellcheck disable=SC2086
   cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread $REPRO_LDFLAGS \
+    "${U2_SPECTRAL_CFLAGS[@]}" \
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \
@@ -1083,6 +1107,8 @@ for ROUND in a b; do
     runtime/cdc_diagnostic.c \
     -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
     runtime/cdc_native_runtime.c \
+    runtime/cdc_variational.c \
+    runtime/cdc_linalg.c \
     runtime/cdc_bridge_runtime.c \
     runtime/cdc_source.c \
     runtime/cdc_receipt.c \
@@ -1091,6 +1117,7 @@ for ROUND in a b; do
     runtime/cdc_digest.c \
     runtime/cdc_blake3.c \
     -lm \
+    "${U2_SPECTRAL_LIBS[@]}" \
     -o "build/repro_round_${ROUND}/cdc_repro"
 done
 if ! cmp build/repro_round_a/cdc_repro build/repro_round_b/cdc_repro; then
@@ -1203,7 +1230,10 @@ echo "  store instance identity excluded by design — see DECISIONS D19)"
 if [ "$SANITIZED" = "1" ]; then
   run_step cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread \
     -fsanitize=address,undefined \
+    "${U2_SPECTRAL_CFLAGS[@]}" \
     runtime/cdc_native_runtime.c \
+    runtime/cdc_variational.c \
+    runtime/cdc_linalg.c \
     runtime/cdc_source.c \
     runtime/cdc_store.c \
     runtime/cdc_digest.c \
@@ -1214,6 +1244,7 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/cdc_lexer.c \
     runtime/cdc_diagnostic.c \
     -lm \
+    "${U2_SPECTRAL_LIBS[@]}" \
     -o build/cdc_persist_asan
   rm -rf build/persistence-journal build/persistence-contended \
     build/persistence-bytes
@@ -1349,6 +1380,7 @@ echo "== Whole-binary sanitizer sweep [gate CT2/CT3] =="
 if [ "$SANITIZED" = "1" ]; then
   run_step cc -std=c99 -Wall -Wextra -pedantic -O1 -pthread \
     -fsanitize=address,undefined \
+    "${U2_SPECTRAL_CFLAGS[@]}" \
     runtime/toolchain/main.c \
     runtime/toolchain/cmd_verify.c \
     runtime/toolchain/cmd_test.c \
@@ -1375,6 +1407,8 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/cdc_diagnostic.c \
     -DCDC_NATIVE_NO_MAIN -DCDC_BRIDGE_NO_MAIN \
     runtime/cdc_native_runtime.c \
+    runtime/cdc_variational.c \
+    runtime/cdc_linalg.c \
     runtime/cdc_bridge_runtime.c \
     runtime/cdc_source.c \
     runtime/cdc_receipt.c \
@@ -1383,6 +1417,7 @@ if [ "$SANITIZED" = "1" ]; then
     runtime/cdc_digest.c \
     runtime/cdc_blake3.c \
     -lm \
+    "${U2_SPECTRAL_LIBS[@]}" \
     -o build/cdc_asan
   run_step ./build/cdc_asan version
   # shellcheck disable=SC2086
@@ -1397,6 +1432,10 @@ if [ "$SANITIZED" = "1" ]; then
   run_step ./build/cdc_asan run framework_persistence.cdc
   run_step ./build/cdc_asan run framework_loop.cdc
   run_step ./build/cdc_asan run council_bridge.cdc
+  run_step ./build/cdc_asan stability \
+    tests/fixtures/u2/u720_projection_hold.cdc
+  run_step ./build/cdc_asan stability \
+    tests/fixtures/u2/u720_true_relative_marginal.cdc
   run_step ./build/cdc_asan bridge verify bridge64.cdc
   rm -rf build/persistence-journal build/persistence-contended
   # shellcheck disable=SC2086
@@ -1424,7 +1463,7 @@ if [ "$SANITIZED" = "1" ]; then
   fi
   # The instrumented binary must agree with the plain one, not merely avoid
   # crashing: identical contract report, identical vectors, identical gate.
-  echo "whole-binary sanitizer sweep ok (verify/run/test/bridge under ASan+UBSan,"
+  echo "whole-binary sanitizer sweep ok (verify/run/stability/test/bridge under ASan+UBSan,"
   echo "  contract + vectors + gate byte-identical to the plain build)"
 else
   echo "sanitizers unavailable; skipping whole-binary sweep"
@@ -1826,7 +1865,10 @@ echo
 echo "== Native reducer runtime =="
 rm -f build/cdc_native_runtime
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
+  "${U2_SPECTRAL_CFLAGS[@]}" \
   runtime/cdc_native_runtime.c \
+  runtime/cdc_variational.c \
+  runtime/cdc_linalg.c \
   runtime/cdc_source.c \
   runtime/cdc_store.c \
   runtime/cdc_digest.c \
@@ -1837,7 +1879,19 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   runtime/cdc_lexer.c \
   runtime/cdc_diagnostic.c \
   -o build/cdc_native_runtime \
-  -lm
+  -lm \
+  "${U2_SPECTRAL_LIBS[@]}"
+
+echo
+echo "== U2 executable return-map, recurrence, and spectrum gate =="
+run_step ./scripts/verify_u2.sh --skip-formal
+
+echo
+run_step ./scripts/verify_web_console.sh
+
+echo
+run_step ./scripts/verify_public_truth.sh
+
 echo
 echo "== Native WASM replay export surface =="
 run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread -Wno-unused-function \
@@ -1847,7 +1901,8 @@ run_step cc -std=c99 -Wall -Wextra -pedantic -O2 -pthread \
   -c runtime/cdc_source.c \
   -o build/cdc_source.o
 if command -v emcc >/dev/null 2>&1; then
-  run_step emcc -O2 runtime/cdc_wasm_exports.c runtime/cdc_source.c \
+  run_step emcc -O2 runtime/cdc_wasm_exports.c runtime/cdc_variational.c \
+    runtime/cdc_linalg.c runtime/cdc_source.c \
     runtime/cdc_store.c runtime/cdc_digest.c runtime/cdc_blake3.c \
     runtime/cdc_receipt.c runtime/cdc_parser.c runtime/cdc_ast.c \
     runtime/cdc_lexer.c runtime/cdc_diagnostic.c \
@@ -2309,19 +2364,31 @@ echo
 echo "== Lean/Coq finite carrier and algebraic proofs =="
 if require_or_skip lean "Lean finite carrier/algebra proof check"; then
   run_step lean formal/lean/CDCFinite.lean
-  echo "lean finite carrier/algebra proof: ok"
+  run_step lean formal/lean/U2VariationalFinite.lean
+  echo "lean finite carrier/algebra/U2 polarity proof: ok"
 fi
 
 if require_or_skip coqc "Coq/Rocq finite carrier/algebra proof check"; then
   run_step coqc -q formal/coq/CDCFinite.v
+  mkdir -p build/u2/coq
+  run_step coqc -q -noglob -o build/u2/coq/U2VariationalFinite.vo \
+    formal/coq/U2VariationalFinite.v
   rm -f formal/coq/CDCFinite.vo formal/coq/CDCFinite.vos formal/coq/CDCFinite.vok formal/coq/CDCFinite.glob formal/coq/.CDCFinite.aux
-  echo "coq finite carrier/algebra proof: ok"
+  echo "coq finite carrier/algebra/U2 polarity proof: ok"
 fi
 
 echo
 echo "== Paper compile =="
 if require_or_skip tectonic "paper compile"; then
-  (cd paper/arxiv && run_step tectonic main.tex)
+  rm -f paper/arxiv/main.log
+  (cd paper/arxiv && run_step tectonic --keep-logs main.tex)
+  test -s paper/arxiv/main.pdf
+  if rg -n 'Overfull \\hbox|Underfull \\hbox|LaTeX Warning|Package [^:]+ Warning|Citation .* undefined|Reference .* undefined|Undefined control sequence|Emergency stop|Fatal error|^!' \
+    paper/arxiv/main.log; then
+    echo "paper emitted a warning, layout defect, undefined reference, or TeX error" >&2
+    exit 1
+  fi
+  echo "paper compile and warning scan: ok"
 fi
 
 echo

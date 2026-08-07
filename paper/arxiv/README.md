@@ -1,20 +1,25 @@
-# arXiv Source Bundle
+# arXiv source bundle
 
-This folder is intentionally flat and dependency-light.
-
-Primary source:
+This folder contains one flattened primary source:
 
 ```text
 main.tex
 ```
 
-Compile when a TeX toolchain is available:
+Compile with:
+
+```bash
+tectonic main.tex
+```
+
+or:
 
 ```bash
 pdflatex main.tex
 pdflatex main.tex
 ```
 
-The source avoids figures, BibTeX, shell escape, minted, and nonstandard
-classes. It uses an inline `thebibliography` environment so no `.bib` or `.bbl`
-file is required.
+The source avoids external figures, BibTeX, shell escape, minted, and custom
+classes. Its inline bibliography contains each cited work once. The surrounding
+repository gate is the authority for version, source counts, runtime receipts,
+U1/U2 verdicts, and formal claim ceilings.

@@ -1,6 +1,14 @@
 # BiDi Coherence-Delta Calculus — Formal Core (v1)
 ### The literal calculus: terms, reduction, an operator algebra, and five metatheorems
 
+> **Historical formal-design snapshot — not current release authority.** This
+> file preserves the earlier maximally compressed calculus proposal. The
+> current specified/executed split, exact finite proof ceiling, U1/U2 chain,
+> and open obligations live in
+> [`FORMAL_SEMANTIC_SPINE.md`](FORMAL_SEMANTIC_SPINE.md) and
+> [`VERIFICATION_OBLIGATION_MATRIX.md`](VERIFICATION_OBLIGATION_MATRIX.md).
+> A declaration or witness named below is not automatically a universal proof.
+
 This is the formal heart of the system. It collapses the earlier "object model" and
 "dynamics" into one object: a **calculus** in the strict sense — a syntax of terms,
 a structural congruence (equational laws), a reduction relation over those terms, an

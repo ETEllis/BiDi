@@ -24,7 +24,7 @@ static int is_native_verb(const char *verb) {
     static const char *const VERBS[] = {
         "run",     "compile", "interpret", "prove",   "surface",
         "council", "evolve",  "universal", "persist", "replay",
-        "fused",
+        "fused",   "stability",
     };
     size_t i;
     for (i = 0; i < sizeof(VERBS) / sizeof(VERBS[0]); i++) {
