@@ -116,6 +116,8 @@ const cases = [
 
 const report = [];
 const pageUrl = pathToFileURL(path.join(HERE, "index.html")).href;
+const compiledPaperPath = path.resolve(HERE, "../../../paper/arxiv/main.pdf");
+assert.ok(fs.existsSync(compiledPaperPath), "compiled paper is missing from the verified checkout");
 
 for (const testCase of cases) {
   await browser.send("Emulation.setEmulatedMedia", { media: "screen", features: [] });
@@ -183,7 +185,8 @@ for (const testCase of cases) {
         spectrumDiagnosticsText: (document.querySelector('[data-evidence="spectrum-diagnostics"]') || {}).textContent || '',
         hasMethodContract: Boolean(document.querySelector('[data-evidence="method-contract"]')),
         methodContractOpen: Boolean(document.querySelector('[data-evidence="method-contract"][open]')),
-        methodContractText: (document.querySelector('[data-evidence="method-contract"]') || {}).textContent || ''
+        methodContractText: (document.querySelector('[data-evidence="method-contract"]') || {}).textContent || '',
+        compiledPaperHref: (document.querySelector('.proof-link[href$="paper/arxiv/main.pdf"]') || {}).getAttribute?.('href') || null
       };
     })()`,
     returnByValue: true,
@@ -196,6 +199,11 @@ for (const testCase of cases) {
   assert.equal(metrics.stage, testCase.stage, `${testCase.id}: stage interaction failed`);
   assert.equal(metrics.source, testCase.source, `${testCase.id}: source interaction failed`);
   assert.ok(!metrics.claim.toLowerCase().includes("loading"), `${testCase.id}: claim did not render`);
+  assert.equal(
+    metrics.compiledPaperHref,
+    "../../../paper/arxiv/main.pdf",
+    `${testCase.id}: compiled paper route is unavailable`,
+  );
   if (testCase.keyboard) assert.equal(metrics.focusedStage, testCase.stage, "keyboard focus did not follow stage");
   if (testCase.zoomEquivalentPercent === 200) {
     assert.equal(metrics.devicePixelRatio, 2, "200% equivalent proof did not use the 2x physical/CSS scale");

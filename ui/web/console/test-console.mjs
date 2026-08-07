@@ -39,6 +39,14 @@ assert.deepEqual(snapshot, buildSnapshot(), "generated U2 snapshot is stale");
 assert.deepEqual(embeddedJson(consoleHtml, "u2-snapshot-data"), snapshot);
 assert.deepEqual(embeddedJson(consoleHtml, "replay-data"), replay);
 assert.deepEqual(embeddedJson(demoHtml, "replay-data"), replay);
+assert.ok(
+  consoleHtml.includes('href="../../../paper/arxiv/main.pdf"'),
+  "compiled paper must remain traversable from the evidence orbit",
+);
+assert.ok(
+  !consoleHtml.includes("Compiled paper PDF is not present in this checkout"),
+  "compiled paper route must not advertise a stale absence state",
+);
 const executableScripts = [...consoleHtml.matchAll(/<script(?![^>]*type="application\/json")[^>]*>([\s\S]*?)<\/script>/gu)];
 assert.ok(executableScripts.length > 0, "console executable script missing");
 const executableSource = executableScripts.at(-1)[1];
