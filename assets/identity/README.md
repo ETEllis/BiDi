@@ -11,6 +11,10 @@ rename the package, the `.cdc` source format, or the formal paper.
   small technical surfaces, with a right-biased live-horizon overhang.
 - `mobius-u-code-sigil-dark.svg` — two-ink dark-surface `𝒰_` with the same
   executable horizon.
+- `mobius-u-code-sigil.png` and `mobius-u-code-sigil-dark.png` — exact 256 px
+  raster delivery mirrors of the two canonical SVGs for GitHub clients that do
+  not reliably display repository SVGs. The SVG files remain the editable
+  identity sources.
 - `mobius-u-operator.svg` — reduced mathematical body `𝒰` without the live
   horizon. The filename remains a compatibility handle, not a second operator.
 - `mobius-ius-relational.svg` — independent `i𝒰s` relational lockup.

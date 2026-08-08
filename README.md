@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/identity/mobius-u-code-sigil-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-code-sigil.svg">
-    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="96">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/identity/mobius-u-code-sigil-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-code-sigil.png">
+    <img src="assets/identity/mobius-u-code-sigil.png" alt="BiDi Universal Operator system sigil" width="96">
   </picture>
 </p>
 
