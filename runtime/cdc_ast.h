@@ -30,8 +30,9 @@ typedef enum {
     CDC_STMT_WITNESS,
     CDC_STMT_FORM, /* field module cell channel guard counter flow commit
                       nest trace measure policy bridge compile interpret
-                      proof council deliberate evolve universal store persist
-                      frame reduce complex topology authority transport */
+                      proof council deliberate evolve universal orbit
+                      variational spectrum store persist frame reduce complex
+                      topology authority transport */
     CDC_STMT_EXPECT,
     CDC_STMT_END,
     CDC_STMT_UNKNOWN

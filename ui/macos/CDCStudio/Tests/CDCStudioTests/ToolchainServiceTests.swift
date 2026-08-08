@@ -1,24 +1,45 @@
 import XCTest
 @testable import CDCStudio
 
-/// 2026-07-28 review, finding 3.
-///
-/// Draining a child's stdout to EOF before starting on stderr deadlocks the
-/// moment the child fills the undrained pipe's buffer: the child blocks
-/// writing to stderr, the parent blocks reading stdout that will never end.
-/// This is deterministic, not a race — which is why it needs a permanent
-/// counterexample rather than a retry.
 final class ToolchainServiceTests: XCTestCase {
+    private func makeRuntime(scriptBody: String) throws -> (root: URL, binary: URL) {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("cdc-studio-runtime-\(UUID().uuidString)")
+        let build = root.appendingPathComponent("build")
+        try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
+        let binary = build.appendingPathComponent("cdc")
+        try scriptBody.write(to: binary, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        return (root, binary)
+    }
 
-    /// Writes a child that floods BOTH streams well past pipe capacity
-    /// (64 KiB on Darwin), interleaved so neither can be drained first.
-    private func makeFloodingChild(bytesPerStream: Int) throws -> URL {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("cdc-studio-flood-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let script = dir.appendingPathComponent("flood.sh")
+    private func makeNativeRuntime(cSource: String) throws -> (root: URL, binary: URL) {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("cdc-studio-native-runtime-\(UUID().uuidString)")
+        let build = root.appendingPathComponent("build")
+        try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("runtime.c")
+        let binary = build.appendingPathComponent("cdc")
+        try cSource.write(to: source, atomically: true, encoding: .utf8)
+        let diagnostics = Pipe()
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
+        compiler.arguments = [source.path, "-o", binary.path]
+        compiler.standardError = diagnostics
+        try compiler.run()
+        compiler.waitUntilExit()
+        guard compiler.terminationStatus == 0 else {
+            let detail = String(decoding: diagnostics.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            throw NSError(domain: "ToolchainServiceTests", code: Int(compiler.terminationStatus), userInfo: [
+                NSLocalizedDescriptionKey: detail
+            ])
+        }
+        return (root, binary)
+    }
+
+    private func makeFloodingRuntime(bytesPerStream: Int) throws -> (root: URL, binary: URL) {
         let chunks = max(1, bytesPerStream / 1024)
-        let body = """
+        return try makeRuntime(scriptBody: """
         #!/bin/sh
         i=0
         line=$(printf 'x%.0s' $(seq 1 1023))
@@ -28,58 +49,140 @@ final class ToolchainServiceTests: XCTestCase {
           i=$((i + 1))
         done
         exit 0
-        """
-        try body.write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        return script
+        """)
+    }
+
+    private func execute(
+        _ runtime: (root: URL, binary: URL),
+        timeout: TimeInterval,
+        streamByteLimit: Int = ToolchainProcessRunner.defaultStreamByteLimit
+    ) async -> ToolchainProcessRunner.Outcome {
+        let runner = ToolchainProcessRunner(streamByteLimit: streamByteLimit)
+        let ticket = runner.reserve()
+        return await runner.execute(
+            binary: runtime.binary,
+            arguments: [],
+            workingDirectory: runtime.root,
+            timeout: timeout,
+            ticket: ticket
+        )
     }
 
     @MainActor
     func testFloodingChildOnBothStreamsTerminatesAndCapturesBoth() async throws {
-        let bytesPerStream = 512 * 1024 // 8x pipe capacity on both streams
-        let child = try makeFloodingChild(bytesPerStream: bytesPerStream)
-        defer { try? FileManager.default.removeItem(at: child.deletingLastPathComponent()) }
+        let bytesPerStream = 512 * 1024
+        let runtime = try makeFloodingRuntime(bytesPerStream: bytesPerStream)
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+        let outcome = await execute(runtime, timeout: 60)
 
-        let service = ToolchainService(repositoryURL: child.deletingLastPathComponent())
-        service.binaryURL = child
-
-        // A generous timeout: this must pass because both pipes are drained
-        // concurrently, NOT because the timeout rescued a deadlock. A
-        // deadlocked implementation would come back with exitCode -2.
-        let invocation = await service.run([], timeout: 60)
-
-        XCTAssertEqual(invocation.exitCode, 0,
-                       "child must exit normally; -2 means the drain deadlocked and timed out")
-        XCTAssertGreaterThan(invocation.stdout.utf8.count, bytesPerStream / 2,
-                             "stdout was truncated")
-        XCTAssertGreaterThan(invocation.stderr.utf8.count, bytesPerStream / 2,
-                             "stderr was truncated")
+        XCTAssertEqual(outcome.exitCode, 0)
+        XCTAssertGreaterThan(outcome.stdout.utf8.count, bytesPerStream / 2, "stdout was truncated")
+        XCTAssertGreaterThan(outcome.stderr.utf8.count, bytesPerStream / 2, "stderr was truncated")
     }
 
-    /// A child that never exits must not wedge the caller: the timeout
-    /// escalates SIGTERM then SIGKILL and the invocation returns.
     @MainActor
     func testWedgedChildIsTerminatedByTimeout() async throws {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("cdc-studio-wedge-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let script = dir.appendingPathComponent("wedge.sh")
-        try "#!/bin/sh\nsleep 600\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-
-        let service = ToolchainService(repositoryURL: dir)
-        service.binaryURL = script
-
+        let runtime = try makeRuntime(scriptBody: "#!/bin/sh\nexec sleep 600\n")
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
         let started = Date()
-        let invocation = await service.run([], timeout: 2)
+        let outcome = await execute(runtime, timeout: 2)
+
         XCTAssertLessThan(Date().timeIntervalSince(started), 30, "timeout did not fire")
-        XCTAssertEqual(invocation.exitCode, -2)
-        XCTAssertTrue(invocation.stderr.contains("timed out"))
+        XCTAssertEqual(outcome.exitCode, -2)
+        XCTAssertTrue(outcome.timedOut)
+        XCTAssertTrue(outcome.stderr.contains("timed out"))
     }
 
-    /// The dyadic readout is six bits, zero-padded on the left. This is the
-    /// value whose construction failed to compile at the reviewed head.
+    func testChildClosingBothPipesCannotBypassProcessTimeout() async throws {
+        let runtime = try makeRuntime(scriptBody: "#!/bin/sh\nexec 1>&-\nexec 2>&-\nexec sleep 600\n")
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+
+        let started = Date()
+        let outcome = await execute(runtime, timeout: 1)
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "EOF incorrectly ended process supervision")
+        XCTAssertEqual(outcome.exitCode, -2)
+        XCTAssertTrue(outcome.timedOut)
+        XCTAssertEqual(outcome.stdoutCapture, .complete)
+        XCTAssertEqual(outcome.stderrCapture, .complete)
+    }
+
+    func testPerStreamCaptureCapsAreTypedAndFailClosed() async throws {
+        let limit = 64 * 1024
+        let runtime = try makeFloodingRuntime(bytesPerStream: limit * 4)
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+
+        let outcome = await execute(runtime, timeout: 30, streamByteLimit: limit)
+
+        XCTAssertEqual(outcome.exitCode, -6)
+        XCTAssertEqual(outcome.stdout.utf8.count, limit)
+        XCTAssertEqual(outcome.stdoutCapture, .truncated(limit: limit))
+        XCTAssertEqual(outcome.stderrCapture, .truncated(limit: limit))
+        XCTAssertTrue(outcome.stderr.contains("capture limit"))
+    }
+
+    func testCancellationReservedBeforeLaunchCannotBeResetOrLost() async throws {
+        let runtime = try makeRuntime(scriptBody: "#!/bin/sh\ntouch launched\n")
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+        let runner = ToolchainProcessRunner()
+        let ticket = runner.reserve()
+        runner.cancel(ticket)
+
+        let outcome = await runner.execute(
+            binary: runtime.binary,
+            arguments: [],
+            workingDirectory: runtime.root,
+            timeout: 5,
+            ticket: ticket
+        )
+
+        XCTAssertEqual(outcome.exitCode, -3)
+        XCTAssertTrue(outcome.cancelled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: runtime.root.appendingPathComponent("launched").path))
+    }
+
+    @MainActor
+    func testOperatorCancellationTerminatesActiveChild() async throws {
+        let runtime = try makeRuntime(scriptBody: "#!/bin/sh\ntrap '' TERM\nexec sleep 600\n")
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+        let runner = ToolchainProcessRunner()
+        let ticket = runner.reserve()
+
+        let task = Task {
+            await runner.execute(
+                binary: runtime.binary,
+                arguments: [],
+                workingDirectory: runtime.root,
+                timeout: 30,
+                ticket: ticket
+            )
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        runner.cancel(ticket)
+        let outcome = await task.value
+
+        XCTAssertTrue(outcome.cancelled)
+        XCTAssertEqual(outcome.exitCode, -3)
+        XCTAssertTrue(outcome.stderr.contains("cancelled by operator"))
+    }
+
+    @MainActor
+    func testConcurrentInvocationFailsFastInsteadOfCorruptingRunningState() async throws {
+        let runtime = try makeNativeRuntime(cSource: "#include <unistd.h>\nint main(void) { sleep(2); return 0; }\n")
+        defer { try? FileManager.default.removeItem(at: runtime.root) }
+        let service = ToolchainService(repositoryURL: runtime.root)
+
+        let first = Task { await service.run([], timeout: 10) }
+        try await Task.sleep(for: .milliseconds(100))
+        let secondResult = await service.run([], timeout: 10)
+        let second = try XCTUnwrap(secondResult)
+        service.cancelCurrentRun()
+        _ = await first.value
+
+        XCTAssertEqual(second.exitCode, -4)
+        XCTAssertTrue(second.stderr.contains("already active"))
+    }
+
     func testDyadicRenderingIsSixBitsZeroPadded() {
         for (index, expected) in [(0, "000000"), (1, "000001"), (43, "101011"), (63, "111111")] {
             let bits = String(index, radix: 2)

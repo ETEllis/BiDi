@@ -1,8 +1,9 @@
-# Product Surfaces
+# BiDi Operator Instruments
 
-Two surfaces over one runtime: a native macOS operator app and a
-self-contained web console. Neither reimplements the calculus — both present
-what the shipped `cdc` binary actually produced.
+BiDi's operator instruments make the source-to-evidence path directly
+navigable in a native macOS app and a self-contained web console. Both present
+the output of the shipped `cdc` binary, keeping source, runtime state, and
+visible evidence on the same path.
 
 ```text
 ui/
@@ -17,19 +18,19 @@ ui/
 substrate → phase indigo → white/electric hinge → cyan resolve, taken from
 `docs/identity/MOBIUS_U_IDENTITY_SYSTEM.md` and the shipped SVGs. One warm
 token exists (`ember`) and it is reserved exclusively for a violated
-invariant — it never appears as emphasis, branding, or an ordinary alert.
+invariant; it never appears as emphasis, branding, or an ordinary alert.
 
 **Three states, never two.** The product's result carrier is balanced ternary,
 so the interface has three outcomes: accepted (`+1`), held (`0`), violated
-(`−1`). A held result is *equilibrium* — informative, admissible, and styled
+(`−1`). A held result is *equilibrium*: informative, admissible, and styled
 as the calmest of the three. Every conventional UI would render it as a
 yellow warning; doing so here would destroy the distinction the calculus
 exists to make. The gate enforces that all three states remain separately
 present and separately coloured on every surface.
 
 **7.16197° is the only rotation in the product.** It is the wordmark's shipped
-invariant, already gated by the identity asset contract. Every tilt — the app
-mark, the console mark — uses exactly that angle.
+invariant, already gated by the identity asset contract. Every tilt, from the
+app mark to the console mark, uses exactly that angle.
 
 **The signature visual is the acceptance condition, not an ornament.** The
 double cover is drawn as a real Möbius ribbon with a half twist, depth-sorted
@@ -41,14 +42,14 @@ watching the band is watching the guarantee.
 **Motion performs the second turn.** Animations are 720° restorations, never
 spinners, and they yield to `prefers-reduced-motion`.
 
-## macOS — CDC Studio
+## macOS: CDC Studio
 
 SwiftUI, SwiftPM, macOS 14+, **zero third-party dependencies**.
 
 ```sh
 cd ui/macos/CDCStudio
 swift build          # or: open Package.swift in Xcode
-CDC_REPOSITORY=/path/to/BiDi-Coherence-Delta-Calculus swift run
+CDC_REPOSITORY=/path/to/BiDi swift run
 ```
 
 Four workspaces, ordered the way the calculus runs: **Execution**
@@ -60,7 +61,7 @@ Operator** (the double cover and the recorded-equals-decided closure),
 own report lines, so the app and the verification gate can never disagree
 about what happened.
 
-## Web — Möbi𝒰s Console
+## Web: Möbi𝒰s Console
 
 One file, no build step, no network. The runtime's replay record is embedded
 and must be byte-identical to `demo/replay.json`; the gate fails otherwise.
@@ -70,7 +71,7 @@ Open `ui/web/console/index.html` directly, or serve the directory.
 
 `scripts/verify_ui.sh` (wired into `scripts/verify.sh`) enforces:
 
-- design-token parity across JSON, Swift, and CSS — 15 colours, the identity
+- design-token parity across JSON, Swift, and CSS: 15 colours, the identity
   tilt, and the ternary triad, with drift failing the build;
 - the console is self-contained (no external `src`/`href`/`@import`), carries
   a language, a title, a described figure, and honours reduced motion;
@@ -82,7 +83,7 @@ Open `ui/web/console/index.html` directly, or serve the directory.
 ## Honest boundaries
 
 - **The Swift app is not compiled on Linux.** SwiftUI ships only on Apple
-  platforms, so a Swift toolchain alone is not sufficient — the GitHub
+  platforms, so a Swift toolchain alone is not sufficient. The GitHub
   Ubuntu runner has `swift` but no SwiftUI, and attempting a build there
   fails on `import SwiftUI` no matter how correct the source is. The gate
   therefore builds CDC Studio only on macOS (`uname -s` = Darwin plus a

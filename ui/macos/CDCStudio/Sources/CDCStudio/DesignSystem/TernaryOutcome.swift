@@ -77,8 +77,8 @@ struct TernaryBadge: View {
 
             if let reason, reason != "none", !reason.isEmpty {
                 Text(reason)
-                    .addressFont(10)
-                    .foregroundStyle(Mobius.Hinge.paper.opacity(0.55))
+                    .addressFont(11)
+                    .foregroundStyle(Mobius.Hinge.paper.opacity(0.74))
                     .padding(.horizontal, Mobius.Space.sm)
                     .padding(.vertical, 2)
                     .background(

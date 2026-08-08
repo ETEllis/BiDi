@@ -12,6 +12,7 @@
 
 capability H5 label="task-loop-composition"
 capability U1 label="universal-operator"
+capability U2 label="variational-universal-operator"
 framework H5 label=loop requires=sense,act,integrate,recur-sense,recur-act,recur-integrate,gate,record,recall,refine,key,cycle-count,proceduralize,skilled-execution,decide,enact,close permits=flow,commit,nest,guard,trace,measure,policy,bridge,counter,compile,interpret,council,evolve,universal
 
 field loop-field dt=0.125 gain=1.0 deadband=0.5
@@ -80,6 +81,15 @@ evolve loop-enact source=framework_loop.cdc output=build/enacted_loop.cdc coordi
 # runtime-computed record.
 universal loop-u720 frame=agent cover-cell=loop-cover.phase cover=double half-step=loop-turn-half full-step=loop-turn-full receptive=loop-receptive radiant=loop-radiant record=loop-key decision=loop-quorum enact=loop-enact tolerance=0.000001 expect-half-projection=returned expect-half-sheet=inverted expect-full-projection=returned expect-full-sheet=restored expect-holonomy=0.125 expect-coordinate=110101 expect-status=accepted expect-reason=none
 
+# Variational Universal Operator: differentiate the exact accepted U1 path, then
+# ask the full executable state to return. The lifted cover closes, but the
+# latches, context belief, and child prior do not. The correct public result is
+# therefore a bound path tangent plus a typed recurrence hold. No monodromy or
+# characteristic multipliers are authorized for this canonical loop.
+orbit loop-u720-full universal=loop-u720 coordinates=all quotient=none tolerance=0.000001
+variational loop-u720-tangent orbit=loop-u720-full
+spectrum loop-u720-spectrum variational=loop-u720-tangent neutral-tolerance=0.000000001 schur-tolerance=0.0000000001
+
 witness loop-sense-native invariant=flow-additivity capability=H5 framework=loop role=sense reducer=loop-sense-1 claim="the loop senses through continuous flow before any commitment"
 witness loop-act-native invariant=preservation capability=H5 framework=loop role=act reducer=loop-act-1 claim="the loop acts through an accepted balanced-ternary commit"
 witness loop-integrate-native invariant=existence-viability capability=H5 framework=loop role=integrate reducer=loop-integrate-1 claim="acted coherence integrates into nested context belief"
@@ -97,9 +107,11 @@ witness loop-interpret-native capability=H5 framework=loop role=skilled-executio
 witness loop-decide-native invariant=dyadic-triadic-closure capability=H5 framework=loop role=decide council=loop-quorum claim="the loop deliberates over its own modules and adopts its recorded coordinate"
 witness loop-enact-native capability=H5 framework=loop role=enact evolution=loop-enact claim="the adopted decision is enacted into durable source memory"
 witness loop-universal-native invariant=universal-closure capability=U1 framework=loop role=close universal=loop-u720 claim="the carried task loop closes its lifted frame after two turns and enacts its runtime-computed record"
+witness loop-u2-native capability=U2 spectrum=loop-u720-spectrum claim="the accepted U1 path has a source-bound tangent; full-state recurrence is held before monodromy because latches, belief, prior, and lifted phase do not return"
 
 expect capability H5
 expect capability U1
+expect capability U2
 expect framework H5 complete
 expect reducer loop-sense-native
 expect reducer loop-act-native
@@ -118,3 +130,4 @@ expect interpret loop-interpret-native
 expect council loop-decide-native
 expect evolution loop-enact-native
 expect universal loop-universal-native
+expect spectrum loop-u2-native

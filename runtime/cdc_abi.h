@@ -6,7 +6,7 @@
 
 /* cdc_abi — the stable embeddable C boundary (Amendment A2).
  *
- * ABI version: 1.0. cdc_abi_version() returns (major << 16) | minor.
+ * ABI version: 1.5. cdc_abi_version() returns (major << 16) | minor.
  * Additions bump the minor version; any breaking change bumps the major
  * version and renames nothing silently. The CLI, daemons, SDK bindings, and
  * tests consume this boundary; nothing outside runtime/ may include the

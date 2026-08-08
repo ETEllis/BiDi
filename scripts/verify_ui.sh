@@ -163,13 +163,71 @@ if ".package(" in package:
     raise SystemExit(1)
 
 # Balanced brace/paren balance is a cheap structural signal on a platform we
-# cannot compile here; it catches truncated or corrupted sources.
+# cannot compile here. Count authored Swift syntax, not braces inside strings
+# (the receipt parser tests intentionally contain multiline JSON fixtures) or
+# comments. The Darwin lane below remains the compiler authority.
+def swift_code_only(text):
+    out = []
+    index = 0
+    block_depth = 0
+    length = len(text)
+    while index < length:
+        if block_depth:
+            if text.startswith("/*", index):
+                block_depth += 1
+                index += 2
+            elif text.startswith("*/", index):
+                block_depth -= 1
+                index += 2
+            else:
+                index += 1
+            continue
+        if text.startswith("//", index):
+            newline = text.find("\n", index + 2)
+            index = length if newline < 0 else newline + 1
+            continue
+        if text.startswith("/*", index):
+            block_depth = 1
+            index += 2
+            continue
+        if text.startswith('"""', index):
+            closing = text.find('"""', index + 3)
+            if closing < 0:
+                raise ValueError("unterminated multiline string")
+            index = closing + 3
+            continue
+        if text[index] == '"':
+            index += 1
+            escaped = False
+            while index < length:
+                char = text[index]
+                index += 1
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    break
+            else:
+                raise ValueError("unterminated string")
+            continue
+        out.append(text[index])
+        index += 1
+    if block_depth:
+        raise ValueError("unterminated block comment")
+    return "".join(out)
+
 for path in sources:
     text = path.read_text()
-    if text.count("{") != text.count("}"):
+    try:
+        code = swift_code_only(text)
+    except ValueError as error:
+        print(f"{error} in {path}", file=sys.stderr)
+        raise SystemExit(1)
+    if code.count("{") != code.count("}"):
         print("unbalanced braces in", path, file=sys.stderr)
         raise SystemExit(1)
-    if text.count("(") != text.count(")"):
+    if code.count("(") != code.count(")"):
         print("unbalanced parens in", path, file=sys.stderr)
         raise SystemExit(1)
 
@@ -189,21 +247,22 @@ import re
 service = Path("ui/macos/CDCStudio/Sources/CDCStudio/Services/ToolchainService.swift")
 text = service.read_text(encoding="utf-8")
 
-# The deadlock signature: two readDataToEndOfFile calls back to back on one
-# thread, nothing concurrent between them.
-if re.search(
-    r"readDataToEndOfFile\(\)\s*\n\s*let\s+\w+\s*=\s*\w+\.fileHandleForReading\.readDataToEndOfFile",
-    text,
-):
+# An unbounded read-to-EOF retains attacker-controlled output and couples the
+# timeout to pipe closure. CDC Studio instead drains both pipes concurrently
+# into explicit bounded collectors while process liveness owns the deadline.
+if "readDataToEndOfFile" in text:
     raise SystemExit(
-        "ToolchainService drains stdout and stderr sequentially; a child that "
-        "fills the undrained pipe deadlocks both processes"
+        "ToolchainService uses unbounded readDataToEndOfFile instead of the "
+        "bounded streaming capture contract"
     )
 
 for token, why in [
     ("DispatchGroup", "concurrent drain needs a completion group"),
-    ("readDataToEndOfFile", "the drain must actually read to EOF"),
-    ("group.wait(timeout:", "a wedged child must be bounded by a timeout"),
+    ("BoundedPipeCollector", "each stream needs a bounded incremental collector"),
+    ("readabilityHandler", "pipes must drain concurrently while the child runs"),
+    ("defaultStreamByteLimit = 1_048_576", "the per-stream byte cap must be explicit"),
+    ("case truncated(limit: Int)", "capture truncation must be typed"),
+    ("termination.wait(timeout:", "process liveness must own the timeout"),
     ("process.terminate()", "timeout must escalate to SIGTERM"),
     ("SIGKILL", "timeout must escalate to SIGKILL if SIGTERM is ignored"),
 ]:
@@ -214,9 +273,72 @@ tests = Path("ui/macos/CDCStudio/Tests/CDCStudioTests/ToolchainServiceTests.swif
 if not tests.is_file():
     raise SystemExit("the flooding-child counterexample is missing")
 test_text = tests.read_text(encoding="utf-8")
-for token in ("512 * 1024", "stderr was truncated", "timeout did not fire"):
+for token in (
+    "512 * 1024",
+    "stderr was truncated",
+    "timeout did not fire",
+    "testChildClosingBothPipesCannotBypassProcessTimeout",
+    "testPerStreamCaptureCapsAreTypedAndFailClosed",
+    "testCancellationReservedBeforeLaunchCannotBeResetOrLost",
+):
     if token not in test_text:
         raise SystemExit(f"counterexample missing {token!r}")
+
+runtime_model = Path(
+    "ui/macos/CDCStudio/Sources/CDCStudio/Models/RepositoryModel.swift"
+).read_text(encoding="utf-8")
+for token, why in [
+    ("O_NOFOLLOW", "runtime capture must reject path-final symlinks"),
+    ("Darwin.fstat", "runtime capture must bind checks to the opened descriptor"),
+    ("maximumExecutableSize", "runtime capture must be explicitly bounded"),
+    ("Darwin.mkdtemp", "prepared images need unique private directories"),
+    ("mode_t(0o700)", "prepared executable permissions must be private"),
+    ("PreparedRuntimeExecutable", "launches must use captured executable bytes"),
+]:
+    if token not in runtime_model:
+        raise SystemExit(f"runtime preparation contract missing {token!r}: {why}")
+
+for token, why in [
+    ("RuntimeExecutableValidator.prepare", "every launch must prepare captured bytes"),
+    ("defer { preparedRuntime.cleanup() }", "prepared bytes must be removed after each outcome"),
+    ("preparedRuntime.executableURL", "the repository path must never be launched after capture"),
+]:
+    if token not in text:
+        raise SystemExit(f"ToolchainService missing {token!r}: {why}")
+
+repository_tests = Path(
+    "ui/macos/CDCStudio/Tests/CDCStudioTests/RepositoryDiscoveryTests.swift"
+).read_text(encoding="utf-8")
+if "testPreparedRuntimeExecutesCapturedBytesAfterRepositoryPathReplacement" not in repository_tests:
+    raise SystemExit("prepared-runtime path-replacement counterexample is missing")
+
+receipt_parser = Path(
+    "ui/macos/CDCStudio/Sources/CDCStudio/Services/U2ReceiptParser.swift"
+).read_text(encoding="utf-8")
+for token, why in [
+    ("validateRecurrenceMeasurements", "reported recurrence data needs independent recomputation"),
+    ("Darwin.fmod", "periodic coordinates must mirror the native runtime topology"),
+    ("recurrence.relativeTolerance", "normalization must include the declared relative tolerance"),
+    ("matchesRuntimeFloat", "reported and recomputed binary64 values need a narrow comparison"),
+    ("producerVerified", "projected producer verification must match its reported diagnostics"),
+    ("projected recurrence cannot carry an authoritative U2 claim", "maskless projections must remain held"),
+]:
+    if token not in receipt_parser:
+        raise SystemExit(f"U2 receipt parser missing {token!r}: {why}")
+
+receipt_tests = Path(
+    "ui/macos/CDCStudio/Tests/CDCStudioTests/U2ReceiptParserTests.swift"
+).read_text(encoding="utf-8")
+for token in (
+    "testRecurrenceReceiptMustMatchExecutableEndpointComputation",
+    "1_000_000_000.0",
+    "testRecurrenceRecomputationUsesAbsolutePlusRelativeTolerance",
+    "testProjectedV1ReceiptRemainsHeldAndNonAuthoritativeWithoutEmittedMask",
+    "forgedProducerMismatch",
+    "testNonExecutableRelativeQuotientPlaceholderRemainsTypedNonAuthoritativeHold",
+):
+    if token not in receipt_tests:
+        raise SystemExit(f"recurrence parser counterexample missing {token!r}")
 
 pkg = Path("ui/macos/CDCStudio/Package.swift").read_text(encoding="utf-8")
 if ".testTarget" not in pkg:
@@ -230,6 +352,8 @@ if "macos-14" not in ci or "swift test" not in ci:
     )
 
 print("subprocess drain contract: concurrent, bounded, counterexample present")
+print("runtime preparation contract: descriptor-bound, private, counterexample present")
+print("U2 recurrence receipt contract: independently recomputed, counterexamples present")
 print("macOS compile lane: required in CI (macos-14)")
 DRAINCHECK
 
@@ -241,7 +365,21 @@ DRAINCHECK
 # because this gate alone let a non-compiling surface reach a green PR.
 if [ "$(uname -s)" = "Darwin" ] && command -v swift >/dev/null 2>&1; then
   echo "macOS host with swift toolchain; building and testing CDC Studio"
-  (cd ui/macos/CDCStudio && swift build && swift test)
+  # The repository may live on a File Provider volume whose generated .build
+  # products inherit FinderInfo/provenance xattrs. codesign correctly rejects
+  # that detritus even when the authored sources are valid. Build into a fresh,
+  # local scratch directory so the gate is reproducible and never strips xattrs
+  # from user or source files.
+  SWIFT_SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/cdcstudio-ui-gate.XXXXXX")
+  cleanup_swift_scratch() {
+    rm -rf -- "$SWIFT_SCRATCH"
+  }
+  trap cleanup_swift_scratch EXIT
+  (cd ui/macos/CDCStudio && \
+    swift build --scratch-path "$SWIFT_SCRATCH" && \
+    swift test --scratch-path "$SWIFT_SCRATCH")
+  cleanup_swift_scratch
+  trap - EXIT
 else
   echo "not an Apple platform (SwiftUI unavailable); CDC Studio is"
   echo "gated structurally here and compiled by the required macos-14 CI lane"

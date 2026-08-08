@@ -1,7 +1,7 @@
 [project]
 name = "bidi-coherence-delta-calculus"
-version = "0.2.4"
-description = "Native .cdc language sources, a minimal Python bootloader, operational C bridge/reducer/full-surface/IR/proof/council runtimes, generated bridge codebooks, Lean/Coq finite proof mirrors, and paper source for BiDi Coherence-Delta Calculus."
+version = "0.3.0"
+description = "BiDi Universal Operator System: the CDC language and native kernel, guarded U1 closure, recurrence-gated U2 analysis, adversarial receipts, and finite Lean/Rocq mirrors."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -26,8 +26,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ETEllis/bidi-coherence-delta-calculus"
-Repository = "https://github.com/ETEllis/bidi-coherence-delta-calculus"
+Homepage = "https://github.com/ETEllis/BiDi"
+Repository = "https://github.com/ETEllis/BiDi"
 
 [tool.setuptools]
 py-modules = ["cdc_boot"]

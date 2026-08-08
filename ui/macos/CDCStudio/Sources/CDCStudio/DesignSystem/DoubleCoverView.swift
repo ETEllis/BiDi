@@ -142,8 +142,8 @@ struct DoubleCoverLegend: View {
     private func row(_ label: String, _ value: String, restored: Bool) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Mobius.Hinge.paper.opacity(0.5))
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(Mobius.Hinge.paper.opacity(0.74))
             Spacer(minLength: Mobius.Space.md)
             Text(value)
                 .addressFont(11)

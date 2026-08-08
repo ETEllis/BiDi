@@ -1,5 +1,11 @@
 # Native Self-Hosting Mandate
 
+> **Historical burn-down record — not current release authority.** The staged
+> v0.2.4 status notes below are retained for provenance. Current host, grammar,
+> ABI, runtime, and verification boundaries are stated in
+> [`README.md`](README.md), [`CDC_LANGUAGE.md`](CDC_LANGUAGE.md), and
+> [`VERIFICATION_OBLIGATION_MATRIX.md`](VERIFICATION_OBLIGATION_MATRIX.md).
+
 This repository is not finished while the executable center is a host language.
 
 The intended end state is:
