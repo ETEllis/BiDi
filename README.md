@@ -12,13 +12,11 @@
   <strong>Universal Operator System</strong>
 </p>
 
-BiDi is a Universal Operator System for making complex transformations
-executable, inspectable, and engineerable from source through evidence. Its CDC
-language and native kernel keep formal intent, live state, guarded action,
-recurrence, and downstream analysis on one operator path. U1 and U2 extend that
-path through guarded acceptance, differentiation, verified return, and
-spectrum, so every result carries the history and earned scope needed to
-reproduce it, challenge it, or build from it.
+BiDi is a Universal Operator System that keeps complex transformations
+executable, inspectable, and engineerable from formal source through live state,
+guarded action, recurrence, and evidence. Its CDC kernel, U1 acceptance, and U2
+variation and return analysis give every result the history and earned scope
+needed to reproduce it, challenge it, or build from it.
 
 <p align="center">
   <strong><a href="UNIVERSAL_OPERATOR_SYSTEM.md">Understand</a> · <a href="#run">Run</a> · <a href="#verify">Verify</a> · <a href="paper/arxiv/main.pdf">Paper</a></strong>
