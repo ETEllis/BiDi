@@ -1768,10 +1768,15 @@ CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
   ./build/cdc install tests/fixtures/packages/ternary-stats \
   > build/concurrent_b.txt 2>&1 &
 CONC_B=$!
+# A child can consume its release and close while Bash is advancing the paired
+# rendezvous on Darwin. The outcome assertions below remain authoritative, so
+# keep a late FIFO close from terminating the harness itself.
 exec 3>build/install_f1
 exec 4>build/install_f2
-printf x >&3
-printf x >&4
+trap '' PIPE
+printf x >&3 || true
+printf x >&4 || true
+trap - PIPE
 exec 3>&- 4>&-
 set +e
 wait $CONC_A
@@ -1808,8 +1813,10 @@ CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
 CONC_B=$!
 exec 3>build/install_f1
 exec 4>build/install_f2
-printf x >&3
-printf x >&4
+trap '' PIPE
+printf x >&3 || true
+printf x >&4 || true
+trap - PIPE
 exec 3>&- 4>&-
 set +e
 wait $CONC_A
@@ -1846,7 +1853,9 @@ CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
 MUT_PID=$!
 exec 3>build/install_f1
 printf '\n# mutated-after-capture\n' >> build/mutpkg/ternary-stats/stats.cdc
-printf x >&3
+trap '' PIPE
+printf x >&3 || true
+trap - PIPE
 exec 3>&-
 wait $MUT_PID
 grep -q "cdc install ok name=ternary-stats" build/mutation.txt

@@ -25,6 +25,6 @@ classes. Its inline bibliography contains each cited work once. The surrounding
 repository gate is the authority for version, source counts, runtime receipts,
 U1/U2 verdicts, and formal claim ceilings.
 
-The paper title remains CDC-specific by design. The repository-level system
-also includes compatibility surfaces, instruments, and bounded research lanes
-that are not promoted into the paper's formal contribution.
+The CDC-specific title keeps the formal contribution exact. The repository's
+BiDi Universal Operator System supplies the wider architecture, compatibility
+surfaces, instruments, and research lanes around it.

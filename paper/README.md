@@ -4,9 +4,11 @@
 the Coherence-Delta Calculus 0.3.0 paper within the BiDi Universal Operator
 System.
 
-The paper stays CDC-first for a reason: it formalizes the language/kernel and the
-U1/U2 release argument rather than claiming the complete repository as one
-mathematical result. It is reconciled to the executable release boundary:
+The paper stays CDC-first for a reason: it gives the language, native kernel,
+and U1/U2 release argument their exact formal treatment. The wider BiDi system
+overview connects that contribution to the runtime, instruments, interfaces,
+and research program. The paper is reconciled to the executable release
+boundary:
 
 - exactly three primitive reductions: `flow`, `commit`, and `nest`;
 - U1 lifted-cover closure is distinct from complete-state recurrence;

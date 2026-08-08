@@ -2,73 +2,72 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/identity/mobius-u-code-sigil-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-code-sigil.svg">
-    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="136">
+    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="112">
   </picture>
 </p>
 
-# BiDi
+<h1 align="center">BiDi</h1>
 
 <p align="center">
-  <strong>Universal Operator System</strong><br>
-  Source · state · guarded execution · recurrence · evidence
+  <strong>Universal Operator System</strong>
 </p>
 
-BiDi begins with a simple constraint: a state transition should not become a
-claim until the path that produced it can be inspected. It is an executable
-research system for expressing those transitions, running them through the
-native Coherence-Delta Calculus (CDC) kernel, and producing receipt-bound U1
-and U2 analyses.
+BiDi is a Universal Operator System for making complex transformations
+executable, inspectable, and engineerable from source through evidence. Its CDC
+language and native kernel keep formal intent, live state, guarded action,
+recurrence, and downstream analysis on one operator path. U1 and U2 extend that
+path through guarded acceptance, differentiation, verified return, and
+spectrum, so every result carries the history and earned scope needed to
+reproduce it, challenge it, or build from it.
 
-> Here, **Universal Operator System** names the complete integration of
-> language, runtime, operators, verification, formal mirrors, and instruments.
-> “Universal” describes the reach of one controlled operator path across those
-> layers. It does not assert a universal physical law, quantum implementation,
-> empirically validated ontology, or the operator-algebra meaning of “operator
-> system.”
+<p align="center">
+  <strong><a href="UNIVERSAL_OPERATOR_SYSTEM.md">Understand</a> · <a href="#run">Run</a> · <a href="#verify">Verify</a> · <a href="paper/arxiv/main.pdf">Paper</a></strong>
+</p>
 
-**[Understand](UNIVERSAL_OPERATOR_SYSTEM.md) · [Run](#run) ·
-[Verify](#verify) · [Paper](paper/arxiv/main.pdf)**
-
-## The system at a glance
+## One system, stable parts
 
 - **BiDi** is the integrated source, execution, and evidence system in this repository.
 - **CDC** is its formal language, native kernel, and canonical `.cdc` source contract.
 - **U1** guards lifted-cover acceptance and effect enactment.
 - **U2** differentiates an accepted path and gates return analysis on independently verified recurrence.
-- **Möbius** is an embodied reference instrument over runtime receipts, not a source of authority.
-- **`𝒰_` / `𝒰`** denote the complete executable operator sigil and its reduced mathematical body; they are notation, not required CLI input.
+- **Möbius** is the embodied reference instrument that makes receipt-bound cover behavior visible.
+- **`𝒰_` / `𝒰`** denote the complete executable operator sigil and its reduced mathematical body.
 
 ```mermaid
-flowchart LR
+flowchart TD
     Source[".cdc source"] --> Runtime["native state + reductions"]
     Runtime --> U1["U1 guarded acceptance"]
     U1 --> U2["U2 path tangent"]
     U2 --> Gate{"recurrence verified?"}
     Gate -->|no| Hold["typed hold"]
     Gate -->|yes| Spectrum["monodromy + spectrum"]
-    Hold --> ReceiptNode["receipt + claim ceiling"];
+    Hold --> ReceiptNode["receipt + earned scope"];
     ReceiptNode --> Paper["formal layer + paper"];
     Spectrum --> ReceiptNode;
 ```
 
-Every arrow may hold without manufacturing the artifact to its right. The
-machine record, source digest, and gate determine authority; presentation does
-not.
+Each transition is earned independently. A hold preserves the last verified
+state and emits its receipt instead of fabricating the next one. The machine
+record, source digest, and gate remain inspectable at every step.
 
-## Release truth
+## Why BiDi exists
 
-Version **0.3.0** is the current public release.
+BiDi grew through a reciprocal exchange between Edward Ellis's theories,
+products, formal work, and executable systems. Each project exposed something
+the others needed: a missing language, state contract, behavior, proof
+obligation, or instrument. Those gaps became new operator machinery, and the
+machinery returned to the surrounding work as sharper mechanisms, engineering
+constraints, and testable alternatives.
 
-- `262/262 expectations`
-- `20 terms · 22 rules · 16 invariants`
-- `46 capabilities · 6 frameworks · 4831 native witnesses`
-- `ABI 1.5`
+That theory-product-formalism-runtime loop is the origin of the system and the
+reason its layers remain connected. Read the
+[origin and evolution](ORIGIN_AND_EVOLUTION.md) for the repository-grounded
+history and human-agent build method.
 
-Within the language/runtime/semantic execution boundary, the shipped
-implementation is the native CDC parser, registry, reducer, receipts, U1/U2
-analysis path, and unified `cdc` driver. Product surfaces, formal mirrors, and
-paper arguments remain downstream explanatory surfaces over that executable
-boundary.
+Version **0.3.0** is the current public release:
+
+**262/262 expectations** · **20 terms · 22 rules · 16 invariants**<br>
+**46 capabilities · 6 frameworks · 4831 native witnesses** · **ABI 1.5**
 
 ## Run
 
@@ -107,9 +106,9 @@ The positive relative-return calibration is explicit and separate:
 ```
 
 It declares the endpoint restoration `rho(theta) = theta - 4 pi` and complete
-`D rho = I`. In that bounded fixture, `M_rel = I_13`. It earns a marginal
-relative spectrum; it does not make the canonical loop recurrent or establish
-physical stability.
+`D rho = I`. In that bounded fixture, `M_rel = I_13` and earns a marginal
+relative spectrum. The canonical loop remains governed by its own held
+recurrence receipt.
 
 ## Verify
 
@@ -131,12 +130,16 @@ The verification unit is always:
 (scope, maturity, verdict, receipt-or-obligation)
 ```
 
-The discipline is simple: declarations do not count as implementation, finite
-proofs do not silently become continuous theorems, and numerical fixtures do
-not become physical laws. A screen or green counter never substitutes for an
-execution receipt.
+Implementation, finite proof, numerical calibration, and physical law are four
+different levels of evidence. BiDi keeps them distinct and binds each public
+statement to a receipt or an explicit open obligation. Screens and status
+counters remain views over that evidence.
 
 ### Current release boundary · 0.3.0
+
+Within the language/runtime/semantic execution boundary, the native CDC parser,
+registry, reducer, receipts, U1/U2 path, and unified `cdc` driver are implemented
+and gated together.
 
 - Grammar-1 source and native contract: **accepted; executed and adversarially verified**.
 - Canonical `framework_loop.cdc` U1: **accepted** for guarded lifted-cover closure.
@@ -184,8 +187,8 @@ is not a hostile-package sandbox.
 
 U1 accepts only when reciprocal channel roles, double-cover restoration,
 declared holonomy, local commits, record/decision agreement, and effect gating
-agree. It earns lifted-cover closure, not automatic recurrence of the complete
-runtime state.
+agree. It earns lifted-cover closure. Complete runtime recurrence remains a
+separate U2 question.
 
 U2 closes a coordinate manifest over the exact accepted path, differentiates
 the executed maps in source order, records continuous and discrete endpoints,

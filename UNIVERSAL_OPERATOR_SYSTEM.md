@@ -1,31 +1,44 @@
 # BiDi Universal Operator System
 
-The central distinction is what this repository contains versus what any one
-layer can prove. **BiDi** names the whole. **CDC** names its formal source
-language, native kernel, and canonical `.cdc` contract. Around that kernel, the
-repository joins guarded operator layers, deterministic receipts, finite proof
-mirrors, research instruments, and a paper without collapsing their different
-kinds of authority.
+BiDi gives a transformation one continuous life across source, state,
+execution, variation, verification, and presentation. As a **Universal
+Operator System**, it can express a transformation, execute it as state change,
+differentiate its path, test whether a return has actually occurred, and bind
+every accepted or held result to evidence. The Coherence-Delta Calculus (CDC)
+is its formal source language, native kernel, and canonical `.cdc` contract.
 
-**Universal Operator System** names that integration. Universal means the same
-controlled operator path survives across source, execution, variation,
-verification, and presentation. It does not mean the repository has established
-a universal law of nature, a quantum implementation, an empirically validated
-ontology, or an operator system in the technical operator-algebra sense.
+It exists to close a familiar break in ambitious technical systems:
+description, execution, analysis, and explanation are split into separate
+languages, then asked to trust that they still refer to the same event. BiDi
+keeps them on one operator path. Runtime, guarded operators, variational
+analysis, receipts, finite proof mirrors, instruments, and paper become
+different working views of that shared path.
 
 ## One system, stable parts
 
-- **BiDi:** integrated repository, system, and evidence surface; not a claim that every included research hypothesis is true.
-- **CDC:** formal language, native kernel, and canonical `.cdc` contract; not the complete product/research system by itself.
-- **U1:** guarded lifted-cover acceptance and effect authorization; not complete-state recurrence or physical closure.
-- **U2:** source-bound tangent plus recurrence-gated return analysis; not automatic monodromy, stability, or spectrum.
-- **Möbius:** embodied reference instrument over system receipts; not mathematical or runtime authority.
-- **`𝒰_` / `𝒰`:** complete executable sigil / reduced mathematical body; not required syntax, an executable name, or a separate package.
-- **RFTC:** bounded classical reference-frame research lane; not a qubit, entanglement, nonlocality, or quantum advantage.
+- **BiDi:** integrated repository, operator system, and evidence surface.
+- **CDC:** formal language, native kernel, and canonical `.cdc` contract.
+- **U1:** guarded lifted-cover acceptance and effect authorization.
+- **U2:** source-bound tangent plus recurrence-gated return analysis.
+- **Möbius:** embodied reference instrument over system receipts.
+- **`𝒰_` / `𝒰`:** complete executable sigil and reduced mathematical body.
+- **RFTC:** bounded classical reference-frame research lane.
 
 The stable compatibility surface remains CDC: the `cdc` command, `.cdc` files,
 package name, ABI, C symbols, and Lean/Rocq namespaces do not change when the
 repository is described at the system level.
+
+## A reciprocal build loop
+
+BiDi grew because Edward Ellis's theories and products repeatedly surfaced gaps
+between an idea, a formal contract, an executable path, and inspectable
+evidence. Each pass turned one of those gaps into shared operator machinery;
+each verified refinement then returned to the originating work as a stronger
+mechanism, constraint, instrument, or falsifiable question.
+
+The [origin and evolution](ORIGIN_AND_EVOLUTION.md) records that progression
+from the first calculus and native reducer through U1, product instruments,
+durable receipts, cross-system interfaces, and U2 recurrence analysis.
 
 ## The operator path
 
@@ -232,6 +245,7 @@ met.
 ## Repository routes
 
 - [README](README.md): public front door, run path, current state, and boundaries.
+- [Origin and evolution](ORIGIN_AND_EVOLUTION.md): theory-product feedback loop and repository history.
 - [CDC language](CDC_LANGUAGE.md): syntax and canonical source contract.
 - [Formal semantic spine](FORMAL_SEMANTIC_SPINE.md): specified versus executed semantics.
 - [Frameworks](FRAMEWORKS.md): H1–H6 task vocabulary and bindings.
