@@ -165,7 +165,7 @@ struct MarkHeader: View {
                 Text("CDC Studio")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Mobius.Hinge.paper)
-                Text("BiDi Coherence-Delta Calculus")
+                Text("BiDi · Universal Operator System")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Mobius.Phase.indigo)
             }

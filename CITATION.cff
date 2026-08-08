@@ -1,22 +1,20 @@
 cff-version: 1.2.0
-title: "BiDi Coherence-Delta Calculus"
-message: "If you use this calculus, reference implementation, or paper source, please cite this repository."
+title: "BiDi Universal Operator System"
+message: "If you use the BiDi system, CDC kernel, reference implementation, or paper source, please cite this repository."
 type: software
 authors:
   - family-names: Ellis
     given-names: Edward
-date-released: "2026-08-07"
+date-released: "2026-08-08"
 version: "0.3.0"
 license: MIT
-repository-code: "https://github.com/ETEllis/bidi-coherence-delta-calculus"
+repository-code: "https://github.com/ETEllis/BiDi"
 abstract: >-
-  BiDi Coherence-Delta Calculus is a compact executable substrate for hybrid
-  systems with continuous phase flow, guarded balanced-ternary commits, nested
-  reference frames, trace/window measurement, and receipt-bound effects.
-  Version 0.3.0 adds the guarded Universal Operator and a variational U2 layer
-  that differentiates the executed native path, verifies full or explicit
-  relative recurrence before constructing monodromy, and emits characteristic
-  multipliers only when that gate passes. Finite Lean and Rocq mirrors cover the
-  exact carrier, event-order, fixed-aperture, cone-role, sheet-parity, and
-  prefix-barrier statements named by the release; runtime covariance and richer
-  continuous or physical interpretations remain open.
+  BiDi is an executable Universal Operator System integrating the
+  Coherence-Delta Calculus formal language and native kernel, guarded U1
+  lifted-cover acceptance, recurrence-gated U2 variational analysis,
+  deterministic receipts, finite Lean/Rocq mirrors, and operator instruments.
+  Version 0.3.0 differentiates the executed native path and emits monodromy or
+  characteristic multipliers only after full or explicitly restored recurrence
+  passes. The descriptor is repository-scoped: richer continuous, empirical,
+  physical, and quantum interpretations remain open obligations.

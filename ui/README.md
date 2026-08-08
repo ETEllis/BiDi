@@ -1,7 +1,7 @@
-# Product Surfaces
+# BiDi Operator Instruments
 
-Two surfaces over one runtime: a native macOS operator app and a
-self-contained web console. Neither reimplements the calculus — both present
+Two instruments over the BiDi system: a native macOS operator app and a
+self-contained web console. Neither reimplements the CDC kernel—both present
 what the shipped `cdc` binary actually produced.
 
 ```text
@@ -48,7 +48,7 @@ SwiftUI, SwiftPM, macOS 14+, **zero third-party dependencies**.
 ```sh
 cd ui/macos/CDCStudio
 swift build          # or: open Package.swift in Xcode
-CDC_REPOSITORY=/path/to/BiDi-Coherence-Delta-Calculus swift run
+CDC_REPOSITORY=/path/to/BiDi swift run
 ```
 
 Four workspaces, ordered the way the calculus runs: **Execution**

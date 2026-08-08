@@ -1,9 +1,12 @@
 # Paper
 
 [`arxiv/main.tex`](arxiv/main.tex) is the flattened, dependency-light source for
-the BiDi Coherence-Delta Calculus 0.3.0 paper.
+the Coherence-Delta Calculus 0.3.0 paper within the BiDi Universal Operator
+System.
 
-The paper is reconciled to the executable release boundary:
+The paper stays CDC-first because it formalizes the language/kernel and the
+U1/U2 release argument rather than claiming the complete repository as one
+mathematical result. It is reconciled to the executable release boundary:
 
 - exactly three primitive reductions: `flow`, `commit`, and `nest`;
 - U1 lifted-cover closure is distinct from complete-state recurrence;

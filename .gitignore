@@ -25,6 +25,7 @@ paper/**/*.fls
 paper/**/*.log
 paper/**/*.out
 paper/**/*.pdf
+!paper/arxiv/main.pdf
 paper/**/*.synctex.gz
 paper/**/*.toc
 paper/**/*.tar.gz

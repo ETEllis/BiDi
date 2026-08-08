@@ -502,7 +502,7 @@ export function buildSnapshot() {
   const snapshot = {
     schema: "cdc.ui.verified-replay.v1",
     snapshotKind: "verified replay snapshot",
-    authoritativeDate: "2026-08-07",
+    authoritativeDate: "2026-08-08",
     generatorPath: "ui/web/console/generate-verified-snapshot.mjs",
     toolchain: abiMetadata(),
     entries: [
