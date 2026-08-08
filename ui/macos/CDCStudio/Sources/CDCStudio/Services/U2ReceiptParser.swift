@@ -36,7 +36,9 @@ enum U2ReceiptParser {
     }
 
     static func parse(_ output: String) throws -> [CanonicalU2Receipt] {
-        let lines = output.split(omittingEmptySubsequences: false, whereSeparator: \Character.isNewline)
+        let lines = output.split(omittingEmptySubsequences: false) { character in
+            character.isNewline
+        }
         var receipts: [CanonicalU2Receipt] = []
         let decoder = JSONDecoder()
 
