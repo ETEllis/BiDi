@@ -4,7 +4,7 @@
 the Coherence-Delta Calculus 0.3.0 paper within the BiDi Universal Operator
 System.
 
-The paper stays CDC-first because it formalizes the language/kernel and the
+The paper stays CDC-first for a reason: it formalizes the language/kernel and the
 U1/U2 release argument rather than claiming the complete repository as one
 mathematical result. It is reconciled to the executable release boundary:
 

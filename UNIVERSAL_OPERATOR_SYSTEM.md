@@ -1,26 +1,27 @@
 # BiDi Universal Operator System
 
-BiDi is the integrated system in this repository. It joins a formal source
-language, a native state/effect runtime, guarded operator layers, deterministic
-receipts, finite proof mirrors, research instruments, and a paper without
-collapsing their different kinds of authority.
+The central distinction is what this repository contains versus what any one
+layer can prove. **BiDi** names the whole. **CDC** names its formal source
+language, native kernel, and canonical `.cdc` contract. Around that kernel, the
+repository joins guarded operator layers, deterministic receipts, finite proof
+mirrors, research instruments, and a paper without collapsing their different
+kinds of authority.
 
-“Universal Operator System” is a bounded systems descriptor. **Universal**
-means that the same controlled operator path is represented across source,
-execution, variation, verification, and presentation. It does not mean that the
-repository has established a universal law of nature, a quantum implementation,
-an empirically validated ontology, or an operator system in the technical
-operator-algebra sense.
+**Universal Operator System** names that integration. Universal means the same
+controlled operator path survives across source, execution, variation,
+verification, and presentation. It does not mean the repository has established
+a universal law of nature, a quantum implementation, an empirically validated
+ontology, or an operator system in the technical operator-algebra sense.
 
 ## One system, stable parts
 
-- **BiDi** — integrated repository, system, and evidence surface; not a claim that every included research hypothesis is true.
-- **CDC** — formal language, native kernel, and canonical `.cdc` contract; not the complete product/research system by itself.
-- **U1** — guarded lifted-cover acceptance and effect authorization; not complete-state recurrence or physical closure.
-- **U2** — source-bound tangent plus recurrence-gated return analysis; not automatic monodromy, stability, or spectrum.
-- **Möbius** — embodied reference instrument over system receipts; not mathematical or runtime authority.
-- **`𝒰_` / `𝒰`** — complete executable sigil / reduced mathematical body; not required syntax, an executable name, or a separate package.
-- **RFTC** — bounded classical reference-frame research lane; not a qubit, entanglement, nonlocality, or quantum advantage.
+- **BiDi:** integrated repository, system, and evidence surface; not a claim that every included research hypothesis is true.
+- **CDC:** formal language, native kernel, and canonical `.cdc` contract; not the complete product/research system by itself.
+- **U1:** guarded lifted-cover acceptance and effect authorization; not complete-state recurrence or physical closure.
+- **U2:** source-bound tangent plus recurrence-gated return analysis; not automatic monodromy, stability, or spectrum.
+- **Möbius:** embodied reference instrument over system receipts; not mathematical or runtime authority.
+- **`𝒰_` / `𝒰`:** complete executable sigil / reduced mathematical body; not required syntax, an executable name, or a separate package.
+- **RFTC:** bounded classical reference-frame research lane; not a qubit, entanglement, nonlocality, or quantum advantage.
 
 The stable compatibility surface remains CDC: the `cdc` command, `.cdc` files,
 package name, ABI, C symbols, and Lean/Rocq namespaces do not change when the
@@ -39,14 +40,14 @@ flowchart TB
     Recurrence -->|held| Refusal["no monodromy · no multipliers"]
     Recurrence -->|accepted| Return["M = D U or M_rel = D rho D U"]
     Return --> Schur["validated real-Schur spectrum"]
-    Refusal --> Evidence["deterministic receipt"]
-    Schur --> Evidence
-    Evidence --> Formal["finite mirrors + open obligations"]
-    Evidence --> Instruments["CDC Studio + evidence console"]
-    Evidence --> Paper["CDC paper"]
+    Refusal --> EvidenceNode["deterministic receipt"];
+    EvidenceNode --> Formal["finite mirrors + open obligations"];
+    Schur --> EvidenceNode;
+    EvidenceNode --> Instruments["CDC Studio + evidence console"];
+    EvidenceNode --> Paper["CDC paper"];
 ```
 
-The path is deliberately asymmetric in authority. Source can authorize
+The path is deliberately one-way in authority. Source can authorize
 execution; execution can authorize a tangent; recurrence can authorize a return
 operator; validated linear algebra can authorize a spectrum. Nothing moves
 backward merely because a diagram, screen, or interpretation is compelling.
@@ -128,7 +129,7 @@ or a physical system.
 
 ## Apertured oriented reciprocity
 
-Polarity is a cross-layer design invariant, but not a single universal toggle.
+Polarity is a cross-layer design invariant, not one universal toggle.
 BiDi keeps four transformations distinct:
 
 1. **Carrier polarity:** `-1` and `+1` exchange while the aperture `0` is fixed.
@@ -143,7 +144,7 @@ accepted only for a declared operator/conjugate pair with both primal and
 tangent covariance receipts.
 
 Within those bounds, apertured oriented reciprocity is universal to the
-**architecture**: every layer must preserve the distinction between opposed
+**architecture**. Every layer must preserve the distinction between opposed
 directions, the neutral aperture, orientation, and cover parity when those
 objects are present. It is not universal as an empirical law, and the system
 does not force polarity onto an operator whose contract does not contain it.
@@ -158,17 +159,17 @@ Every public claim is evaluated as:
 
 ### Maturity
 
-- **specified** — defined mathematically or contractually;
-- **executed** — produced by the current implementation;
-- **adversarially verified** — survived positive, negative, drift, or mutant gates;
-- **mechanized finite** — checked in the exact finite Lean/Rocq statement named.
+- **specified:** defined mathematically or contractually;
+- **executed:** produced by the current implementation;
+- **adversarially verified:** survived positive, negative, drift, or mutant gates;
+- **mechanized finite:** checked in the exact finite Lean/Rocq statement named.
 
 ### Verdict
 
-- **accepted** — the scoped gate passed;
-- **held** — required authority was absent, ambiguous, or non-returning;
-- **violated** — a declared invariant failed;
-- **not emitted** — a downstream artifact was correctly withheld.
+- **accepted:** the scoped gate passed;
+- **held:** required authority was absent, ambiguous, or non-returning;
+- **violated:** a declared invariant failed;
+- **not emitted:** a downstream artifact was correctly withheld.
 
 Maturity and verdict are independent. A recurrence hold can be adversarially
 verified when false recurrence is reliably refused. A finite proof can be
@@ -230,17 +231,17 @@ met.
 
 ## Repository routes
 
-- [README](README.md) — public front door, run path, current state, and boundaries.
-- [CDC language](CDC_LANGUAGE.md) — syntax and canonical source contract.
-- [Formal semantic spine](FORMAL_SEMANTIC_SPINE.md) — specified versus executed semantics.
-- [Frameworks](FRAMEWORKS.md) — H1–H6 task vocabulary and bindings.
-- [Verification matrix](VERIFICATION_OBLIGATION_MATRIX.md) — exact claims and receipts.
-- [U2 semantics](docs/u2/U2_SEMANTICS.md) — normative variational/recurrence protocol.
-- [Polarity audit](docs/u2/POLARITY_AUDIT.md) — invariants, counterexamples, and open obligations.
-- [CDC Studio and console](ui/README.md) — operator surfaces.
-- [RFTC matrix](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md) — bounded classical research lane.
-- [Identity source](docs/identity/README.md) — visual and motion provenance.
-- [CDC paper](paper/arxiv/main.pdf) — formal kernel and U1/U2 release argument.
+- [README](README.md): public front door, run path, current state, and boundaries.
+- [CDC language](CDC_LANGUAGE.md): syntax and canonical source contract.
+- [Formal semantic spine](FORMAL_SEMANTIC_SPINE.md): specified versus executed semantics.
+- [Frameworks](FRAMEWORKS.md): H1–H6 task vocabulary and bindings.
+- [Verification matrix](VERIFICATION_OBLIGATION_MATRIX.md): exact claims and receipts.
+- [U2 semantics](docs/u2/U2_SEMANTICS.md): normative variational/recurrence protocol.
+- [Polarity audit](docs/u2/POLARITY_AUDIT.md): invariants, counterexamples, and open obligations.
+- [CDC Studio and console](ui/README.md): operator surfaces.
+- [RFTC matrix](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md): bounded classical research lane.
+- [Identity source](docs/identity/README.md): visual and motion provenance.
+- [CDC paper](paper/arxiv/main.pdf): formal kernel and U1/U2 release argument.
 
 ## Compatibility contract
 

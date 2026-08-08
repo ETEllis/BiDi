@@ -13,15 +13,18 @@
   Source · state · guarded execution · recurrence · evidence
 </p>
 
-BiDi is an executable research system for expressing controlled state
-transitions, running them through the native Coherence-Delta Calculus (CDC)
-kernel, and producing receipt-bound U1 and U2 analyses.
+BiDi begins with a simple constraint: a state transition should not become a
+claim until the path that produced it can be inspected. It is an executable
+research system for expressing those transitions, running them through the
+native Coherence-Delta Calculus (CDC) kernel, and producing receipt-bound U1
+and U2 analyses.
 
-> **Universal Operator System** is a bounded repository-level description. It
-> names the integration of language, runtime, operators, verification, formal
-> mirrors, and instruments. It does not claim a universal physical law, quantum
-> implementation, empirically validated ontology, or the operator-algebra
-> meaning of “operator system.”
+> Here, **Universal Operator System** names the complete integration of
+> language, runtime, operators, verification, formal mirrors, and instruments.
+> “Universal” describes the reach of one controlled operator path across those
+> layers. It does not assert a universal physical law, quantum implementation,
+> empirically validated ontology, or the operator-algebra meaning of “operator
+> system.”
 
 **[Understand](UNIVERSAL_OPERATOR_SYSTEM.md) · [Run](#run) ·
 [Verify](#verify) · [Paper](paper/arxiv/main.pdf)**
@@ -43,9 +46,9 @@ flowchart LR
     U2 --> Gate{"recurrence verified?"}
     Gate -->|no| Hold["typed hold"]
     Gate -->|yes| Spectrum["monodromy + spectrum"]
-    Hold --> Receipt["receipt + claim ceiling"]
-    Spectrum --> Receipt
-    Receipt --> Paper["formal layer + paper"]
+    Hold --> ReceiptNode["receipt + claim ceiling"];
+    ReceiptNode --> Paper["formal layer + paper"];
+    Spectrum --> ReceiptNode;
 ```
 
 Every arrow may hold without manufacturing the artifact to its right. The
@@ -91,9 +94,10 @@ monodromy      not emitted
 multipliers    not emitted
 ```
 
-This is a successful, informative hold. The two-turn lifted-cover criterion
-passes, while latch mode, belief, prior, and unwrapped phase do not all return.
-The complete authoritative record is the output line beginning `u2-json=`.
+That hold is the result, not a failed success screen. The two-turn lifted-cover
+criterion passes, while latch mode, belief, prior, and unwrapped phase do not
+all return. The complete authoritative record is the output line beginning
+`u2-json=`.
 
 The positive relative-return calibration is explicit and separate:
 
@@ -127,9 +131,10 @@ The verification unit is always:
 (scope, maturity, verdict, receipt-or-obligation)
 ```
 
-A declaration is not an implementation. A passing finite proof is not a
-continuous theorem. A numerical fixture is not a physical law. A screen or
-green counter is not an execution receipt.
+The discipline is simple: declarations do not count as implementation, finite
+proofs do not silently become continuous theorems, and numerical fixtures do
+not become physical laws. A screen or green counter never substitutes for an
+execution receipt.
 
 ### Current release boundary · 0.3.0
 
@@ -148,7 +153,7 @@ the normative recurrence contract.
 
 ## CDC: the formal and executable kernel
 
-CDC has exactly three primitive reductions:
+The kernel is small on purpose. CDC has exactly three primitive reductions:
 
 - `flow(d)` performs synchronous continuous phase evolution;
 - `commit(m)` quantizes to balanced ternary and enforces the nonnegative-prefix barrier;
@@ -179,7 +184,7 @@ is not a hostile-package sandbox.
 
 U1 accepts only when reciprocal channel roles, double-cover restoration,
 declared holonomy, local commits, record/decision agreement, and effect gating
-agree. It earns lifted-cover closure—not automatic recurrence of the complete
+agree. It earns lifted-cover closure, not automatic recurrence of the complete
 runtime state.
 
 U2 closes a coordinate manifest over the exact accepted path, differentiates
@@ -188,14 +193,15 @@ and verifies full or explicitly restored recurrence before it constructs a
 monodromy operator or emits characteristic multipliers. A missing spectral
 backend produces a typed hold rather than invented eigenvalues.
 
-Polarity is system-wide as **apertured oriented reciprocity** where a contract
-declares it: carrier inversion exchanges `-1` and `+1` while fixing `0`;
-receptive/radiant roles may exchange; path orientation may reverse; and
-double-cover sheet parity changes after one turn and restores after two. These
-are related but distinct transformations. The system does not force them into
-one binary symmetry, and it does not promote their verified software behavior
-into a universal physical polarity law. The exact scope and counterexamples
-are recorded in the [polarity audit](docs/u2/POLARITY_AUDIT.md).
+Polarity does not collapse into one binary toggle. The architecture treats it
+as **apertured oriented reciprocity** wherever a contract declares it: carrier
+inversion exchanges `-1` and `+1` while fixing `0`; receptive and radiant roles
+may exchange; path orientation may reverse; and double-cover sheet parity
+changes after one turn and restores after two. These transformations touch one
+another without becoming interchangeable. The system neither forces them into
+one symmetry nor promotes their verified software behavior into a universal
+physical polarity law. The exact scope and counterexamples are recorded in the
+[polarity audit](docs/u2/POLARITY_AUDIT.md).
 
 ## Architecture and evidence
 
@@ -203,13 +209,13 @@ Start with the [Universal Operator System](UNIVERSAL_OPERATOR_SYSTEM.md) for the
 whole-to-parts model and compatibility boundary. Then use the route appropriate
 to the question:
 
-- [CDC language reference](CDC_LANGUAGE.md) — syntax and source contract.
-- [Formal semantic spine](FORMAL_SEMANTIC_SPINE.md) — specification versus audited realization.
-- [Frameworks](FRAMEWORKS.md) — H1–H6 source-level task vocabulary.
-- [Bridge runtime](BRIDGE_RUNTIME.md) — bridge generation and runtime behavior.
-- [Verification matrix](VERIFICATION_OBLIGATION_MATRIX.md) — claims, receipts, counterexamples, and open obligations.
-- [U2 semantics](docs/u2/U2_SEMANTICS.md) — tangent, recurrence, restoration, and spectral authority.
-- [Paper](paper/arxiv/main.pdf) and [source](paper/arxiv/main.tex) — CDC formalization and release argument.
+- [CDC language reference](CDC_LANGUAGE.md): syntax and source contract.
+- [Formal semantic spine](FORMAL_SEMANTIC_SPINE.md): specification versus audited realization.
+- [Frameworks](FRAMEWORKS.md): H1–H6 source-level task vocabulary.
+- [Bridge runtime](BRIDGE_RUNTIME.md): bridge generation and runtime behavior.
+- [Verification matrix](VERIFICATION_OBLIGATION_MATRIX.md): claims, receipts, counterexamples, and open obligations.
+- [U2 semantics](docs/u2/U2_SEMANTICS.md): tangent, recurrence, restoration, and spectral authority.
+- [Paper](paper/arxiv/main.pdf) and [source](paper/arxiv/main.tex): CDC formalization and release argument.
 
 ## Instruments and research lanes
 
@@ -230,8 +236,9 @@ of the formal kernel or a replacement for the BiDi system.
 
 ## Compatibility
 
-The system-level identity does not rename the package, executable, file format,
-ABI, C symbols, or formal namespaces. Existing automation continues to use
+A clearer name is not permission to break the working contract. The system
+identity does not rename the package, executable, file format, ABI, C symbols,
+or formal namespaces. Existing automation continues to use
 `bidi-coherence-delta-calculus`, `cdc`, `.cdc`, and the established CDC symbols.
 Historical specifications remain versioned provenance, not current release
 authority.

@@ -10,10 +10,12 @@ version: "0.3.0"
 license: MIT
 repository-code: "https://github.com/ETEllis/BiDi"
 abstract: >-
-  BiDi is an executable Universal Operator System integrating the
-  Coherence-Delta Calculus formal language and native kernel, guarded U1
-  lifted-cover acceptance, recurrence-gated U2 variational analysis,
-  deterministic receipts, finite Lean/Rocq mirrors, and operator instruments.
+  BiDi is an executable Universal Operator System that keeps source, state,
+  guarded execution, recurrence, and evidence on one inspectable path. The
+  Coherence-Delta Calculus supplies its formal language and native kernel;
+  guarded U1 lifted-cover acceptance, recurrence-gated U2 variational analysis,
+  deterministic receipts, finite Lean/Rocq mirrors, and operator instruments
+  extend that path without collapsing their different kinds of authority.
   Version 0.3.0 differentiates the executed native path and emits monodromy or
   characteristic multipliers only after full or explicitly restored recurrence
   passes. The descriptor is repository-scoped: richer continuous, empirical,
