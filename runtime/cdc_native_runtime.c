@@ -3368,6 +3368,23 @@ static int u2_coordinate_mask(Runtime *rt, const cdc_u2_layout *layout,
     return 1;
 }
 
+/* U2 receipts cross macOS and Linux, whose libm implementations may return
+ * adjacent IEEE-754 values for the same transcendental operation.  Fifteen
+ * significant decimal digits preserve the meaningful double-precision
+ * result while collapsing that sub-receipt, one-ULP platform noise.  The
+ * same formatter feeds both JSON artifacts and their digests. */
+static int u2_format_canonical_float(char *buffer, size_t size, double value) {
+    return snprintf(buffer, size, "%.15g", value == 0.0 ? 0.0 : value);
+}
+
+static void u2_emit_canonical_float(double value) {
+    char buffer[64];
+    int written = u2_format_canonical_float(buffer, sizeof(buffer), value);
+    if (written > 0 && (size_t)written < sizeof(buffer)) {
+        fwrite(buffer, 1, (size_t)written, stdout);
+    }
+}
+
 static void u2_digest_layout(const cdc_u2_layout *layout, char *hex,
                              size_t hex_size) {
     cdc_digest_ctx context;
@@ -3375,12 +3392,16 @@ static void u2_digest_layout(const cdc_u2_layout *layout, char *hex,
     char line[256];
     cdc_digest_init(&context);
     for (size_t i = 0; i < layout->dimension; i++) {
-        int written = snprintf(line, sizeof(line),
-                               "%zu|%s|%d|%zu|%.17g\n", i,
-                               layout->coordinates[i].name,
-                               (int)layout->coordinates[i].kind,
-                               layout->coordinates[i].source_index,
-                               layout->coordinates[i].period);
+        char period[64];
+        int period_written = u2_format_canonical_float(
+            period, sizeof(period), layout->coordinates[i].period);
+        int written = period_written > 0 &&
+                              (size_t)period_written < sizeof(period)
+                          ? snprintf(line, sizeof(line), "%zu|%s|%d|%zu|%s\n",
+                                     i, layout->coordinates[i].name,
+                                     (int)layout->coordinates[i].kind,
+                                     layout->coordinates[i].source_index, period)
+                          : -1;
         if (written > 0 && (size_t)written < sizeof(line)) {
             cdc_digest_update(&context, line, (size_t)written);
         }
@@ -3408,7 +3429,12 @@ static void u2_digest_matrix(const cdc_matrix *matrix, char *hex,
         cdc_digest_update(&context, line, (size_t)written);
     }
     for (size_t i = 0; i < matrix->rows * matrix->cols; i++) {
-        written = snprintf(line, sizeof(line), "%.17g\n", matrix->data[i]);
+        char value[64];
+        int value_written =
+            u2_format_canonical_float(value, sizeof(value), matrix->data[i]);
+        written = value_written > 0 && (size_t)value_written < sizeof(value)
+                      ? snprintf(line, sizeof(line), "%s\n", value)
+                      : -1;
         if (written > 0 && (size_t)written < sizeof(line)) {
             cdc_digest_update(&context, line, (size_t)written);
         }
@@ -3690,11 +3716,15 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
                "\"spectrum\":{\"solver\":\"validated-real-schur\","
                "\"ordering\":\"sorted-multipliers\"}}");
     }
-    printf(",\"tolerances\":{\"recurrenceAbsolute\":%.17g,"
-           "\"recurrenceRelative\":%.17g,\"neutral\":%.17g,"
-           "\"schur\":%.17g}", orbit->absolute_tolerance,
-           orbit->relative_tolerance, spectrum_job->neutral_tolerance,
-           spectrum_job->schur_tolerance);
+    printf(",\"tolerances\":{\"recurrenceAbsolute\":");
+    u2_emit_canonical_float(orbit->absolute_tolerance);
+    printf(",\"recurrenceRelative\":");
+    u2_emit_canonical_float(orbit->relative_tolerance);
+    printf(",\"neutral\":");
+    u2_emit_canonical_float(spectrum_job->neutral_tolerance);
+    printf(",\"schur\":");
+    u2_emit_canonical_float(spectrum_job->schur_tolerance);
+    putchar('}');
     printf(",\"finiteDifference\":");
     if (!tangent_ready) {
         printf("null");
@@ -3724,14 +3754,17 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
         u2_json_string(cdc_u2_recurrence_kind_name(recurrence->kind));
         printf(",\"scope\":");
         u2_json_string(scope);
-        printf(",\"residual\":%.17g,\"absoluteTolerance\":%.17g,"
-               "\"relativeTolerance\":%.17g,\"normalizedResidual\":%.17g,"
-               "\"verified\":%s,\"authorizesMonodromy\":%s,"
+        printf(",\"residual\":");
+        u2_emit_canonical_float(recurrence->residual);
+        printf(",\"absoluteTolerance\":");
+        u2_emit_canonical_float(recurrence->absolute_tolerance);
+        printf(",\"relativeTolerance\":");
+        u2_emit_canonical_float(recurrence->relative_tolerance);
+        printf(",\"normalizedResidual\":");
+        u2_emit_canonical_float(recurrence->normalized_residual);
+        printf(",\"verified\":%s,\"authorizesMonodromy\":%s,"
                "\"discreteStateVerified\":%s,"
                "\"restorationDerivativeApplied\":%s,\"restoration\":",
-               recurrence->residual, recurrence->absolute_tolerance,
-               recurrence->relative_tolerance,
-               recurrence->normalized_residual,
                recurrence->verified ? "true" : "false",
                recurrence->authorizes_monodromy ? "true" : "false",
                recurrence->discrete_state_verified ? "true" : "false",
@@ -3744,14 +3777,15 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
                    restoration->cover_coordinate);
             u2_json_string(
                 tangent->layout.coordinates[restoration->cover_coordinate].name);
-            printf(",\"displacement\":%.17g,\"equivarianceWitness\":{"
+            printf(",\"displacement\":");
+            u2_emit_canonical_float(restoration->displacement);
+            printf(",\"equivarianceWitness\":{"
                    "\"id\":\"isolated-affine-two-turn-cover\","
                    "\"verified\":%s,\"fieldGain\":0,"
                    "\"fieldCellCount\":%d,\"incidentChannelCount\":%d,"
                    "\"mutatingStepCount\":%d},\"sectionWitness\":{"
                    "\"id\":\"u1-two-turn-returned-restored\","
                    "\"verified\":%s,\"winding\":%d,\"projection\":",
-                   restoration->displacement,
                    restoration->equivariance_verified ? "true" : "false",
                    restoration->field_cell_count,
                    restoration->incident_channel_count,
@@ -3773,7 +3807,7 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
                 if (i) {
                     putchar(',');
                 }
-                printf("%.17g", restoration_derivative->data[i]);
+                u2_emit_canonical_float(restoration_derivative->data[i]);
             }
             printf("]}},");
         }
@@ -3802,8 +3836,9 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
             }
             printf("{\"name\":");
             u2_json_string(tangent->layout.coordinates[i].name);
-            printf(",\"period\":%.17g}",
-                   tangent->layout.coordinates[i].period);
+            printf(",\"period\":");
+            u2_emit_canonical_float(tangent->layout.coordinates[i].period);
+            putchar('}');
         }
         printf("],\"initialState\":");
     } else {
@@ -3818,14 +3853,14 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
             if (i) {
                 putchar(',');
             }
-            printf("%.17g", tangent->initial[i]);
+            u2_emit_canonical_float(tangent->initial[i]);
         }
         printf("],\"finalState\":[");
         for (size_t i = 0; i < tangent->layout.dimension; i++) {
             if (i) {
                 putchar(',');
             }
-            printf("%.17g", tangent->final[i]);
+            u2_emit_canonical_float(tangent->final[i]);
         }
         printf("],\"pathTangentDigest\":");
         u2_json_string(path_tangent_hex);
@@ -3834,7 +3869,7 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
             if (i) {
                 putchar(',');
             }
-            printf("%.17g", path_tangent->data[i]);
+            u2_emit_canonical_float(path_tangent->data[i]);
         }
         printf("],");
     }
@@ -3846,7 +3881,9 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
         }
         printf("{\"kind\":");
         u2_json_string(cdc_u2_event_kind_name(event->kind));
-        printf(",\"time\":%.17g,\"transverse\":", event->time);
+        printf(",\"time\":");
+        u2_emit_canonical_float(event->time);
+        printf(",\"transverse\":");
         if (event->transverse < 0) {
             printf("null");
         } else {
@@ -3869,7 +3906,7 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
             if (i) {
                 putchar(',');
             }
-            printf("%.17g", tangent->tangent.matrix.data[i]);
+            u2_emit_canonical_float(tangent->tangent.matrix.data[i]);
         }
         printf("],\"multipliers\":null,"
                "\"spectrumDiagnostics\":null,"
@@ -3883,33 +3920,36 @@ static void u2_emit_json(const char *source_digest, OrbitJob *orbit,
             if (i) {
                 putchar(',');
             }
-            printf("%.17g", tangent->tangent.matrix.data[i]);
+            u2_emit_canonical_float(tangent->tangent.matrix.data[i]);
         }
         printf("],\"multipliers\":[");
         for (size_t i = 0; i < spectrum->dimension; i++) {
             if (i) {
                 putchar(',');
             }
-            printf("{\"real\":%.17g,\"imag\":%.17g,\"modulus\":%.17g,"
-                   "\"mode\":\"%s\"}",
-                   spectrum->multipliers[i].real,
-                   spectrum->multipliers[i].imag,
-                   spectrum->multipliers[i].modulus,
+            printf("{\"real\":");
+            u2_emit_canonical_float(spectrum->multipliers[i].real);
+            printf(",\"imag\":");
+            u2_emit_canonical_float(spectrum->multipliers[i].imag);
+            printf(",\"modulus\":");
+            u2_emit_canonical_float(spectrum->multipliers[i].modulus);
+            printf(",\"mode\":\"%s\"}",
                    spectrum->multipliers[i].mode == CDC_U2_MULTIPLIER_GAUGE
                        ? "gauge" : "physical");
         }
         printf("],\"backend\":");
         u2_json_string(spectrum->backend);
-        printf(",\"spectrumDiagnostics\":{\"spectralRadius\":%.17g,"
-               "\"schur\":{\"reconstructionResidual\":%.17g,"
-               "\"orthogonalityResidual\":%.17g,"
-               "\"triangularResidual\":%.17g,"
-               "\"validationTolerance\":%.17g}}",
-               spectrum->spectral_radius,
-               spectrum->schur_reconstruction_residual,
-               spectrum->schur_orthogonality_residual,
-               spectrum->schur_triangular_residual,
-               spectrum_job->schur_tolerance);
+        printf(",\"spectrumDiagnostics\":{\"spectralRadius\":");
+        u2_emit_canonical_float(spectrum->spectral_radius);
+        printf(",\"schur\":{\"reconstructionResidual\":");
+        u2_emit_canonical_float(spectrum->schur_reconstruction_residual);
+        printf(",\"orthogonalityResidual\":");
+        u2_emit_canonical_float(spectrum->schur_orthogonality_residual);
+        printf(",\"triangularResidual\":");
+        u2_emit_canonical_float(spectrum->schur_triangular_residual);
+        printf(",\"validationTolerance\":");
+        u2_emit_canonical_float(spectrum_job->schur_tolerance);
+        printf("}}");
         printf(",\"classification\":");
         u2_json_string(cdc_u2_stability_class_name(spectrum->classification));
         putchar('}');

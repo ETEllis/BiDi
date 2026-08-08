@@ -632,6 +632,13 @@ authority. Re-running the same source/runtime/configuration MUST produce the
 same manifest, itinerary, matrix digest, and deterministically ordered
 multipliers within the declared numeric serialization contract.
 
+In `cdc.u2.stability.v1`, `canonical-float` means that every finite real in the
+machine receipt is serialized in the C locale with fifteen significant decimal
+digits and negative zero is normalized to zero. Matrix and manifest digests
+consume those same canonical strings. The solver and all acceptance decisions
+still use their unrounded binary64 values; this receipt boundary removes only
+sub-serialization, one-ULP variation between supported system math libraries.
+
 If U1 holds before snapshot admission, there is no U2 state artifact. The
 receipt preserves the U1 result and its causal reason, but the manifest,
 recurrence, discrete-state artifact, dimension, coordinates, endpoint state,
