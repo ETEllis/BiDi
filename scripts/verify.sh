@@ -1758,7 +1758,41 @@ echo "package manifest sweep ok (6 mutations + malformed-installed refused, rest
 # for one logical install. The pause fifo holds both attempts at the
 # same pre-lock rendezvous and releases them together, so the race
 # window is genuinely entered, deterministically.
+fifo_release_after_gate() {
+  local fifo=$1
+  local ready=$2
+  local gate=$3
+  local attempt
+  exec 9>"$fifo"
+  : > "$ready"
+  for ((attempt = 0; attempt < 1000; attempt++)); do
+    if [ -e "$gate" ]; then
+      printf x >&9
+      exec 9>&-
+      return 0
+    fi
+    sleep 0.01
+  done
+  echo "fifo release gate timed out: $gate" >&2
+  return 1
+}
+
+wait_for_fifo_readers() {
+  local first=$1
+  local second=${2:-}
+  local attempt
+  for ((attempt = 0; attempt < 1000; attempt++)); do
+    if [ -e "$first" ] && { [ -z "$second" ] || [ -e "$second" ]; }; then
+      return 0
+    fi
+    sleep 0.01
+  done
+  echo "fifo readers did not reach the capture barrier" >&2
+  return 1
+}
+
 rm -rf build/cdc_modules build/install_f1 build/install_f2
+rm -f build/install_ready_a build/install_ready_b build/install_release
 mkfifo build/install_f1 build/install_f2
 CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
   ./build/cdc install tests/fixtures/packages/ternary-stats \
@@ -1768,16 +1802,16 @@ CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
   ./build/cdc install tests/fixtures/packages/ternary-stats \
   > build/concurrent_b.txt 2>&1 &
 CONC_B=$!
-# A child can consume its release and close while Bash is advancing the paired
-# rendezvous on Darwin. The outcome assertions below remain authoritative, so
-# keep a late FIFO close from terminating the harness itself.
-exec 3>build/install_f1
-exec 4>build/install_f2
-trap '' PIPE
-printf x >&3 || true
-printf x >&4 || true
-trap - PIPE
-exec 3>&- 4>&-
+fifo_release_after_gate build/install_f1 build/install_ready_a \
+  build/install_release &
+RELEASE_A=$!
+fifo_release_after_gate build/install_f2 build/install_ready_b \
+  build/install_release &
+RELEASE_B=$!
+wait_for_fifo_readers build/install_ready_a build/install_ready_b
+: > build/install_release
+wait "$RELEASE_A"
+wait "$RELEASE_B"
 set +e
 wait $CONC_A
 CONC_A_RC=$?
@@ -1793,11 +1827,13 @@ test "$(grep -c "already-installed=identical" build/concurrent_all.txt)" = "1"
   | grep -q "open=ok recovered=0 sealed=1 events=2 generation=0 verify=ok"
 CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
 rm -f build/install_f1 build/install_f2
+rm -f build/install_ready_a build/install_ready_b build/install_release
 echo "concurrent identical installs ok (one install, one observation, ONE journal transaction)"
 
 # divergent concurrent installers: one winner, one typed refusal, and the
 # installed bytes are exactly one attempt's bytes — never a mixture
 rm -rf build/cdc_modules build/conc_a build/conc_b build/install_f1 build/install_f2
+rm -f build/install_ready_a build/install_ready_b build/install_release
 mkdir -p build/conc_a/ternary-stats build/conc_b/ternary-stats
 cp tests/fixtures/packages/ternary-stats/stats.cdc build/conc_a/ternary-stats/
 cp tests/fixtures/packages/ternary-stats/stats.cdc build/conc_b/ternary-stats/
@@ -1811,13 +1847,16 @@ CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f2 \
   ./build/cdc install build/conc_b/ternary-stats \
   > build/concurrent_db.txt 2>&1 &
 CONC_B=$!
-exec 3>build/install_f1
-exec 4>build/install_f2
-trap '' PIPE
-printf x >&3 || true
-printf x >&4 || true
-trap - PIPE
-exec 3>&- 4>&-
+fifo_release_after_gate build/install_f1 build/install_ready_a \
+  build/install_release &
+RELEASE_A=$!
+fifo_release_after_gate build/install_f2 build/install_ready_b \
+  build/install_release &
+RELEASE_B=$!
+wait_for_fifo_readers build/install_ready_a build/install_ready_b
+: > build/install_release
+wait "$RELEASE_A"
+wait "$RELEASE_B"
 set +e
 wait $CONC_A
 CONC_A_RC=$?
@@ -1838,12 +1877,14 @@ fi
 CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
 rm -rf build/conc_a build/conc_b
 rm -f build/install_f1 build/install_f2
+rm -f build/install_ready_a build/install_ready_b build/install_release
 echo "concurrent divergent installs ok (one winner, one refusal, no byte mixing)"
 
 # source mutation during installation: every consumer of the member —
 # digest, journal, staged tree — derives from ONE capture, so a source
 # mutated after capture cannot split the installed identity
 rm -rf build/cdc_modules build/mutpkg build/install_f1
+rm -f build/install_ready build/install_release
 mkdir -p build/mutpkg/ternary-stats
 cp tests/fixtures/packages/ternary-stats/stats.cdc build/mutpkg/ternary-stats/
 cp build/mutpkg/ternary-stats/stats.cdc build/mut_original.bak
@@ -1851,18 +1892,20 @@ mkfifo build/install_f1
 CDC_MODULES=build/cdc_modules CDC_INSTALL_PAUSE_AFTER_CAPTURE=build/install_f1 \
   ./build/cdc install build/mutpkg/ternary-stats > build/mutation.txt 2>&1 &
 MUT_PID=$!
-exec 3>build/install_f1
+fifo_release_after_gate build/install_f1 build/install_ready \
+  build/install_release &
+RELEASE_PID=$!
+wait_for_fifo_readers build/install_ready
 printf '\n# mutated-after-capture\n' >> build/mutpkg/ternary-stats/stats.cdc
-trap '' PIPE
-printf x >&3 || true
-trap - PIPE
-exec 3>&-
+: > build/install_release
+wait "$RELEASE_PID"
 wait $MUT_PID
 grep -q "cdc install ok name=ternary-stats" build/mutation.txt
 cmp build/mut_original.bak build/cdc_modules/ternary-stats/stats.cdc
 CDC_MODULES=build/cdc_modules ./build/cdc x ternary-stats stats.cdc > /dev/null
 rm -rf build/mutpkg
 rm -f build/install_f1
+rm -f build/install_ready build/install_release
 echo "mid-install source mutation ok (captured bytes installed, identity whole)"
 
 # leave a clean fixture install for any later section
