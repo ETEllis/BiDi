@@ -60,6 +60,12 @@ enum {
     HEAD_BODY = STORE_UUID_SIZE + 8 + 8 + 2 * CDC_DIGEST_SIZE
 };
 
+/* The public accessor copies CDC_STORE_UUID_SIZE bytes out of a field sized
+ * by the internal constant; a drift between the two would over- or under-read
+ * the HEAD body, so fail the build instead. */
+typedef char cdc_store_uuid_size_matches[
+    (STORE_UUID_SIZE == CDC_STORE_UUID_SIZE) ? 1 : -1];
+
 struct cdc_store {
     char dir[512];
     char log_path[600];
@@ -988,6 +994,19 @@ void cdc_store_close(cdc_store *store) {
 
 uint64_t cdc_store_generation(const cdc_store *store) {
     return store ? store->generation : 0;
+}
+
+cdc_store_status cdc_store_uuid(const cdc_store *store,
+                                uint8_t out[CDC_STORE_UUID_SIZE]) {
+    if (!store || !out) {
+        return CDC_STORE_EARG;
+    }
+    /* The uuid is established at creation and re-read from the HEAD on every
+     * open; compaction carries it forward (compact refuses a base that does
+     * not match). It is therefore stable for the life of the store and safe
+     * to read without the lock. */
+    memcpy(out, store->uuid, CDC_STORE_UUID_SIZE);
+    return CDC_STORE_OK;
 }
 
 uint64_t cdc_store_sealed_count(const cdc_store *store) {
