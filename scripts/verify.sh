@@ -105,6 +105,7 @@ echo
 echo "== Möbi𝒰s identity asset contract =="
 python3 - <<'PY'
 from pathlib import Path
+import struct
 import xml.etree.ElementTree as ET
 
 root = Path(".")
@@ -131,6 +132,26 @@ for path in svgs:
     if not any(child.tag.endswith("title") for child in node):
         raise SystemExit(f"identity asset lacks accessible title: {path}")
 
+readme_rasters = [
+    identity / "mobius-u-code-sigil.png",
+    identity / "mobius-u-code-sigil-dark.png",
+]
+for path in readme_rasters:
+    if not path.is_file():
+        raise SystemExit(f"README identity raster missing: {path}")
+    with path.open("rb") as handle:
+        header = handle.read(24)
+    if header[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SystemExit(f"README identity raster is not a PNG: {path}")
+    if struct.unpack(">II", header[16:24]) != (256, 256):
+        raise SystemExit(f"README identity raster has wrong dimensions: {path}")
+
+readme = (root / "README.md").read_text(encoding="utf-8")
+for path in readme_rasters:
+    relative = path.relative_to(root).as_posix()
+    if relative not in readme:
+        raise SystemExit(f"README does not reference identity raster: {relative}")
+
 for path in identity.glob("mobius-u-wordmark-*.svg"):
     text = path.read_text(encoding="utf-8")
     if "<text" in text:
@@ -155,7 +176,7 @@ docs = [
 if not all(path.is_file() for path in docs):
     raise SystemExit("identity documentation set is incomplete")
 
-print(f"mobius identity assets: ok ({len(svgs)} svg, {len(docs)} contracts, 1 motion lab)")
+print(f"mobius identity assets: ok ({len(svgs)} svg, {len(readme_rasters)} README rasters, {len(docs)} contracts, 1 motion lab)")
 PY
 
 run_step ./scripts/verify_identity_3d.sh
