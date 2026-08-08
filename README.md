@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/identity/mobius-u-code-sigil-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-code-sigil.svg">
-    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="112">
+    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="96">
   </picture>
 </p>
 
@@ -12,11 +12,10 @@
   <strong>Universal Operator System</strong>
 </p>
 
-BiDi is a Universal Operator System that keeps complex transformations
-executable, inspectable, and engineerable from formal source through live state,
-guarded action, recurrence, and evidence. Its CDC kernel, U1 acceptance, and U2
-variation and return analysis give every result the history and earned scope
-needed to reproduce it, challenge it, or build from it.
+BiDi is a Universal Operator System for making complex transformations
+executable, inspectable, and engineerable. Its CDC kernel, U1 acceptance, and U2
+variation and return analysis bind every result to reproducible evidence and
+earned scope.
 
 <p align="center">
   <strong><a href="UNIVERSAL_OPERATOR_SYSTEM.md">Understand</a> · <a href="#run">Run</a> · <a href="#verify">Verify</a> · <a href="paper/arxiv/main.pdf">Paper</a></strong>
