@@ -20,6 +20,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install native linear algebra backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liblapack-dev libblas-dev
+
       - name: Install Lean
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \

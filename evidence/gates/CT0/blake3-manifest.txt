@@ -9,7 +9,7 @@
 # The interim sha256-manifest.txt is retained unmodified as the
 # historical record of the pre-BLAKE3 era (DECISIONS D2).
 blake3:3f606b72740d2ab4424854500ef19ec65a0ddc3d476eb6869fe5520249d9f965  .gitattributes
-blake3:dad813b340a91876969cafac7a2eb4a32d2c505b5bbfaa2b054c530ccb32d75e  .github/workflows/ci.yml
+blake3:5b707514f31501154375d92e3ec74a86722979bb74639b8ab2f90c8be5245256  .github/workflows/ci.yml
 blake3:089d1d80c9640ad1d3c33cc332c9e405e072fa7fe62cf98e7a8afee13fb36861  .gitignore
 blake3:7f6c650a048e5ff7ccdec7042e1b5fad59f213a1527142e499734ac405a8754b  BIDI_CALCULUS_CORE.md
 blake3:605c64023f02bfd71429a6e33e0368f2ef4d01d63f00a9ae98c47d843f2a4d4c  BIDI_COHERENCE_DELTA_CALCULUS.md
