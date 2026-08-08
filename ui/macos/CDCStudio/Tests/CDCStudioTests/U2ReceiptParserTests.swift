@@ -16,6 +16,28 @@ final class U2ReceiptParserTests: XCTestCase {
         XCTAssertTrue(orbit.claimCeiling.contains("Monodromy analyzed as marginal"))
     }
 
+    func testCanonicalFifteenDigitSerializationAdmitsOnlyItsDeclaredBoundary() {
+        let canonical = mutate(acceptedJSON) { receipt in
+            let serializedTwoTurns = 12.5663706143592
+            receipt["finalState"] = [serializedTwoTurns]
+            var recurrence = receipt["recurrence"] as! [String: Any]
+            var restoration = recurrence["restoration"] as! [String: Any]
+            restoration["displacement"] = serializedTwoTurns
+            recurrence["restoration"] = restoration
+            receipt["recurrence"] = recurrence
+        }
+        XCTAssertNoThrow(try U2ReceiptParser.parse("u2-json=\(canonical)"))
+
+        let beyondBoundary = mutate(canonical) { receipt in
+            var recurrence = receipt["recurrence"] as! [String: Any]
+            var restoration = recurrence["restoration"] as! [String: Any]
+            restoration["displacement"] = 12.5663706153592
+            recurrence["restoration"] = restoration
+            receipt["recurrence"] = recurrence
+        }
+        XCTAssertThrowsError(try U2ReceiptParser.parse("u2-json=\(beyondBoundary)"))
+    }
+
     func testTangentHoldHasNoSpectrumAndKeepsRecurrenceReason() throws {
         let receipt = try XCTUnwrap(U2ReceiptParser.parse("u2-json=\(tangentHoldJSON)").first)
         XCTAssertEqual(receipt.record.analysis, "tangent")

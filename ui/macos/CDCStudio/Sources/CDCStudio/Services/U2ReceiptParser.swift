@@ -517,12 +517,15 @@ enum U2ReceiptParser {
 
     private static func matchesRuntimeFloat(_ reported: Double, _ expected: Double) -> Bool {
         if reported == expected { return true }
-        // The C producer emits %.17g, which round-trips a binary64 value, and
-        // this path mirrors its arithmetic and Darwin libm calls. Eight ULPs is
-        // therefore a narrow allowance for operation-order/compiler variance,
-        // not a scale-relative escape hatch.
+        // The v1 machine receipt deliberately serializes finite reals with
+        // fifteen significant decimal digits so adjacent libm results collapse
+        // to one macOS/Linux artifact. Calculations and acceptance remain
+        // binary64. Admit only that declared decimal boundary (plus the former
+        // eight-ULP operation-order allowance), never the runtime tolerance.
         let ulpBudget = 8 * max(reported.ulp, expected.ulp)
-        return Darwin.fabs(reported - expected) <= ulpBudget
+        let scale = max(Darwin.fabs(reported), Darwin.fabs(expected))
+        let serializationBudget = 5e-15 * scale
+        return Darwin.fabs(reported - expected) <= max(ulpBudget, serializationBudget)
     }
 
     private static func validateAuthorizedRestoration(_ recurrence: U2StabilityRecord.Recurrence) throws {
