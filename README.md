@@ -42,7 +42,7 @@ An endpoint rarely tells the whole story. A system may return to the same visibl
 
 The system grew through reciprocal work across mathematical models, products and executable instruments. New mechanisms exposed new obligations; those obligations sharpened the models in turn. The [origin and evolution](ORIGIN_AND_EVOLUTION.md) documents that history.
 
-Release **0.3.0** establishes the following source and native-closure inventory:
+Version **0.3.0** establishes the following source and native-closure inventory:
 
 **262/262 expectations** · **20 terms · 22 rules · 16 invariants**<br>
 **46 capabilities · 6 frameworks · 4831 native witnesses** · **ABI 1.5**
