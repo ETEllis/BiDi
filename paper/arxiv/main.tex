@@ -26,9 +26,9 @@
 \newcommand{\eps}{\varepsilon}
 \newcommand{\R}{\mathbb{R}}
 
-\title{\CDC\ (CDC):\\Receipt-Bound Hybrid Reduction and\\Recurrence-Gated Variational Analysis}
+\title{\CDC\ (CDC):\\Hybrid State Reduction and\\Recurrence-Gated Variational Analysis}
 \author{Edward Ellis\\Independent Researcher}
-\date{August 8, 2026}
+\date{September 2026\\[.4em]\small Research preprint; runtime profile 0.3.0}
 
 \begin{document}
 \maketitle
@@ -64,16 +64,15 @@ interpretations addressable as explicit, testable extensions.
 
 Hybrid software often needs continuous evolution, discrete admissibility,
 nested reference frames, local observation, and effects in one auditable object.
-BiDi keeps those demands on one executable operator path rather than distributing
-them across a modeling language, simulation, verification notes, and interface
-prose.
+BiDi connects those demands through one executable operator path, with explicit
+contracts between its source, state transitions and downstream analysis.
 Classical hybrid-automata theory supplies a rigorous setting for continuous
 modes and discrete transitions \cite{henzinger1996}. CDC narrows that ambition to
 a compact executable source contract whose higher-order claims are controlled by
 receipts.
 
-The contribution is a claim-preserving chain, not another syntax for a state
-machine:
+The contribution is a chain of transformations whose conditions and evidence
+remain connected:
 \[
 \texttt{.cdc source}
 \longrightarrow \text{typed state path}
@@ -82,7 +81,8 @@ machine:
 \longrightarrow \text{return gate}
 \longrightarrow \text{spectrum}.
 \]
-Every arrow can hold without manufacturing the artifact to its right.
+Each transition may be held when its premises fail, preserving the results
+already established to its left.
 
 The release makes four contributions:
 \begin{enumerate}
@@ -113,10 +113,10 @@ implementation reliably refuses a false periodic-orbit claim. Conversely, a
 mechanized finite involution says nothing by itself about a continuous physical
 system.
 
-The authority order is executed machine receipt, permanent verification gate,
-versioned language/ABI contract, mathematical specification, and finally
-presentation. A declaration, diagram, or screen cannot promote itself above its
-receipt.
+Execution records identify the tested source and state. Verification checks
+assess their agreement with the versioned language and ABI contract. The
+mathematical specification states the broader model and any correspondence
+still to be established between that model and its implementation.
 
 \section{Language and semantic partition}
 
@@ -276,8 +276,7 @@ S_e=D_xR_e+
 CDC's generic U2 tests exercise this formula, including transversality and event
 order. The canonical source path reports its guard method as
 \texttt{unbound-no-saltation}, because its guard is not yet a localized
-transition surface. This is a deliberate realization boundary, not missing
-metadata.
+transition surface. This records the current event-localization boundary.
 
 \subsection{Recurrence before monodromy}
 
@@ -347,7 +346,7 @@ physical polarity law follows.
 \section{Executable results}
 
 Table~\ref{tab:results} reports the release's current decision surface. The
-machine authority is the deterministic line beginning \texttt{u2-json=} with
+machine-readable result is the deterministic line beginning \texttt{u2-json=} with
 schema \texttt{cdc.u2.stability.v1}.
 
 \begin{table}[ht]
@@ -407,7 +406,7 @@ and sheet involutions; fixed aperture; and the $+-/-+$ barrier counterexample.
 They do not prove the runtime Jacobian, recurrence, numerical spectrum,
 source-bound covariance, continuous holonomy, or a physical theory.
 
-\section{Artifact surface}
+\section{Implementation and reproducibility}
 
 The release is intentionally source-centered:
 \begin{itemize}
@@ -421,7 +420,7 @@ The release is intentionally source-centered:
 \item \path{tests/u2/} and \path{tests/fixtures/u2/} contain executable positive,
   negative, numerical, receipt, and purity cases; and
 \item \path{formal/lean/} and \path{formal/coq/} contain the finite proof
-  mirrors with explicit claim ceilings.
+  mirrors with explicit theorem scopes.
 \end{itemize}
 
 Within the language/runtime/semantic execution boundary, the one Python file,
@@ -438,24 +437,35 @@ history dynamics, or parity between prose semantics and unimplemented primal
 fields. The positive relative fixture validates a return-analysis mechanism; it
 does not make the canonical loop recurrent.
 
-The artifact is deterministic classical machinery. It provides neither a
-physical constitutive law nor empirical evidence for spinorial matter,
-nonlocality, gravity, plasma identity, biological identity, cosmology, quantum
-hardware, or quantum advantage. Any such specialization requires a
-domain-specific state map, units, constitutive grounding, calibration data,
-competing models, and discriminating experiments. U2 makes those future claims
-more engineerable and falsifiable; it does not pre-validate them.
+The implementation is deterministic classical software. Its mathematical
+state variables acquire a physical interpretation only through a specified
+mapping to measured quantities, units and constitutive relations. A physical
+specialization therefore requires calibration data, competing models and
+discriminating experiments. The software's recurrence and derivative checks
+provide tools for that work without establishing the physical mapping itself.
 
 \section{Conclusion}
 
-CDC shows how an ambitious hybrid calculus can preserve its full research reach
-while making every implemented transition and downstream claim inspectable. U1
+CDC connects implemented transitions to the conditions for downstream analysis. U1
 binds lifted closure to reciprocal relations, topology, record agreement, and
 effect gating. U2 binds first-order analysis to the exact executed path and
 refuses monodromy until state recurrence is independently earned. The
 implemented result is a language-level discipline in which accepted, held,
 mechanized, and exploratory statements remain distinct enough
-to support both engineering and future formal or empirical specialization.
+to support engineering and further formal or empirical specialization.
+
+\section*{Relationship to U and disclosure}
+The U language develops a broader substrate for operations with explicit laws,
+resource accounts and observation contracts. CDC predates U and provides an
+independent compatibility case: its finite phase map, ternary barrier and
+guarded analysis must retain their existing semantics in any U realization.
+The projects are available at \url{https://etellis.github.io/BiDi-web/} and
+\url{https://etellis.github.io/U-web/}.
+
+Edward Ellis is the author. AI systems assisted with implementation,
+mathematical exposition and editorial review; responsibility for the claims
+remains with the author. This research preprint is prepared for arXiv. No
+submission or peer review is claimed.
 
 \begin{thebibliography}{9}
 

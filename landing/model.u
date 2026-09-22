@@ -1,0 +1,11 @@
+u "etellis.u/0.1";
+use "u.standard/0.1";
+
+// The ordered four-trit prefix barrier. Every running prefix must remain
+// nonnegative. There is deliberately no final-sum-equals-zero requirement.
+// Phase flow and quantization are separate numerical operations.
+def prefix_admissible(a: Int, b: Int, c: Int, d: Int) -> Bool =
+  bool.and(int.ge(a, 0),
+    bool.and(int.ge(int.add(a, b), 0),
+      bool.and(int.ge(int.add(int.add(a, b), c), 0),
+        int.ge(int.add(int.add(int.add(a, b), c), d), 0))));

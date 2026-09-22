@@ -1,7 +1,12 @@
-# arXiv source bundle
+# CDC research preprint
 
-This folder contains the flattened primary source for the CDC paper within the
-BiDi Universal Operator System:
+This folder contains the paper and reproducible source for **BiDi Coherence-Delta Calculus: Hybrid State Reduction and Recurrence-Gated Variational Analysis** by Edward Ellis.
+
+- [Paper](main.pdf)
+- [Source bundle](arxiv-source.zip)
+- [Public introduction](https://etellis.github.io/BiDi-web/)
+
+The complete manuscript source is:
 
 ```text
 main.tex
@@ -20,11 +25,6 @@ pdflatex main.tex
 pdflatex main.tex
 ```
 
-The source avoids external figures, BibTeX, shell escape, minted, and custom
-classes. Its inline bibliography contains each cited work once. The surrounding
-repository gate is the authority for version, source counts, runtime receipts,
-U1/U2 verdicts, and formal claim ceilings.
+The source requires no external figures, BibTeX, shell escape, minted or custom classes. Its inline bibliography contains each cited work once. The repository's verification tools reproduce the versioned runtime results and finite formal statements described in the paper.
 
-The CDC-specific title keeps the formal contribution exact. The repository's
-BiDi Universal Operator System supplies the wider architecture, compatibility
-surfaces, instruments, and research lanes around it.
+The manuscript concerns the CDC kernel and U1/U2 analysis within the wider BiDi system. It is prepared for arXiv; no submission or peer review is claimed. AI assistance is disclosed in the paper.

@@ -1,10 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/identity/mobius-u-code-sigil-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/identity/mobius-u-code-sigil.svg">
-    <img src="assets/identity/mobius-u-code-sigil.svg" alt="BiDi Universal Operator system sigil" width="96">
-  </picture>
-</p>
+[![BiDi: a transformation should account for itself. Open the interactive site.](assets/banner.svg)](https://etellis.github.io/BiDi-web/)
 
 <h1 align="center">BiDi</h1>
 
@@ -12,13 +6,10 @@
   <strong>Universal Operator System</strong>
 </p>
 
-BiDi is a Universal Operator System for making complex transformations
-executable, inspectable, and engineerable. Its CDC kernel, U1 acceptance, and U2
-variation and return analysis bind every result to reproducible evidence and
-earned scope.
+BiDi connects formal source, executable state and evidence through the Coherence-Delta Calculus. Its three primitive reductions describe how phases evolve, when observations can commit, and how belief and prior move between levels. U1 checks a guarded path; U2 differentiates that path and tests whether its complete state returns before authorizing return analysis.
 
 <p align="center">
-  <strong><a href="UNIVERSAL_OPERATOR_SYSTEM.md">Understand</a> · <a href="#run">Run</a> · <a href="#verify">Verify</a> · <a href="paper/arxiv/main.pdf">Paper</a></strong>
+  <strong><a href="https://etellis.github.io/BiDi-web/">Explore the interactive site ↗</a> · <a href="#run">Run</a> · <a href="#verify">Verify</a> · <a href="paper/arxiv/main.pdf">Paper</a> · <a href="https://etellis.github.io/U-web/">U</a></strong>
 </p>
 
 ## One system, stable parts
@@ -43,25 +34,15 @@ flowchart TD
     Spectrum --> ReceiptNode;
 ```
 
-Each transition is earned independently. A hold preserves the last verified
-state and emits its receipt instead of fabricating the next one. The machine
-record, source digest, and gate remain inspectable at every step.
+Each transition has its own conditions. A hold preserves the last verified state and records the unmet condition. The resulting record identifies the source, state and check that produced it.
 
 ## Why BiDi exists
 
-BiDi grew through a reciprocal exchange between Edward Ellis's theories,
-products, formal work, and executable systems. Each project exposed something
-the others needed: a missing language, state contract, behavior, proof
-obligation, or instrument. Those gaps became new operator machinery, and the
-machinery returned to the surrounding work as sharper mechanisms, engineering
-constraints, and testable alternatives.
+An endpoint rarely tells the whole story. A system may return to the same visible angle while its latches, belief, prior or unwrapped phase have changed. A derivative can be valid along that path even when the path is not recurrent. BiDi makes those distinctions executable, so a useful intermediate result can survive while an unsupported consequence is held.
 
-That theory-product-formalism-runtime loop is the origin of the system and the
-reason its layers remain connected. Read the
-[origin and evolution](ORIGIN_AND_EVOLUTION.md) for the repository-grounded
-history and human-agent build method.
+The system grew through reciprocal work across mathematical models, products and executable instruments. New mechanisms exposed new obligations; those obligations sharpened the models in turn. The [origin and evolution](ORIGIN_AND_EVOLUTION.md) documents that history.
 
-Version **0.3.0** is the current public release:
+Release **0.3.0** establishes the following source and native-closure inventory:
 
 **262/262 expectations** · **20 terms · 22 rules · 16 invariants**<br>
 **46 capabilities · 6 frameworks · 4831 native witnesses** · **ABI 1.5**
@@ -90,10 +71,7 @@ monodromy      not emitted
 multipliers    not emitted
 ```
 
-That hold is the result, not a failed success screen. The two-turn lifted-cover
-criterion passes, while latch mode, belief, prior, and unwrapped phase do not
-all return. The complete authoritative record is the output line beginning
-`u2-json=`.
+The two-turn lifted-cover criterion passes, while latch mode, belief, prior and unwrapped phase do not all return. The hold records that distinction. The complete machine-readable result is the output line beginning `u2-json=`.
 
 The positive relative-return calibration is explicit and separate:
 
@@ -127,10 +105,7 @@ The verification unit is always:
 (scope, maturity, verdict, receipt-or-obligation)
 ```
 
-Implementation, finite proof, numerical calibration, and physical law are four
-different levels of evidence. BiDi keeps them distinct and binds each public
-statement to a receipt or an explicit open obligation. Screens and status
-counters remain views over that evidence.
+Execution, finite proof, numerical calibration and empirical validation answer different questions. The verification record names which question was tested, its result and any remaining obligations.
 
 ### Current release boundary · 0.3.0
 
@@ -155,7 +130,7 @@ the normative recurrence contract.
 
 The kernel is small on purpose. CDC has exactly three primitive reductions:
 
-- `flow(d)` performs synchronous continuous phase evolution;
+- `flow(d)` performs a synchronous finite phase update;
 - `commit(m)` quantizes to balanced ternary and enforces the nonnegative-prefix barrier;
 - `nest(parent, child)` performs the audited cross-scale belief/prior exchange.
 
@@ -193,14 +168,12 @@ and verifies full or explicitly restored recurrence before it constructs a
 monodromy operator or emits characteristic multipliers. A missing spectral
 backend produces a typed hold rather than invented eigenvalues.
 
-Polarity does not collapse into one binary toggle. The architecture treats it
+The architecture treats polarity
 as **apertured oriented reciprocity** wherever a contract declares it: carrier
 inversion exchanges `-1` and `+1` while fixing `0`; receptive and radiant roles
 may exchange; path orientation may reverse; and double-cover sheet parity
 changes after one turn and restores after two. These transformations touch one
-another without becoming interchangeable. The system neither forces them into
-one symmetry nor promotes their verified software behavior into a universal
-physical polarity law. The exact scope and counterexamples are recorded in the
+another without becoming interchangeable. Their interaction depends on the declared symmetry and observation contracts. The exact scope and counterexamples are recorded in the
 [polarity audit](docs/u2/POLARITY_AUDIT.md).
 
 ## Architecture and evidence
@@ -223,10 +196,7 @@ to the question:
 over runtime receipts. Their controls and visual states do not outrank source,
 runtime, or receipt evidence.
 
-The [Reference-Frame Topological Coherence lane](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md)
-is deterministic classical local machinery for synchronization, winding,
-provenance, admissibility, and record closure. It is not a deployed multi-host
-session, physical qubit, entanglement, nonlocality, or quantum advantage.
+The [Reference-Frame Topological Coherence work](docs/rftc/VERIFICATION_OBLIGATION_MATRIX.md) implements local classical synchronization, winding, provenance, admissibility and record closure. Its current evidence concerns that software model. Multi-host and physical realizations require separate implementation and validation.
 
 Möbius identity construction, renders, motion, and provenance live under
 [identity documentation](docs/identity/README.md). The interactive
@@ -234,14 +204,15 @@ Möbius identity construction, renders, motion, and provenance live under
 instrument. **Möbi𝒰s remains a proposed product-linked identity**, not the name
 of the formal kernel or a replacement for the BiDi system.
 
+## Relationship to U
+
+[U](https://etellis.github.io/U-web/) develops a general language in which operations carry explicit laws, resources and observation contracts. BiDi predates U and supplies a concrete compatibility test for that broader substrate. CDC's phase maps, balanced-ternary barrier and guarded analysis remain a specialization with their own semantics. The independent BiDi runtime provides a comparison for U implementations of those operations.
+
 ## Compatibility
 
-A clearer name is not permission to break the working contract. The system
-identity does not rename the package, executable, file format, ABI, C symbols,
-or formal namespaces. Existing automation continues to use
+Existing automation continues to use
 `bidi-coherence-delta-calculus`, `cdc`, `.cdc`, and the established CDC symbols.
-Historical specifications remain versioned provenance, not current release
-authority.
+Package, executable, file format, ABI and formal namespaces retain their published contracts. Versioned historical specifications remain available alongside the current release documentation.
 
 ## Citation and license
 
