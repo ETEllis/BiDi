@@ -37,8 +37,8 @@
 The \BiDiSystem\ keeps formal source, native execution, guarded acceptance,
 recurrence, and evidence on one inspectable path. Within that system, the
 Coherence-Delta Calculus (CDC) is the formal source language and executable
-native kernel for guarded hybrid state evolution. Its semantic center contains three primitive
-reductions: synchronous phase flow, balanced-ternary commit, and nested
+native kernel for guarded hybrid state evolution. Three primitive reductions
+form its semantic center: synchronous phase flow, balanced-ternary commit, and nested
 belief/prior exchange. Derived layers provide local observation, durable
 effects, a guarded Universal Operator (U1), and a variational Universal
 Operator (U2). U1 accepts a lifted double-cover closure only when reciprocal
@@ -52,12 +52,11 @@ state recurrence is held because latch mode, belief, prior, and unwrapped phase
 do not all return. Consequently, no canonical-loop multipliers are emitted. A
 separate calibration fixture with an explicit $4\pi$ endpoint restoration and
 complete derivative yields $M_{\mathrm{rel}}=I_{13}$ and a marginal spectrum.
-The artifact binds results to canonical-source, state-manifest, tangent, return,
-and spectrum receipts; exercises analytic, numerical, negative, sanitizer, and
-permanent-mutant gates; and mechanizes only its precisely named finite
-carrier, event-order, cone, sheet, aperture, and barrier statements in Lean and
-Rocq. The resulting artifact makes richer continuous semantics and physical
-interpretations addressable as explicit, testable extensions.
+Results bind to canonical source, state manifest, tangent, return and spectrum
+receipts. Analytic, numerical, negative, sanitizer and permanent-mutant checks
+test the executable path. Lean and Rocq establish the named finite carrier,
+event-order, cone, sheet, aperture and barrier statements. Richer continuous
+semantics and physical interpretations need their own explicit tests.
 \end{abstract}
 
 \section{Introduction}
@@ -84,7 +83,7 @@ remain connected:
 Each transition may be held when its premises fail, preserving the results
 already established to its left.
 
-The release makes four contributions:
+Four contributions follow:
 \begin{enumerate}
 \item a grammar-1 source and native runtime organized around exactly three
   primitive reductions;
@@ -408,7 +407,7 @@ source-bound covariance, continuous holonomy, or a physical theory.
 
 \section{Implementation and reproducibility}
 
-The release is intentionally source-centered:
+The path from CDC source to result can be inspected in:
 \begin{itemize}
 \item \path{kernel.cdc} and \path{laws.cdc} declare the language contract and
   16-key invariant registry;
@@ -423,10 +422,10 @@ The release is intentionally source-centered:
   mirrors with explicit theorem scopes.
 \end{itemize}
 
-Within the language/runtime/semantic execution boundary, the one Python file,
-\path{cdc_boot.py}, is a declaration/expectation oracle; separate
-asset-generation utilities do not participate in execution;
-it is not the reducer. The shipped native ABI is 1.5 and the source grammar is
+The language/runtime/semantic execution boundary contains one Python file:
+\path{cdc_boot.py}, a declaration and expectation oracle. The reducer
+and U1/U2 analysis execute natively; asset-generation utilities do not
+execute CDC source. The shipped native ABI is 1.5 and the source grammar is
 version 1.
 
 \section{Limitations and research boundary}
@@ -449,10 +448,10 @@ provide tools for that work without establishing the physical mapping itself.
 CDC connects implemented transitions to the conditions for downstream analysis. U1
 binds lifted closure to reciprocal relations, topology, record agreement, and
 effect gating. U2 binds first-order analysis to the exact executed path and
-refuses monodromy until state recurrence is independently earned. The
-implemented result is a language-level discipline in which accepted, held,
-mechanized, and exploratory statements remain distinct enough
-to support engineering and further formal or empirical specialization.
+refuses monodromy until state recurrence is independently earned. An accepted
+cover, an earned tangent and a held recurrence can coexist without being
+flattened into one verdict. That distinction supports stronger formal and
+empirical work without assigning it evidence in advance.
 
 \section*{Relationship to U and disclosure}
 The U language develops a broader substrate for operations with explicit laws,

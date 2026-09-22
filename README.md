@@ -1,4 +1,4 @@
-[![BiDi: a transformation should account for itself. Open the interactive site.](assets/banner.svg)](https://etellis.github.io/BiDi-web/)
+[![BiDi and CDC marks: system and calculus. A transformation should account for itself.](assets/banner.svg)](https://etellis.github.io/BiDi-web/)
 
 <h1 align="center">BiDi</h1>
 
@@ -172,8 +172,9 @@ The architecture treats polarity
 as **apertured oriented reciprocity** wherever a contract declares it: carrier
 inversion exchanges `-1` and `+1` while fixing `0`; receptive and radiant roles
 may exchange; path orientation may reverse; and double-cover sheet parity
-changes after one turn and restores after two. These transformations touch one
-another without becoming interchangeable. Their interaction depends on the declared symmetry and observation contracts. The exact scope and counterexamples are recorded in the
+changes after one turn and restores after two. They interact, but none can stand
+in for another. Their compatibility depends on the declared symmetry and
+observation contracts. The scope and counterexamples are recorded in the
 [polarity audit](docs/u2/POLARITY_AUDIT.md).
 
 ## Architecture and evidence

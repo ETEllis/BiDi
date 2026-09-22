@@ -1,1 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="2" fill="#eeeae1"/><ellipse cx="50" cy="50" rx="23" ry="37" transform="rotate(38 50 50)" fill="none" stroke="#293634" stroke-width="9"/><ellipse cx="50" cy="50" rx="23" ry="37" transform="rotate(-38 50 50)" fill="none" stroke="#acbabc" stroke-width="5"/><circle cx="50" cy="50" r="8" fill="#eeeae1"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 112" role="img" aria-labelledby="title desc">
+  <title id="title">BiDi</title>
+  <desc id="desc">Two opposed paths cross around an open center, with four shared endpoint nodes.</desc>
+  <rect width="112" height="112" rx="2" fill="#293634"/>
+  <path d="M24 22C48 21 59 88 88 90" fill="none" stroke="#eeeae1" stroke-width="9" stroke-linecap="round"/>
+  <path d="M88 22C64 21 53 88 24 90" fill="none" stroke="#abc3ad" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="56" cy="56" r="11" fill="#293634"/>
+  <g fill="#d4ee64" stroke="#293634" stroke-width="2">
+    <circle cx="24" cy="22" r="5"/><circle cx="88" cy="22" r="5"/>
+    <circle cx="24" cy="90" r="5"/><circle cx="88" cy="90" r="5"/>
+  </g>
+</svg>
