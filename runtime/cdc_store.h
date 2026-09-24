@@ -126,6 +126,29 @@ uint64_t cdc_store_event_count(const cdc_store *store);
  * never-compacted store; each activated compaction advances it by one. */
 uint64_t cdc_store_generation(const cdc_store *store);
 
+/* Size, in bytes, of the stable per-store identifier below. */
+#define CDC_STORE_UUID_SIZE 16
+
+/* The store's STABLE identity: the uuid minted into the HEAD record when the
+ * store was created. Unlike `attest` (which digests the sealed log bytes and
+ * therefore moves as events are sealed) this value never changes for the life
+ * of the store, and it survives compaction because `compact` verifies the
+ * prepared base still belongs to this uuid before activating a new
+ * generation. Two stores with identical histories still carry different
+ * uuids, and a store reachable through several paths (absolute, relative,
+ * symlinked) reports one uuid. The identity ends when the store does:
+ * `cdc_store_reset` deletes the HEAD with the log, so a store recreated at
+ * the same path mints a NEW uuid — state bound to the old identity can
+ * never silently apply to the replacement.
+ *
+ * Provided so a caller can bind out-of-band state — an authority record, an
+ * external anchor — to the store ITSELF rather than to the path it happens to
+ * live at (Memory Manifold MM-D12). Copies CDC_STORE_UUID_SIZE bytes into
+ * `out`; returns CDC_STORE_EARG for a NULL store or `out`. Read-only: it
+ * takes no lock and mutates nothing. */
+cdc_store_status cdc_store_uuid(const cdc_store *store,
+                                uint8_t out[CDC_STORE_UUID_SIZE]);
+
 /* Removes exactly this store's own artifacts — the log, any prepared base
  * (base.pending), and the crash-window temp files — from `dir`, leaving
  * every other path untouched, so a declared store can be opened from a
